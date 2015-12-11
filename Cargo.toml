@@ -3,5 +3,10 @@ name = "stateful"
 version = "0.1.0"
 authors = ["Erick Tryzelaar <erick.tryzelaar@gmail.com>"]
 
+[lib]
+name = "stateful"
+plugin = true
+
 [dependencies]
-time = "*"
+aster = "*"
+petgraph = "*"
