@@ -275,10 +275,11 @@ fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>>
             }
             Node::Entry => {}
             Node::Exit => {
+                let next_state = make_state_expr(cx, nx, vec![]);
                 stmts.push(quote_stmt!(cx,
                     return (
                         ::std::option::Option::None,
-                        State::Exit,
+                        $next_state,
                     );
                 ).unwrap());
             }
@@ -299,6 +300,33 @@ fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>>
     });
 
     state_map
+}
+
+fn make_state_enum_and_arms(cx: &ExtCtxt,
+                            block: &ast::Block) -> (P<ast::Item>, Vec<ast::Arm>) {
+    let cfg_builder = CFGBuilder::new();
+    let cfg = cfg_builder.build(block);
+
+    let state_map = make_state_map(cx, &cfg);
+    let exit_block = state_map.get(&cfg.exit).unwrap();
+
+    let mut state_variants = Vec::with_capacity(state_map.len());
+    let mut state_arms = Vec::with_capacity(state_map.len());
+
+    for (nx, block) in state_map.iter()
+            .map(|(nx, block)| (*nx, block))
+            .filter(|&(nx, _)| nx.index() != cfg.exit.index())
+            .chain(Some((cfg.exit, exit_block))) {
+        let id = make_state_id(nx);
+        state_variants.push(id);
+        state_arms.push(quote_arm!(cx, State::$id => $block));
+    }
+
+    let state_enum = aster::item::ItemBuilder::new().enum_("State")
+        .ids(state_variants.iter())
+        .build();
+
+    (state_enum, state_arms)
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -413,27 +441,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         ast::FunctionRetTy::Return(ref ty) => ty.clone(),
     };
 
-    let cfg_builder = CFGBuilder::new();
-    let cfg = cfg_builder.build(block);
-
-    let state_map = make_state_map(cx, &cfg);
-    let exit_block = state_map.get(&cfg.exit).unwrap();
-
-    let mut state_variants = Vec::with_capacity(state_map.len());
-    let mut state_arms = Vec::with_capacity(state_map.len());
-
-    for (nx, block) in state_map.iter()
-            .map(|(nx, block)| (*nx, block))
-            .filter(|&(nx, _)| nx.index() != cfg.exit.index())
-            .chain(Some((cfg.exit, exit_block))) {
-        let id = make_state_id(nx);
-        state_variants.push(id);
-        state_arms.push(quote_arm!(cx, State::$id => $block));
-    }
-
-    let state_enum = builder.item().enum_("State")
-        .ids(state_variants.iter())
-        .build();
+    let (state_enum, state_arms) = make_state_enum_and_arms(cx, block);
 
     let item = quote_item!(cx,
         fn $ident() -> ::std::boxed::Box<::std::iter::Iterator<Item=$ret_ty>> {
