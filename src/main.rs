@@ -14,8 +14,7 @@ fn yield_() -> usize {
 }
 
 fn main() {
-    /*
     for value in yield_3() {
         println!("yield_3: {:?}", value);
-    }*/
+    }
 }
