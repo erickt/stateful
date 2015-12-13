@@ -15,307 +15,18 @@ use syntax::ext::base::{
     MultiModifier,
 };
 use syntax::ext::build::AstBuilder;
-use syntax::visit;
 use syntax::ptr::P;
 
 use rustc_plugin::Registry;
 
-use petgraph::EdgeDirection;
-use petgraph::graph::{Graph, NodeIndex};
-use petgraph::visit::{Reversed, DfsIter};
+use petgraph::graph::NodeIndex;
+use petgraph::visit::DfsIter;
 
 //////////////////////////////////////////////////////////////////////////////
 
-#[derive(Debug)]
-enum Node {
-    BasicBlock(BasicBlock),
-    Exit,
-}
+mod cfg;
 
-impl Node {
-    fn decls(&self) -> &[ast::Ident] {
-        match *self {
-            Node::BasicBlock(ref bb) => &bb.decl_idents[..],
-            Node::Exit => &[]
-        }
-    }
-}
-
-#[derive(Debug)]
-enum Edge {
-    Goto(Vec<ast::Ident>),
-    Yield(P<ast::Expr>, Vec<ast::Ident>),
-}
-
-#[derive(Debug)]
-struct BasicBlock {
-    decl_idents: Vec<ast::Ident>,
-    live_idents: Vec<ast::Ident>,
-    stmts: Vec<P<ast::Stmt>>,
-    expr: Option<P<ast::Expr>>,
-}
-
-impl BasicBlock {
-    fn new() -> Self {
-        BasicBlock {
-            decl_idents: Vec::new(),
-            live_idents: Vec::new(),
-            stmts: Vec::new(),
-            expr: None,
-        }
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-struct CFGBuilder {
-    graph: Graph<Node, Edge>,
-}
-
-impl CFGBuilder {
-    fn new() -> Self {
-        CFGBuilder {
-            graph: Graph::new(),
-        }
-    }
-
-    fn build(mut self, block: &ast::Block) -> CFG {
-        let entry = self.add_node();
-        let exit = self.graph.add_node(Node::Exit);
-
-        let pred = self.block(block, entry);
-        self.graph.add_edge(pred, exit, Edge::Goto(vec![]));
-
-        CFG {
-            graph: self.graph,
-            entry: entry,
-            exit: exit,
-        }
-    }
-
-    fn block(&mut self, block: &ast::Block, mut pred: NodeIndex) -> NodeIndex {
-        let nx = self.add_node();
-        self.graph.add_edge(pred, nx, Edge::Goto(vec![]));
-        pred = nx;
-
-        for stmt in block.stmts.iter() {
-            pred = self.stmt(stmt, pred);
-        }
-
-        pred
-    }
-
-    fn stmt(&mut self, stmt: &P<ast::Stmt>, pred: NodeIndex) -> NodeIndex {
-        if let Some(edge) = self.get_edge(stmt, pred) {
-            let nx = self.add_node();
-            self.graph.add_edge(pred, nx, edge);
-            return nx;
-        }
-
-        let decl_idents = match stmt.node {
-            ast::Stmt_::StmtDecl(ref decl, _) => {
-                match decl.node {
-                    ast::Decl_::DeclLocal(ref local) => self.find_decl_idents(&local.pat),
-                    _ => vec![],
-                }
-            }
-            _ => vec![],
-        };
-        let live_idents = self.find_live_idents(stmt);
-
-        let mut bb = self.get_node_mut(pred);
-        bb.decl_idents.extend(decl_idents);
-        bb.live_idents.extend(live_idents);
-        bb.stmts.push(stmt.clone());
-
-        pred
-    }
-
-    fn add_node(&mut self) -> NodeIndex {
-        self.graph.add_node(Node::BasicBlock(BasicBlock::new()))
-    }
-
-    fn get_node(&self, index: NodeIndex) -> &BasicBlock {
-        match self.graph.node_weight(index) {
-            Some(node) => {
-                match *node {
-                    Node::BasicBlock(ref bb) => bb,
-                    _ => {
-                        panic!("node is not a basic block")
-                    }
-                }
-            }
-            None => {
-                panic!("missing node!")
-            }
-        }
-    }
-
-    fn get_node_mut(&mut self, index: NodeIndex) -> &mut BasicBlock {
-        match self.graph.node_weight_mut(index) {
-            Some(node) => {
-                match *node {
-                    Node::BasicBlock(ref mut bb) => bb,
-                    _ => {
-                        panic!("node is not a basic block")
-                    }
-                }
-            }
-            None => {
-                panic!("missing node!")
-            }
-        }
-    }
-
-    fn get_edge(&self, stmt: &ast::Stmt, pred: NodeIndex) -> Option<Edge> {
-        struct Visitor<'a> {
-            builder: &'a CFGBuilder,
-            pred: NodeIndex,
-            edge: Option<Edge>,
-        }
-
-        impl<'a> visit::Visitor<'a> for Visitor<'a> {
-            fn visit_expr(&mut self, expr: &'a ast::Expr) {
-                match expr.node {
-                    ast::Expr_::ExprRet(Some(ref e)) => {
-                        assert!(self.edge.is_none());
-
-                        let bb = self.builder.get_node(self.pred);
-
-                        self.edge = Some(Edge::Yield(e.clone(), bb.decl_idents.clone()));
-                    }
-                    ast::Expr_::ExprRet(None) => {
-                        panic!();
-                    }
-                    _ => { }
-                }
-                visit::walk_expr(self, expr)
-            }
-        }
-
-        let mut visitor = Visitor {
-            builder: self,
-            pred: pred,
-            edge: None,
-        };
-
-        visit::Visitor::visit_stmt(&mut visitor, stmt);
-        visitor.edge
-    }
-
-    fn find_decl_idents(&self, pat: &ast::Pat) -> Vec<ast::Ident> {
-        struct Visitor(Vec<ast::Ident>);
-
-        impl<'a> visit::Visitor<'a> for Visitor {
-            fn visit_ident(&mut self, _span: Span, ident: ast::Ident) {
-                self.0.push(ident);
-            }
-        }
-
-        let mut visitor = Visitor(Vec::new());
-        visit::Visitor::visit_pat(&mut visitor, pat);
-        visitor.0
-    }
-
-    fn find_live_idents(&self, stmt: &ast::Stmt) -> Vec<ast::Ident> {
-        struct Visitor(Vec<ast::Ident>);
-
-        impl<'a> visit::Visitor<'a> for Visitor {
-            fn visit_expr(&mut self, expr: &ast::Expr) {
-                match expr.node {
-                    ast::ExprPath(_, ref path) => {
-                        if path.segments.len() == 1 {
-                            self.0.push(path.segments[0].identifier);
-                        }
-                    }
-                    _ => {}
-                }
-                visit::walk_expr(self, expr);
-            }
-        }
-
-        let mut visitor = Visitor(Vec::new());
-        visit::Visitor::visit_stmt(&mut visitor, stmt);
-        visitor.0
-    }
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-struct CFG {
-    graph: Graph<Node, Edge>,
-    entry: NodeIndex,
-    exit: NodeIndex,
-}
-
-impl CFG {
-    fn get_node(&self, nx: NodeIndex) -> &Node {
-        &self.graph[nx]
-    }
-
-    fn get_node_decls(&self, nx: NodeIndex) -> Vec<ast::Ident> {
-        let mut decls = Vec::new();
-
-        // Exit node doesn't need any state.
-        if let Node::Exit = self.graph[nx] {
-            return decls;
-        }
-
-        for nx in DfsIter::new(&Reversed(&self.graph), nx) {
-            decls.extend(self.graph[nx].decls());
-        }
-
-        decls.reverse();
-
-        decls
-    }
-
-    fn get_parent_decls(&self, nx: NodeIndex) -> Vec<ast::Ident> {
-        // Exit node doesn't need any state.
-        if let Node::Exit = self.graph[nx] {
-            return Vec::new();
-        }
-
-        match self.get_parent(nx) {
-            Some(parent_nx) => self.get_node_decls(parent_nx),
-            None => Vec::new(),
-        }
-    }
-
-    fn get_edge(&self, nx: NodeIndex, direction: EdgeDirection) -> Option<(NodeIndex, &Edge)> {
-        let mut edges = self.graph.edges_directed(nx, direction);
-
-        match edges.next() {
-            Some(edge) => {
-                assert!(edges.next().is_none());
-                Some(edge)
-            }
-            None => None,
-        }
-    }
-
-    fn get_child_edge(&self, nx: NodeIndex) -> Option<(NodeIndex, &Edge)> {
-        self.get_edge(nx, EdgeDirection::Outgoing)
-    }
-
-    fn get_parent_edge(&self, nx: NodeIndex) -> Option<(NodeIndex, &Edge)> {
-        self.get_edge(nx, EdgeDirection::Incoming)
-    }
-
-    fn get_parent(&self, nx: NodeIndex) -> Option<NodeIndex> {
-        self.get_parent_edge(nx).map(|(nx, _)| nx)
-    }
-
-    /*
-    fn get_parent_node(&self, nx: NodeIndex) -> Option<&Node> {
-        self.get_parent_edge(nx).map(|(nx, _)| self.get_node(nx))
-    }
-    */
-}
-
-//////////////////////////////////////////////////////////////////////////////
-
-fn make_state_variant(cfg: &CFG,
+fn make_state_variant(cfg: &cfg::CFG,
                       nx: NodeIndex,
                       state_variables: usize) -> (P<ast::Variant>, Vec<ast::Ident>) {
     let ast_builder = aster::AstBuilder::new();
@@ -355,7 +66,7 @@ fn make_state_variant(cfg: &CFG,
     (variant, variant_ty_idents)
 }
 
-fn make_state_pat(cfg: &CFG, nx: NodeIndex) -> P<ast::Pat> {
+fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
     let ast_builder = aster::AstBuilder::new();
 
     let state_id_path = make_state_id_path(nx);
@@ -366,7 +77,7 @@ fn make_state_pat(cfg: &CFG, nx: NodeIndex) -> P<ast::Pat> {
         .build()
 }
 
-fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
+fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
     let mut state_map = BTreeMap::new();
 
     for nx in DfsIter::new(&cfg.graph, cfg.entry) {
@@ -374,7 +85,7 @@ fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>>
         let edge = cfg.get_child_edge(nx);
         
         let block = match *node {
-            Node::BasicBlock(ref bb) => {
+            cfg::Node::BasicBlock(ref bb) => {
                 let stmts = &bb.stmts;
                 //let expr = &bb.expr;
 
@@ -387,7 +98,7 @@ fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>>
                     $transition
                 })
             }
-            Node::Exit => {
+            cfg::Node::Exit => {
                 assert!(edge.is_none());
 
                 let next_state = make_state_expr(cfg, nx);
@@ -408,7 +119,7 @@ fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>>
 }
 
 fn make_state_enum_and_arms(cx: &ExtCtxt,
-                            cfg: &CFG) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
+                            cfg: &cfg::CFG) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
     let ast_builder = aster::AstBuilder::new();
 
     let state_map = make_state_map(cx, &cfg);
@@ -490,7 +201,7 @@ fn make_return(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Stmt> {
 }
 */
 
-fn make_state_expr(cfg: &CFG, nx: NodeIndex) -> P<ast::Expr> {
+fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     let ast_builder = aster::AstBuilder::new();
 
 
@@ -509,7 +220,7 @@ fn make_state_expr(cfg: &CFG, nx: NodeIndex) -> P<ast::Expr> {
     }
 }
 
-fn make_continue_to(cx: &ExtCtxt, cfg: &CFG, next_state: NodeIndex) -> P<ast::Stmt> {
+fn make_continue_to(cx: &ExtCtxt, cfg: &cfg::CFG, next_state: NodeIndex) -> P<ast::Stmt> {
     let next_state = make_state_expr(cfg, next_state);
 
     quote_stmt!(cx, {
@@ -519,7 +230,7 @@ fn make_continue_to(cx: &ExtCtxt, cfg: &CFG, next_state: NodeIndex) -> P<ast::St
 }
 
 fn make_return_and_goto(cx: &ExtCtxt,
-                        cfg: &CFG,
+                        cfg: &cfg::CFG,
                         data: P<ast::Expr>,
                         next_state: NodeIndex) -> P<ast::Stmt> {
     let next_state = make_state_expr(cfg, next_state);
@@ -533,14 +244,14 @@ fn make_return_and_goto(cx: &ExtCtxt,
 }
 
 fn make_transition_stmt(cx: &ExtCtxt,
-                        cfg: &CFG,
+                        cfg: &cfg::CFG,
                         dst: NodeIndex,
-                        edge: &Edge) -> P<ast::Stmt> {
+                        edge: &cfg::Edge) -> P<ast::Stmt> {
     match *edge {
-        Edge::Goto(_) => {
+        cfg::Edge::Goto(_) => {
             make_continue_to(cx, cfg, dst)
         }
-        Edge::Yield(ref expr, _) => {
+        cfg::Edge::Yield(ref expr, _) => {
             make_return_and_goto(cx, cfg, expr.clone(), dst)
         }
     }
@@ -590,7 +301,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         ast::FunctionRetTy::Return(ref ty) => ty.clone(),
     };
 
-    let cfg_builder = CFGBuilder::new();
+    let cfg_builder = cfg::CFGBuilder::new();
     let cfg = cfg_builder.build(block);
 
     let (state_enum, state_default, state_arms) = make_state_enum_and_arms(cx, &cfg);
