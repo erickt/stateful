@@ -50,6 +50,7 @@ enum Edge {
 #[derive(Debug)]
 struct BasicBlock {
     decl_idents: Vec<ast::Ident>,
+    live_idents: Vec<ast::Ident>,
     stmts: Vec<P<ast::Stmt>>,
     expr: Option<P<ast::Expr>>,
 }
@@ -58,6 +59,7 @@ impl BasicBlock {
     fn new() -> Self {
         BasicBlock {
             decl_idents: Vec::new(),
+            live_idents: Vec::new(),
             stmts: Vec::new(),
             expr: None,
         }
@@ -110,27 +112,21 @@ impl CFGBuilder {
             return nx;
         }
 
-        let mut decl_idents = None;
-
-        match stmt.node {
+        let decl_idents = match stmt.node {
             ast::Stmt_::StmtDecl(ref decl, _) => {
                 match decl.node {
-                    ast::Decl_::DeclLocal(ref local) => {
-                        decl_idents = Some(self.find_decl_idents(&local.pat));
-                    }
-                    _ => {}
+                    ast::Decl_::DeclLocal(ref local) => self.find_decl_idents(&local.pat),
+                    _ => vec![],
                 }
             }
-            _ => {}
+            _ => vec![],
         };
+        let live_idents = self.find_live_idents(stmt);
 
         let mut bb = self.get_node_mut(pred);
+        bb.decl_idents.extend(decl_idents);
+        bb.live_idents.extend(live_idents);
         bb.stmts.push(stmt.clone());
-
-        match decl_idents {
-            Some(decl_idents) => bb.decl_idents.extend(decl_idents),
-            None => {}
-        }
 
         pred
     }
@@ -218,6 +214,28 @@ impl CFGBuilder {
 
         let mut visitor = Visitor(Vec::new());
         visit::Visitor::visit_pat(&mut visitor, pat);
+        visitor.0
+    }
+
+    fn find_live_idents(&self, stmt: &ast::Stmt) -> Vec<ast::Ident> {
+        struct Visitor(Vec<ast::Ident>);
+
+        impl<'a> visit::Visitor<'a> for Visitor {
+            fn visit_expr(&mut self, expr: &ast::Expr) {
+                match expr.node {
+                    ast::ExprPath(_, ref path) => {
+                        if path.segments.len() == 1 {
+                            self.0.push(path.segments[0].identifier);
+                        }
+                    }
+                    _ => {}
+                }
+                visit::walk_expr(self, expr);
+            }
+        }
+
+        let mut visitor = Visitor(Vec::new());
+        visit::Visitor::visit_stmt(&mut visitor, stmt);
         visitor.0
     }
 }

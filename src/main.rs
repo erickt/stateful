@@ -9,8 +9,7 @@ fn yield_() -> usize {
     let y = 1;
     return x + y;
 
-    let z = 2;
-    return x + y + z;
+    return x;
 }
 
 fn main() {
