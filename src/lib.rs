@@ -22,15 +22,23 @@ use rustc_plugin::Registry;
 
 use petgraph::EdgeDirection;
 use petgraph::graph::{Graph, NodeIndex};
-use petgraph::visit::Dfs;
+use petgraph::visit::{Reversed, DfsIter};
 
 //////////////////////////////////////////////////////////////////////////////
 
 #[derive(Debug)]
 enum Node {
     BasicBlock(BasicBlock),
-    Entry,
     Exit,
+}
+
+impl Node {
+    fn decls(&self) -> &[ast::Ident] {
+        match *self {
+            Node::BasicBlock(ref bb) => &bb.decl_idents[..],
+            Node::Exit => &[]
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -70,7 +78,7 @@ impl CFGBuilder {
     }
 
     fn build(mut self, block: &ast::Block) -> CFG {
-        let entry = self.graph.add_node(Node::Entry);
+        let entry = self.add_node();
         let exit = self.graph.add_node(Node::Exit);
 
         let pred = self.block(block, entry);
@@ -223,117 +231,234 @@ struct CFG {
 }
 
 impl CFG {
-    fn walk<F>(&self, mut f: F)
-        where F: FnMut(NodeIndex, &Node, Option<(NodeIndex, &Edge)>)
-    {
-        let mut dfs = Dfs::new(&self.graph, self.entry);
+    fn get_node(&self, nx: NodeIndex) -> &Node {
+        &self.graph[nx]
+    }
 
-        let mut node_nx = self.entry;
+    fn get_node_decls(&self, nx: NodeIndex) -> Vec<ast::Ident> {
+        let mut decls = Vec::new();
 
-        loop {
-            let node = self.graph.node_weight(node_nx).unwrap();
+        // Exit node doesn't need any state.
+        if let Node::Exit = self.graph[nx] {
+            return decls;
+        }
 
-            let mut edges = self.graph
-                .edges_directed(node_nx, EdgeDirection::Outgoing);
+        for nx in DfsIter::new(&Reversed(&self.graph), nx) {
+            decls.extend(self.graph[nx].decls());
+        }
 
-            let exit = match edges.next() {
-                Some(exit) => {
-                    assert!(edges.next().is_none());
-                    Some(exit)
-                }
-                None => None
-            };
+        decls.reverse();
 
-            f(node_nx, node, exit);
+        decls
+    }
 
-            if let Some(nx) = dfs.next(&self.graph) {
-                node_nx = nx;
-            } else {
-                break;
-            }
+    fn get_parent_decls(&self, nx: NodeIndex) -> Vec<ast::Ident> {
+        // Exit node doesn't need any state.
+        if let Node::Exit = self.graph[nx] {
+            return Vec::new();
+        }
+
+        match self.get_parent(nx) {
+            Some(parent_nx) => self.get_node_decls(parent_nx),
+            None => Vec::new(),
         }
     }
+
+    fn get_edge(&self, nx: NodeIndex, direction: EdgeDirection) -> Option<(NodeIndex, &Edge)> {
+        let mut edges = self.graph.edges_directed(nx, direction);
+
+        match edges.next() {
+            Some(edge) => {
+                assert!(edges.next().is_none());
+                Some(edge)
+            }
+            None => None,
+        }
+    }
+
+    fn get_child_edge(&self, nx: NodeIndex) -> Option<(NodeIndex, &Edge)> {
+        self.get_edge(nx, EdgeDirection::Outgoing)
+    }
+
+    fn get_parent_edge(&self, nx: NodeIndex) -> Option<(NodeIndex, &Edge)> {
+        self.get_edge(nx, EdgeDirection::Incoming)
+    }
+
+    fn get_parent(&self, nx: NodeIndex) -> Option<NodeIndex> {
+        self.get_parent_edge(nx).map(|(nx, _)| nx)
+    }
+
+    /*
+    fn get_parent_node(&self, nx: NodeIndex) -> Option<&Node> {
+        self.get_parent_edge(nx).map(|(nx, _)| self.get_node(nx))
+    }
+    */
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
+fn make_state_variant(cfg: &CFG,
+                      nx: NodeIndex,
+                      state_variables: usize) -> (P<ast::Variant>, Vec<ast::Ident>) {
+    let ast_builder = aster::AstBuilder::new();
+
+    let decl_idents = cfg.get_parent_decls(nx);
+
+    let state_id = make_state_id(nx);
+
+    let variant_ty_idents = (0 .. decl_idents.len())
+        .map(|id| {
+            ast_builder.id(format!("T{}", state_variables + id))
+        })
+        .collect::<Vec<_>>();
+
+    let variant = {
+        let mut variant_tys = variant_ty_idents.iter()
+            .map(|id| ast_builder.ty().id(id));
+
+        match variant_tys.next() {
+            Some(ty) => {
+                ast_builder.variant(state_id).tuple()
+                    .build_ty(ty)
+                    .with_fields(
+                        variant_tys
+                            .map(|ty| {
+                                ast_builder.tuple_field().ty().build(ty)
+                            })
+                    )
+                    .build()
+            }
+            None => {
+                ast_builder.variant(state_id).unit()
+            }
+        }
+    };
+
+    (variant, variant_ty_idents)
+}
+
+fn make_state_pat(cfg: &CFG, nx: NodeIndex) -> P<ast::Pat> {
+    let ast_builder = aster::AstBuilder::new();
+
+    let state_id_path = make_state_id_path(nx);
+    let decl_idents = cfg.get_parent_decls(nx);
+
+    ast_builder.pat().enum_().build(state_id_path)
+        .with_ids(decl_idents)
+        .build()
+}
+
 fn make_state_map(cx: &ExtCtxt, cfg: &CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
     let mut state_map = BTreeMap::new();
 
-    cfg.walk(|nx, node, exit| {
-        if state_map.contains_key(&nx) {
-            return;
-        }
-
-        let mut stmts = vec![];
-        let mut expr = None;
-
-        match *node {
+    for nx in DfsIter::new(&cfg.graph, cfg.entry) {
+        let node = cfg.get_node(nx);
+        let edge = cfg.get_child_edge(nx);
+        
+        let block = match *node {
             Node::BasicBlock(ref bb) => {
-                stmts.extend(bb.stmts.iter().cloned());
-                expr = bb.expr.clone();
+                let stmts = &bb.stmts;
+                //let expr = &bb.expr;
+
+                let transition = edge.map(|(edge_nx, edge)| {
+                    make_transition_stmt(cx, cfg, edge_nx, edge)
+                });
+
+                quote_block!(cx, {
+                    $stmts
+                    $transition
+                })
             }
-            Node::Entry => {}
             Node::Exit => {
-                let next_state = make_state_expr(cx, nx, vec![]);
-                stmts.push(quote_stmt!(cx,
+                assert!(edge.is_none());
+
+                let next_state = make_state_expr(cfg, nx);
+
+                quote_block!(cx, {
                     return (
                         ::std::option::Option::None,
                         $next_state,
                     );
-                ).unwrap());
+                })
             }
-        }
-
-        let transition = exit.map(|(exit_nx, edge)| {
-            make_transition_stmt(cx, exit_nx, edge)
-        });
-
-        assert!(expr.is_none());
-
-        let block = quote_block!(cx, {
-            $stmts
-            $transition
-        });
+        };
 
         state_map.insert(nx, block);
-    });
+    }
 
     state_map
 }
 
 fn make_state_enum_and_arms(cx: &ExtCtxt,
-                            block: &ast::Block) -> (P<ast::Item>, Vec<ast::Arm>) {
-    let cfg_builder = CFGBuilder::new();
-    let cfg = cfg_builder.build(block);
+                            cfg: &CFG) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
+    let ast_builder = aster::AstBuilder::new();
 
     let state_map = make_state_map(cx, &cfg);
     let exit_block = state_map.get(&cfg.exit).unwrap();
 
-    let mut state_variants = Vec::with_capacity(state_map.len());
-    let mut state_arms = Vec::with_capacity(state_map.len());
+    let mut state_variables = Vec::new();;
+    let mut state_variants = Vec::new();
+    let mut state_arms = Vec::new();
 
     for (nx, block) in state_map.iter()
             .map(|(nx, block)| (*nx, block))
             .filter(|&(nx, _)| nx.index() != cfg.exit.index())
             .chain(Some((cfg.exit, exit_block))) {
-        let id = make_state_id(nx);
-        state_variants.push(id);
-        state_arms.push(quote_arm!(cx, State::$id => $block));
+        let (variant, variables) = make_state_variant(cfg, nx, state_variables.len());
+        state_variables.extend(variables);
+
+        state_variants.push(variant);
+
+        let pat = make_state_pat(cfg, nx);
+
+        state_arms.push(quote_arm!(cx, $pat => $block));
     }
 
-    let state_enum = aster::item::ItemBuilder::new().enum_("State")
-        .ids(state_variants.iter())
+    let state_generics = ast_builder.generics()
+        .with_ty_param_ids(state_variables.iter())
         .build();
 
-    (state_enum, state_arms)
+    let state_enum = ast_builder.item().enum_("State")
+        .generics().with(state_generics.clone()).build()
+        .with_variants(state_variants)
+        .build();
+
+    let state_path = ast_builder.path()
+        .segment("State")
+            .with_tys(
+                state_variables.iter()
+                    .map(|variable| ast_builder.ty().id(variable))
+            )
+            .build()
+        .build();
+
+    let exit_expr = make_state_expr(&cfg, cfg.exit);
+
+    let state_default = quote_item!(cx,
+        impl $state_generics Default for $state_path {
+            fn default() -> Self {
+                $exit_expr
+            }
+        }
+    ).unwrap();
+
+    (state_enum, state_default, state_arms)
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-fn make_state_id(id: NodeIndex) -> ast::Ident {
-    let builder = aster::AstBuilder::new();
-    builder.id(format!("State{}", id.index()))
+fn make_state_id(nx: NodeIndex) -> ast::Ident {
+    let ast_builder = aster::AstBuilder::new();
+    ast_builder.id(format!("State{}", nx.index()))
+}
+
+fn make_state_id_path(nx: NodeIndex) -> ast::Path {
+    let ast_builder = aster::AstBuilder::new();
+
+    ast_builder.path()
+        .id("State")
+        .id(make_state_id(nx))
+        .build()
 }
 
 /*
@@ -347,22 +472,27 @@ fn make_return(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Stmt> {
 }
 */
 
-fn make_state_expr(cx: &ExtCtxt,
-                   state: NodeIndex,
-                   args: Vec<ast::Ident>) -> P<ast::Expr> {
-    let id = make_state_id(state);
+fn make_state_expr(cfg: &CFG, nx: NodeIndex) -> P<ast::Expr> {
+    let ast_builder = aster::AstBuilder::new();
 
-    if args.is_empty() {
-        quote_expr!(cx, State::$id)
+
+    let state_id_path = make_state_id_path(nx);
+    let decl_idents = cfg.get_parent_decls(nx);
+
+    if decl_idents.is_empty() {
+        ast_builder.expr().path().build(state_id_path)
     } else {
-        quote_expr!(cx, State::$id($args))
+        ast_builder.expr().call().path().build(state_id_path)
+            .with_args(
+                decl_idents.iter()
+                    .map(|ident| ast_builder.expr().id(ident))
+            )
+            .build()
     }
 }
 
-fn make_continue_to(cx: &ExtCtxt,
-                    next_state: NodeIndex,
-                    args: Vec<ast::Ident>) -> P<ast::Stmt> {
-    let next_state = make_state_expr(cx, next_state, args);
+fn make_continue_to(cx: &ExtCtxt, cfg: &CFG, next_state: NodeIndex) -> P<ast::Stmt> {
+    let next_state = make_state_expr(cfg, next_state);
 
     quote_stmt!(cx, {
         state = $next_state;
@@ -371,10 +501,10 @@ fn make_continue_to(cx: &ExtCtxt,
 }
 
 fn make_return_and_goto(cx: &ExtCtxt,
+                        cfg: &CFG,
                         data: P<ast::Expr>,
-                        next_state: NodeIndex,
-                        args: Vec<ast::Ident>) -> P<ast::Stmt> {
-    let next_state = make_state_expr(cx, next_state, args);
+                        next_state: NodeIndex) -> P<ast::Stmt> {
+    let next_state = make_state_expr(cfg, next_state);
 
     quote_stmt!(cx,
         return (
@@ -385,14 +515,15 @@ fn make_return_and_goto(cx: &ExtCtxt,
 }
 
 fn make_transition_stmt(cx: &ExtCtxt,
+                        cfg: &CFG,
                         dst: NodeIndex,
                         edge: &Edge) -> P<ast::Stmt> {
     match *edge {
-        Edge::Goto(ref idents) => {
-            make_continue_to(cx, dst, idents.clone())
+        Edge::Goto(_) => {
+            make_continue_to(cx, cfg, dst)
         }
-        Edge::Yield(ref expr, ref idents) => {
-            make_return_and_goto(cx, expr.clone(), dst, idents.clone())
+        Edge::Yield(ref expr, _) => {
+            make_return_and_goto(cx, cfg, expr.clone(), dst)
         }
     }
 }
@@ -441,7 +572,12 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         ast::FunctionRetTy::Return(ref ty) => ty.clone(),
     };
 
-    let (state_enum, state_arms) = make_state_enum_and_arms(cx, block);
+    let cfg_builder = CFGBuilder::new();
+    let cfg = cfg_builder.build(block);
+
+    let (state_enum, state_default, state_arms) = make_state_enum_and_arms(cx, &cfg);
+
+    let entry_expr = make_state_expr(&cfg, cfg.entry);
 
     let item = quote_item!(cx,
         fn $ident() -> ::std::boxed::Box<::std::iter::Iterator<Item=$ret_ty>> {
@@ -476,15 +612,10 @@ fn expand_state_machine(cx: &mut ExtCtxt,
             }
 
             $state_enum
-
-            impl Default for State {
-                fn default() -> Self {
-                    State::Exit
-                }
-            }
+            $state_default
 
             Box::new(Wrapper::new(
-                State::Exit,
+                $entry_expr,
                 |mut state| {
                     loop {
                         match state {
