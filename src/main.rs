@@ -4,13 +4,13 @@
 #[state_machine]
 fn yield_() -> usize {
     let x = 0;
-    return 0;
+    return x;
 
     let y = 1;
-    return 1;
+    return x + y;
 
     let z = 2;
-    return 2;
+    return x + y + z;
 }
 
 fn main() {
