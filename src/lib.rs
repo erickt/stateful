@@ -33,7 +33,7 @@ fn make_state_variant(cfg: &cfg::CFG,
 
     let decl_idents = cfg.get_parent_decls(nx);
 
-    let state_id = make_state_id(nx);
+    let state_id = make_state_id(cfg, nx);
 
     let variant_ty_idents = (0 .. decl_idents.len())
         .map(|id| {
@@ -69,7 +69,7 @@ fn make_state_variant(cfg: &cfg::CFG,
 fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
     let ast_builder = aster::AstBuilder::new();
 
-    let state_id_path = make_state_id_path(nx);
+    let state_id_path = make_state_id_path(cfg, nx);
     let decl_idents = cfg.get_parent_decls(nx);
 
     ast_builder.pat().enum_().build(state_id_path)
@@ -78,6 +78,8 @@ fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
 }
 
 fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
+    let ast_builder = aster::AstBuilder::new();
+
     let mut state_map = BTreeMap::new();
 
     for nx in DfsIter::new(&cfg.graph, cfg.entry) {
@@ -86,15 +88,25 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
         
         let block = match *node {
             cfg::Node::BasicBlock(ref bb) => {
+                let decls = &bb.dead_decls;
                 let stmts = &bb.stmts;
-                //let expr = &bb.expr;
+                let expr = &bb.expr;
+
+                let tuple = ast_builder.expr().tuple()
+                    .with_exprs(
+                        decls.iter().map(|decl| ast_builder.expr().id(decl))
+                    )
+                    .build();
 
                 let transition = edge.map(|(edge_nx, edge)| {
                     make_transition_stmt(cx, cfg, edge_nx, edge)
                 });
 
                 quote_block!(cx, {
+                    $tuple;
+
                     $stmts
+                    $expr
                     $transition
                 })
             }
@@ -123,7 +135,7 @@ fn make_state_enum_and_arms(cx: &ExtCtxt,
     let ast_builder = aster::AstBuilder::new();
 
     let state_map = make_state_map(cx, &cfg);
-    let exit_block = state_map.get(&cfg.exit).unwrap();
+    let exit_block = state_map.get(&cfg.exit).expect("exit block");
 
     let mut state_variables = Vec::new();;
     let mut state_variants = Vec::new();
@@ -169,24 +181,26 @@ fn make_state_enum_and_arms(cx: &ExtCtxt,
                 $exit_expr
             }
         }
-    ).unwrap();
+    ).expect("state default item");
 
     (state_enum, state_default, state_arms)
 }
 
 //////////////////////////////////////////////////////////////////////////////
 
-fn make_state_id(nx: NodeIndex) -> ast::Ident {
+fn make_state_id(cfg: &cfg::CFG, nx: NodeIndex) -> ast::Ident {
     let ast_builder = aster::AstBuilder::new();
-    ast_builder.id(format!("State{}", nx.index()))
+
+    let name = cfg.get_node(nx).name();
+    ast_builder.id(format!("State{}{}", nx.index(), name))
 }
 
-fn make_state_id_path(nx: NodeIndex) -> ast::Path {
+fn make_state_id_path(cfg: &cfg::CFG, nx: NodeIndex) -> ast::Path {
     let ast_builder = aster::AstBuilder::new();
 
     ast_builder.path()
         .id("State")
-        .id(make_state_id(nx))
+        .id(make_state_id(cfg, nx))
         .build()
 }
 
@@ -204,8 +218,7 @@ fn make_return(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Stmt> {
 fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     let ast_builder = aster::AstBuilder::new();
 
-
-    let state_id_path = make_state_id_path(nx);
+    let state_id_path = make_state_id_path(cfg, nx);
     let decl_idents = cfg.get_parent_decls(nx);
 
     if decl_idents.is_empty() {
@@ -220,13 +233,15 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     }
 }
 
-fn make_continue_to(cx: &ExtCtxt, cfg: &cfg::CFG, next_state: NodeIndex) -> P<ast::Stmt> {
+fn make_continue_to(cx: &ExtCtxt,
+                    cfg: &cfg::CFG,
+                    next_state: NodeIndex) -> P<ast::Stmt> {
     let next_state = make_state_expr(cfg, next_state);
 
     quote_stmt!(cx, {
         state = $next_state;
         continue;
-    }).unwrap()
+    }).expect("continue to stmt")
 }
 
 fn make_return_and_goto(cx: &ExtCtxt,
@@ -240,7 +255,7 @@ fn make_return_and_goto(cx: &ExtCtxt,
             ::std::option::Option::Some($data),
             $next_state,
         );
-    ).unwrap()
+    ).expect("return and goto stmt")
 }
 
 fn make_transition_stmt(cx: &ExtCtxt,
@@ -248,10 +263,10 @@ fn make_transition_stmt(cx: &ExtCtxt,
                         dst: NodeIndex,
                         edge: &cfg::Edge) -> P<ast::Stmt> {
     match *edge {
-        cfg::Edge::Goto(_) => {
+        cfg::Edge::Goto => {
             make_continue_to(cx, cfg, dst)
         }
-        cfg::Edge::Yield(ref expr, _) => {
+        cfg::Edge::Yield { ref expr } => {
             make_return_and_goto(cx, cfg, expr.clone(), dst)
         }
     }
@@ -354,7 +369,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
                 }
             ))
         }
-    ).unwrap();
+    ).expect("state machine function item");
 
     Annotatable::Item(item)
 }

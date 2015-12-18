@@ -12,21 +12,23 @@ use petgraph::visit::{Reversed, DfsIter};
 
 pub struct CFGBuilder {
     graph: Graph<Node, Edge>,
+    scope: Vec<usize>,
 }
 
 impl CFGBuilder {
     pub fn new() -> Self {
         CFGBuilder {
             graph: Graph::new(),
+            scope: Vec::new(),
         }
     }
 
     pub fn build(mut self, block: &ast::Block) -> CFG {
-        let entry = self.add_node();
+        let entry = self.add_bb("Entry");
         let exit = self.graph.add_node(Node::Exit);
 
         let pred = self.block(block, entry);
-        self.graph.add_edge(pred, exit, Edge::Goto(vec![]));
+        self.goto(pred, exit);
 
         CFG {
             graph: self.graph,
@@ -36,45 +38,155 @@ impl CFGBuilder {
     }
 
     fn block(&mut self, block: &ast::Block, mut pred: NodeIndex) -> NodeIndex {
-        let nx = self.add_node();
-        self.graph.add_edge(pred, nx, Edge::Goto(vec![]));
-        pred = nx;
+        self.push_scope();
+
+        // We need to determine what declarations are in scope for this block so we can propogate
+        // the state. These then will be threaded through the child blocks.
+        //let pred_bb = self.get_node(pred);
+        //let pred_decls = pred_bb.decls();
+
+        let entry = self.add_bb("BlockEntry");
+        self.goto(pred, entry);
+        pred = entry;
+
+
+        let mut decls = vec![];
 
         for stmt in block.stmts.iter() {
+            decls.extend(self.get_decls(stmt));
+
             pred = self.stmt(stmt, pred);
         }
 
-        pred
+        pred = match block.expr {
+            Some(ref _expr) => {
+                panic!("cannot handle block expressions yet");
+
+                /*
+                {
+                    let mut bb = self.get_node_mut(pred);
+                    bb.expr = block.expr.clone();
+                }
+
+                match self.expr(expr, pred) {
+                    Some(edge) => {
+                        let nx = self.add_bb();
+                        self.graph.add_edge(pred, nx, edge);
+                        nx
+                    }
+                    None => pred,
+                }
+                */
+            }
+            None => pred,
+        };
+
+        {
+            let bb = self.get_node_mut(pred);
+            bb.close_scope = true;
+            bb.dead_decls = decls;
+        }
+
+        self.pop_scope();
+
+        let exit = self.add_bb("BlockExit");
+        self.goto(pred, exit);
+        exit
+    }
+
+    fn get_decls(&self, stmt: &P<ast::Stmt>) -> Vec<ast::Ident> {
+        let mut decls = vec![];
+
+        if let ast::Stmt_::StmtDecl(ref decl, _) = stmt.node {
+            match decl.node {
+                ast::Decl_::DeclLocal(ref local) => {
+                    decls.extend(self.find_decl_idents(&local.pat));
+                }
+                _ => {
+                    panic!("cannot handle item declarations yet");
+                }
+            }
+        }
+
+        decls
+    }
+
+    fn add_edge(&mut self, src: NodeIndex, dst: NodeIndex, edge: Edge) -> NodeIndex {
+        self.graph.add_edge(src, dst, edge);
+        dst
+    }
+
+    /*
+    fn return_(&mut self, src: NodeIndex, name: String, expr: P<ast::Expr>) -> NodeIndex {
+        self.add_edge(src, Edge::Return {
+            name: name,
+            expr: expr,
+        })
+    }
+    */
+
+    fn goto(&mut self, src: NodeIndex, dst: NodeIndex) -> NodeIndex {
+        self.add_edge(src, dst, Edge::Goto)
+    }
+
+    fn yield_(&mut self, src: NodeIndex, expr: &P<ast::Expr>) -> NodeIndex {
+        let dst = self.add_bb("Yield");
+        self.add_edge(src, dst, Edge::Yield {
+            expr: expr.clone(),
+        })
     }
 
     fn stmt(&mut self, stmt: &P<ast::Stmt>, pred: NodeIndex) -> NodeIndex {
-        if let Some(edge) = self.get_edge(stmt, pred) {
-            let nx = self.add_node();
-            self.graph.add_edge(pred, nx, edge);
-            return nx;
-        }
-
-        let decl_idents = match stmt.node {
-            ast::Stmt_::StmtDecl(ref decl, _) => {
-                match decl.node {
-                    ast::Decl_::DeclLocal(ref local) => self.find_decl_idents(&local.pat),
-                    _ => vec![],
+        match stmt.node {
+            ast::Stmt_::StmtSemi(ref expr, _) => {
+                let nx = self.expr(expr, pred);
+                if pred != nx {
+                    return nx;
                 }
             }
-            _ => vec![],
-        };
+            _ => {}
+        }
+
+        let decls = self.get_decls(stmt);
+
         let live_idents = self.find_live_idents(stmt);
 
         let mut bb = self.get_node_mut(pred);
-        bb.decl_idents.extend(decl_idents);
+        bb.decl_idents.extend(decls);
         bb.live_idents.extend(live_idents);
         bb.stmts.push(stmt.clone());
 
         pred
     }
 
-    fn add_node(&mut self) -> NodeIndex {
-        self.graph.add_node(Node::BasicBlock(BasicBlock::new()))
+    fn expr(&mut self, expr: &P<ast::Expr>, pred: NodeIndex) -> NodeIndex {
+        match expr.node {
+            ast::Expr_::ExprRet(Some(ref expr)) => {
+                self.yield_(pred, expr)
+            }
+            ast::Expr_::ExprRet(None) => {
+                panic!("cannot handle empty returns yet");
+            }
+            ast::Expr_::ExprBlock(ref block) => {
+                self.block(block, pred)
+            }
+            _ => pred,
+        }
+    }
+
+    fn push_scope(&mut self) {
+        self.scope.push(0);
+    }
+
+    fn pop_scope(&mut self) {
+        self.scope.pop();
+    }
+
+    fn add_bb<T>(&mut self, name: T) -> NodeIndex
+        where T: Into<String>
+    {
+        let name = name.into();
+        self.graph.add_node(Node::BasicBlock(BasicBlock::new(name, self.scope.clone())))
     }
 
     fn get_node(&self, index: NodeIndex) -> &BasicBlock {
@@ -109,7 +221,9 @@ impl CFGBuilder {
         }
     }
 
+    /*
     fn get_edge(&self, stmt: &ast::Stmt, pred: NodeIndex) -> Option<Edge> {
+        /*
         struct Visitor<'a> {
             builder: &'a CFGBuilder,
             pred: NodeIndex,
@@ -120,8 +234,6 @@ impl CFGBuilder {
             fn visit_expr(&mut self, expr: &'a ast::Expr) {
                 match expr.node {
                     ast::Expr_::ExprRet(Some(ref e)) => {
-                        assert!(self.edge.is_none());
-
                         let bb = self.builder.get_node(self.pred);
 
                         self.edge = Some(Edge::Yield(e.clone(), bb.decl_idents.clone()));
@@ -143,7 +255,14 @@ impl CFGBuilder {
 
         visit::Visitor::visit_stmt(&mut visitor, stmt);
         visitor.edge
+        */
+
+        match stmt.node {
+            ast::Stmt_::StmtSemi(ref expr, _) => self.expr(expr, pred),
+            _ => None,
+        }
     }
+    */
 
     fn find_decl_idents(&self, pat: &ast::Pat) -> Vec<ast::Ident> {
         struct Visitor(Vec<ast::Ident>);
@@ -264,33 +383,63 @@ pub enum Node {
 }
 
 impl Node {
-    fn decls(&self) -> &[ast::Ident] {
+    pub fn name(&self) -> &str {
         match *self {
-            Node::BasicBlock(ref bb) => &bb.decl_idents[..],
-            Node::Exit => &[]
+            Node::BasicBlock(ref bb) => &bb.name[..],
+            Node::Exit => "Exit",
+        }
+    }
+
+    pub fn scope(&self) -> &[usize] {
+        match *self {
+            Node::BasicBlock(ref bb) => &bb.scope[..],
+            Node::Exit => &[],
+        }
+    }
+
+    pub fn decls(&self) -> &[ast::Ident] {
+        match *self {
+            Node::BasicBlock(ref bb) => {
+                if bb.close_scope {
+                    &[]
+                } else {
+                    &bb.decl_idents[..]
+                }
+            }
+            Node::Exit => &[],
         }
     }
 }
 
 #[derive(Debug)]
 pub enum Edge {
-    Goto(Vec<ast::Ident>),
-    Yield(P<ast::Expr>, Vec<ast::Ident>),
+    Goto,
+    Yield {
+        expr: P<ast::Expr>,
+    },
 }
 
 #[derive(Debug)]
 pub struct BasicBlock {
-    decl_idents: Vec<ast::Ident>,
-    live_idents: Vec<ast::Ident>,
+    name: String,
+    scope: Vec<usize>,
+    close_scope: bool,
+    pub decl_idents: Vec<ast::Ident>,
+    pub live_idents: Vec<ast::Ident>,
+    pub dead_decls: Vec<ast::Ident>,
     pub stmts: Vec<P<ast::Stmt>>,
-    expr: Option<P<ast::Expr>>,
+    pub expr: Option<P<ast::Expr>>,
 }
 
 impl BasicBlock {
-    fn new() -> Self {
+    fn new(name: String, scope: Vec<usize>) -> Self {
         BasicBlock {
+            name: name,
+            scope: scope,
+            close_scope: false,
             decl_idents: Vec::new(),
             live_idents: Vec::new(),
+            dead_decls: Vec::new(),
             stmts: Vec::new(),
             expr: None,
         }
