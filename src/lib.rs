@@ -306,59 +306,64 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     };
 
     let cfg_builder = cfg::CFGBuilder::new();
-    let cfg = cfg_builder.build(block);
+    let cfg = cfg_builder.build(fn_decl, block);
 
     let (state_enum, state_default, state_arms) = make_state_enum_and_arms(cx, &cfg);
 
     let entry_expr = make_state_expr(&cfg, cfg.entry);
 
-    let item = quote_item!(cx,
-        fn $ident() -> ::std::boxed::Box<::std::iter::Iterator<Item=$ret_ty>> {
-            struct Wrapper<S, F> {
-                state: S,
-                next: F,
-            }
-
-            impl<S, T, F> Wrapper<S, F>
-                where F: Fn(S) -> (Option<T>, S),
-            {
-                fn new(initial_state: S, next: F) -> Self {
-                    Wrapper {
-                        state: initial_state,
-                        next: next,
-                    }
-                }
-            }
-
-            impl<S, T, F> Iterator for Wrapper<S, F>
-                where S: Default,
-                      F: Fn(S) -> (Option<T>, S)
-            {
-                type Item = T;
-
-                fn next(&mut self) -> Option<Self::Item> {
-                    let old_state = ::std::mem::replace(&mut self.state, S::default());
-                    let (value, next_state) = (self.next)(old_state);
-                    self.state = next_state;
-                    value
-                }
-            }
-
-            $state_enum
-            $state_default
-
-            Box::new(Wrapper::new(
-                $entry_expr,
-                |mut state| {
-                    loop {
-                        match state {
-                            $state_arms
-                        }
-                    }
-                }
-            ))
+    let block = quote_block!(cx, {
+        struct Wrapper<S, F> {
+            state: S,
+            next: F,
         }
-    ).expect("state machine function item");
+
+        impl<S, T, F> Wrapper<S, F>
+            where F: Fn(S) -> (Option<T>, S),
+        {
+            fn new(initial_state: S, next: F) -> Self {
+                Wrapper {
+                    state: initial_state,
+                    next: next,
+                }
+            }
+        }
+
+        impl<S, T, F> Iterator for Wrapper<S, F>
+            where S: Default,
+                  F: Fn(S) -> (Option<T>, S)
+        {
+            type Item = T;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                let old_state = ::std::mem::replace(&mut self.state, S::default());
+                let (value, next_state) = (self.next)(old_state);
+                self.state = next_state;
+                value
+            }
+        }
+
+        $state_enum
+        $state_default
+
+        Box::new(Wrapper::new(
+            $entry_expr,
+            |mut state| {
+                loop {
+                    match state {
+                        $state_arms
+                    }
+                }
+            }
+        ))
+    });
+
+    let item = builder.item().fn_(ident)
+        .with_args(fn_decl.inputs.iter().cloned())
+        .build_return(
+            quote_ty!(cx, ::std::boxed::Box<::std::iter::Iterator<Item=$ret_ty>>)
+        )
+        .build(block);
 
     Annotatable::Item(item)
 }

@@ -2,24 +2,25 @@
 #![plugin(stateful)]
 #![allow(unused_variables)]
 
-fn a() -> usize { 0 }
-fn b(_: usize) -> usize { 1 }
-fn c(_: usize) -> usize { 2 }
+fn increment(x: usize) -> usize { x + 1 }
 
 #[state_machine]
-fn yield_() -> usize {
-    let x = a();
+fn yield_(a: usize) -> usize {
+    let x = increment(a);
+
     {
-        let y = b(x);
+        let y = increment(x);
         return x + y;
 
-        let z = c(y);
+        let z = increment(y);
         return x + y + z;
     };
+
+    return x;
 }
 
 fn main() {
-    for value in yield_() {
+    for value in yield_(1) {
         println!("yield_: {:?}", value);
     }
 }

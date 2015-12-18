@@ -20,8 +20,13 @@ impl CFGBuilder {
         }
     }
 
-    pub fn build(mut self, block: &ast::Block) -> CFG {
-        let scope = Vec::new();
+    pub fn build(mut self, fn_decl: &ast::FnDecl, block: &ast::Block) -> CFG {
+        let mut scope = Vec::new();
+
+        // The initial scope is the function scope arguments.
+        for arg in fn_decl.inputs.iter() {
+            scope.extend(self.find_decl_idents(&arg.pat));
+        }
 
         let entry = self.add_bb("Entry", &scope);
         let exit = self.graph.add_node(Node::Exit);
