@@ -31,7 +31,7 @@ fn make_state_variant(cfg: &cfg::CFG,
                       state_variables: usize) -> (P<ast::Variant>, Vec<ast::Ident>) {
     let ast_builder = aster::AstBuilder::new();
 
-    let decl_idents = cfg.get_parent_decls(nx);
+    let decl_idents = cfg.get_node_decls(nx);
 
     let state_id = make_state_id(cfg, nx);
 
@@ -70,7 +70,7 @@ fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
     let ast_builder = aster::AstBuilder::new();
 
     let state_id_path = make_state_id_path(cfg, nx);
-    let decl_idents = cfg.get_parent_decls(nx);
+    let decl_idents = cfg.get_node_decls(nx);
 
     ast_builder.pat().enum_().build(state_id_path)
         .with_ids(decl_idents)
@@ -78,8 +78,6 @@ fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
 }
 
 fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
-    let ast_builder = aster::AstBuilder::new();
-
     let mut state_map = BTreeMap::new();
 
     for nx in DfsIter::new(&cfg.graph, cfg.entry) {
@@ -88,23 +86,14 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
         
         let block = match *node {
             cfg::Node::BasicBlock(ref bb) => {
-                let decls = &bb.dead_decls;
                 let stmts = &bb.stmts;
                 let expr = &bb.expr;
-
-                let tuple = ast_builder.expr().tuple()
-                    .with_exprs(
-                        decls.iter().map(|decl| ast_builder.expr().id(decl))
-                    )
-                    .build();
 
                 let transition = edge.map(|(edge_nx, edge)| {
                     make_transition_stmt(cx, cfg, edge_nx, edge)
                 });
 
                 quote_block!(cx, {
-                    $tuple;
-
                     $stmts
                     $expr
                     $transition
@@ -219,7 +208,7 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     let ast_builder = aster::AstBuilder::new();
 
     let state_id_path = make_state_id_path(cfg, nx);
-    let decl_idents = cfg.get_parent_decls(nx);
+    let decl_idents = cfg.get_node_decls(nx);
 
     if decl_idents.is_empty() {
         ast_builder.expr().path().build(state_id_path)

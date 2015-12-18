@@ -7,6 +7,10 @@ authors = ["Erick Tryzelaar <erick.tryzelaar@gmail.com>"]
 name = "stateful"
 plugin = true
 
+[features]
+unstable = ["compiletest_rs"]
+
 [dependencies]
 aster = "*"
 petgraph = "*"
+compiletest_rs = { version = "*", optional = true }
