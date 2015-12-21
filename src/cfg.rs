@@ -1,6 +1,5 @@
 use syntax::ast;
 use syntax::codemap::Span;
-use syntax::ext::build::AstBuilder;
 use syntax::visit;
 use syntax::ptr::P;
 
@@ -10,7 +9,7 @@ use petgraph::graph::{self, Graph, NodeIndex};
 //////////////////////////////////////////////////////////////////////////////
 
 pub struct CFGBuilder {
-    graph: Graph<Node, Edge>,
+    graph: Graph<Node, ()>,
 }
 
 impl CFGBuilder {
@@ -47,24 +46,10 @@ impl CFGBuilder {
              scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
         let (entry, pred) = self.block_inner(block, pred, scope);
 
-        /*
         let exit = self.add_bb("BlockExit", &scope);
         self.goto(pred, exit);
 
         (entry, exit)
-        */
-
-        (entry, pred)
-    }
-
-    fn loop_(&mut self,
-             block: &ast::Block,
-             pred: NodeIndex,
-             scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
-        let (entry, pred) = self.block_inner(block, pred, scope);
-        self.goto(pred, entry);
-
-        (entry, pred)
     }
 
     fn block_inner(&mut self,
@@ -83,7 +68,7 @@ impl CFGBuilder {
         */
 
         for stmt in block.stmts.iter() {
-            pred = self.stmt(stmt, pred, &mut scope);
+            pred = self.stmt(pred, &mut scope, stmt);
         }
 
         if block.expr.is_some() {
@@ -93,9 +78,8 @@ impl CFGBuilder {
         (entry, pred)
     }
 
-    fn add_edge(&mut self, src: NodeIndex, dst: NodeIndex, edge: Edge) -> NodeIndex {
-        self.graph.add_edge(src, dst, edge);
-        dst
+    fn add_edge(&mut self, src: NodeIndex, dst: NodeIndex) {
+        self.graph.add_edge(src, dst, ());
     }
 
     /*
@@ -110,7 +94,10 @@ impl CFGBuilder {
     fn goto(&mut self,
             src: NodeIndex,
             dst: NodeIndex) -> NodeIndex {
-        self.add_edge(src, dst, Edge::Goto)
+        self.add_edge(src, dst);
+        self.add_stmt(src, Stmt::Goto(dst));
+
+        dst
     }
 
     fn yield_(&mut self,
@@ -118,14 +105,21 @@ impl CFGBuilder {
               expr: &P<ast::Expr>,
               scope: &Vec<ast::Ident>) -> NodeIndex {
         let dst = self.add_bb("Yield", scope);
-        self.add_edge(src, dst, Edge::Yield {
-            expr: expr.clone(),
-        })
+        self.add_edge(src, dst);
+        self.add_stmt(src, Stmt::Yield(dst, expr.clone()));
+
+        dst
     }
 
-    fn stmt(&mut self, stmt: &P<ast::Stmt>,
+    fn add_stmt(&mut self, nx: NodeIndex, stmt: Stmt) {
+        let bb = self.get_node_mut(nx);
+        bb.stmts.push(stmt);
+    }
+
+    fn stmt(&mut self,
             pred: NodeIndex,
-            scope: &mut Vec<ast::Ident>) -> NodeIndex {
+            scope: &mut Vec<ast::Ident>,
+            stmt: &P<ast::Stmt>) -> NodeIndex {
         match stmt.node {
             ast::Stmt_::StmtDecl(ref decl, _) => {
                 match decl.node {
@@ -136,27 +130,23 @@ impl CFGBuilder {
                         panic!("cannot handle item declarations yet");
                     }
                 }
-            }
 
-            ast::Stmt_::StmtSemi(ref expr, _) if self.contains_transition(expr) => {
-                let nx = self.expr(expr, pred, &*scope);
-                if pred != nx {
-                    return nx;
-                }
+                self.add_stmt(pred, Stmt::Stmt(stmt.clone()));
+                pred
             }
-            _ => {}
+            ast::Stmt_::StmtSemi(ref expr, _) if self.contains_transition_expr(expr) => {
+                self.stmt_semi(pred, &*scope, expr)
+            }
+            _ => {
+                panic!("Cannot handle this statement yet: {:?}", stmt);
+            }
         }
-
-        let mut bb = self.get_node_mut(pred);
-        bb.stmts.push(stmt.clone());
-
-        pred
     }
 
-    fn expr(&mut self,
-            expr: &P<ast::Expr>,
-            pred: NodeIndex,
-            scope: &Vec<ast::Ident>) -> NodeIndex {
+    fn stmt_semi(&mut self,
+                 pred: NodeIndex,
+                 scope: &Vec<ast::Ident>,
+                 expr: &P<ast::Expr>) -> NodeIndex {
         match expr.node {
             ast::Expr_::ExprRet(Some(ref expr)) => {
                 self.yield_(pred, expr, scope)
@@ -169,19 +159,66 @@ impl CFGBuilder {
                 exit
             }
             ast::Expr_::ExprLoop(ref block, _) => {
-                let (_, pred) = self.loop_(block, pred, scope);
+                let (_, pred) = self.expr_loop(block, pred, scope);
                 pred
             }
-            _ => pred,
+            /*
+            ast::Expr_::ExprIf(ref expr, ref then, ref else_) => {
+                let builder = AstBuilder::new();
+                let expr = expr.clone();
+                let then = expr.clone();
+
+                // Make sure there is an else branch.
+                let else_ = else_.clone().or_else(builder.expr().unit());
+
+                let (_, pred) = self.expr_if(pred, expr, then, else_);
+                pred
+            }
+            */
+            ref expr => {
+                panic!("cannot handle {:?} yet", expr);
+            }
         }
     }
+
+    fn expr_loop(&mut self,
+                 block: &ast::Block,
+                 pred: NodeIndex,
+                 scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
+        let (entry, pred) = self.block_inner(block, pred, scope);
+        self.goto(pred, entry);
+
+        (entry, pred)
+    }
+
+
+    /*
+    fn expr_if(&mut self,
+               scope: &Vec<ast::Ident>,
+               pred: NodeIndex,
+               expr: P<ast::Expr>,
+               then: P<ast::Block>,
+               else_: P<ast::Expr>) -> (P<ast::Expr>, NodeIndex) {
+        assert!(!self.contains_transition_expr(expr));
+
+        let builder = AstBuilder::new();
+
+        let entry_bb = self.add_bb("IfEntry", scope);
+        let then_bb = self.add_bb("IfThen", scope);
+        let else_bb = self.add_bb("IfElse", scope);
+
+
+
+
+        pred
+    }
+    */
 
     fn add_bb<T>(&mut self, name: T, scope: &Vec<ast::Ident>) -> NodeIndex
         where T: Into<String>
     {
         let name = name.into();
-        let decls = scope.clone();
-        let bb = BasicBlock::new(name, decls);
+        let bb = BasicBlock::new(name, scope.clone());
 
         self.graph.add_node(Node::BasicBlock(bb))
     }
@@ -191,8 +228,8 @@ impl CFGBuilder {
             Some(node) => {
                 match *node {
                     Node::BasicBlock(ref mut bb) => bb,
-                    _ => {
-                        panic!("node is not a basic block")
+                    ref node => {
+                        panic!("node is not a basic block: {:?}", node)
                     }
                 }
             }
@@ -216,7 +253,7 @@ impl CFGBuilder {
         visitor.0
     }
 
-    fn contains_transition(&self, expr: &ast::Expr) -> bool {
+    fn contains_transition_expr(&self, expr: &ast::Expr) -> bool {
         struct Visitor(bool);
 
         impl<'a> visit::Visitor<'a> for Visitor {
@@ -241,7 +278,7 @@ impl CFGBuilder {
 //////////////////////////////////////////////////////////////////////////////
 
 pub struct CFG {
-    pub graph: Graph<Node, Edge>,
+    pub graph: Graph<Node, ()>,
     pub entry: NodeIndex,
     pub exit: NodeIndex,
 }
@@ -255,11 +292,11 @@ impl CFG {
         self.get_node(nx).decls()
     }
 
-    pub fn get_edges(&self, nx: NodeIndex, direction: EdgeDirection) -> graph::Edges<Edge> {
+    pub fn get_edges(&self, nx: NodeIndex, direction: EdgeDirection) -> graph::Edges<()> {
         self.graph.edges_directed(nx, direction)
     }
 
-    pub fn get_child_edges(&self, nx: NodeIndex) -> graph::Edges<Edge> {
+    pub fn get_child_edges(&self, nx: NodeIndex) -> graph::Edges<()> {
         self.get_edges(nx, EdgeDirection::Outgoing)
     }
 }
@@ -269,6 +306,7 @@ impl CFG {
 #[derive(Debug)]
 pub enum Node {
     BasicBlock(BasicBlock),
+    //Placeholder(String),
     Exit,
 }
 
@@ -276,6 +314,7 @@ impl Node {
     pub fn name(&self) -> &str {
         match *self {
             Node::BasicBlock(ref bb) => &bb.name[..],
+            //Node::Placeholder(_) => panic!("placeholder"),
             Node::Exit => "Exit",
         }
     }
@@ -283,25 +322,17 @@ impl Node {
     pub fn decls(&self) -> &[ast::Ident] {
         match *self {
             Node::BasicBlock(ref bb) => &bb.decls[..],
+            //Node::Placeholder(_) => panic!("placeholder"),
             Node::Exit => &[],
         }
     }
 }
 
 #[derive(Debug)]
-pub enum Edge {
-    Goto,
-    Yield {
-        expr: P<ast::Expr>,
-    },
-}
-
-#[derive(Debug)]
 pub struct BasicBlock {
     name: String,
     decls: Vec<ast::Ident>,
-    pub stmts: Vec<P<ast::Stmt>>,
-    pub expr: Option<P<ast::Expr>>,
+    pub stmts: Vec<Stmt>,
 }
 
 impl BasicBlock {
@@ -310,7 +341,13 @@ impl BasicBlock {
             name: name,
             decls: decls,
             stmts: Vec::new(),
-            expr: None,
         }
     }
+}
+
+#[derive(Debug)]
+pub enum Stmt {
+    Stmt(P<ast::Stmt>),
+    Goto(NodeIndex),
+    Yield(NodeIndex, P<ast::Expr>),
 }

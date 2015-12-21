@@ -5,14 +5,20 @@
 fn increment(x: usize) -> usize { x + 1 }
 
 #[state_machine]
-fn yield_(a: usize) -> usize {
-    let x = 1;
+fn yield_(b: bool, a: usize, b: usize) -> usize {
     loop {
+        let x = 1;
         return a;
     };
-    let y = 2;
-    return y;
 }
+
+    /*
+    if b {
+        return a;
+    } else {
+        return b;
+    };
+    */
 
 fn main() {
     for value in yield_(1).take(20) {

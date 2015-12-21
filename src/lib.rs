@@ -17,8 +17,6 @@ use syntax::ext::base::{
 use syntax::ext::build::AstBuilder;
 use syntax::ptr::P;
 
-use rustc_plugin::Registry;
-
 use petgraph::graph::NodeIndex;
 use petgraph::visit::DfsIter;
 
@@ -83,18 +81,15 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
     for nx in DfsIter::new(&cfg.graph, cfg.entry) {
         let node = cfg.get_node(nx);
 
-        for (edge_nx, edge) in cfg.get_child_edges(nx) {
+        for _ in cfg.get_child_edges(nx) {
             let block = match *node {
                 cfg::Node::BasicBlock(ref bb) => {
-                    let stmts = &bb.stmts;
-                    let expr = &bb.expr;
-
-                    let transition = make_transition_stmt(cx, cfg, edge_nx, edge);
+                    let stmts = bb.stmts.iter()
+                        .map(|stmt| make_stmt(cx, cfg, stmt))
+                        .collect::<Vec<_>>();
 
                     quote_block!(cx, {
                         $stmts
-                        $expr
-                        $transition
                     })
                 }
                 cfg::Node::Exit => {
@@ -232,9 +227,9 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     }
 }
 
-fn make_continue_to(cx: &ExtCtxt,
-                    cfg: &cfg::CFG,
-                    next_state: NodeIndex) -> P<ast::Stmt> {
+fn make_goto(cx: &ExtCtxt,
+             cfg: &cfg::CFG,
+             next_state: NodeIndex) -> P<ast::Stmt> {
     let next_state = make_state_expr(cfg, next_state);
 
     quote_stmt!(cx, {
@@ -243,10 +238,10 @@ fn make_continue_to(cx: &ExtCtxt,
     }).expect("continue to stmt")
 }
 
-fn make_return_and_goto(cx: &ExtCtxt,
-                        cfg: &cfg::CFG,
-                        data: P<ast::Expr>,
-                        next_state: NodeIndex) -> P<ast::Stmt> {
+fn make_yield(cx: &ExtCtxt,
+              cfg: &cfg::CFG,
+              data: &P<ast::Expr>,
+              next_state: NodeIndex) -> P<ast::Stmt> {
     let next_state = make_state_expr(cfg, next_state);
 
     quote_stmt!(cx,
@@ -257,17 +252,13 @@ fn make_return_and_goto(cx: &ExtCtxt,
     ).expect("return and goto stmt")
 }
 
-fn make_transition_stmt(cx: &ExtCtxt,
-                        cfg: &cfg::CFG,
-                        dst: NodeIndex,
-                        edge: &cfg::Edge) -> P<ast::Stmt> {
-    match *edge {
-        cfg::Edge::Goto => {
-            make_continue_to(cx, cfg, dst)
-        }
-        cfg::Edge::Yield { ref expr } => {
-            make_return_and_goto(cx, cfg, expr.clone(), dst)
-        }
+fn make_stmt(cx: &ExtCtxt,
+             cfg: &cfg::CFG,
+             stmt: &cfg::Stmt) -> P<ast::Stmt> {
+    match *stmt {
+        cfg::Stmt::Stmt(ref stmt) => stmt.clone(),
+        cfg::Stmt::Goto(nx) => make_goto(cx, cfg, nx),
+        cfg::Stmt::Yield(nx, ref expr) => make_yield(cx, cfg, expr, nx),
     }
 }
 
