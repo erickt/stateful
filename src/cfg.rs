@@ -1,10 +1,12 @@
+use aster::AstBuilder;
+
+use petgraph::EdgeDirection;
+use petgraph::graph::{self, Graph, NodeIndex};
+
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::visit;
 use syntax::ptr::P;
-
-use petgraph::EdgeDirection;
-use petgraph::graph::{self, Graph, NodeIndex};
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -159,22 +161,11 @@ impl CFGBuilder {
                 exit
             }
             ast::Expr_::ExprLoop(ref block, _) => {
-                let (_, pred) = self.expr_loop(block, pred, scope);
-                pred
+                self.expr_loop(block, pred, scope)
             }
-            /*
             ast::Expr_::ExprIf(ref expr, ref then, ref else_) => {
-                let builder = AstBuilder::new();
-                let expr = expr.clone();
-                let then = expr.clone();
-
-                // Make sure there is an else branch.
-                let else_ = else_.clone().or_else(builder.expr().unit());
-
-                let (_, pred) = self.expr_if(pred, expr, then, else_);
-                pred
+                self.expr_if(expr, then, else_, pred, scope)
             }
-            */
             ref expr => {
                 panic!("cannot handle {:?} yet", expr);
             }
@@ -184,35 +175,51 @@ impl CFGBuilder {
     fn expr_loop(&mut self,
                  block: &ast::Block,
                  pred: NodeIndex,
-                 scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
+                 scope: &Vec<ast::Ident>) -> NodeIndex {
         let (entry, pred) = self.block_inner(block, pred, scope);
         self.goto(pred, entry);
 
-        (entry, pred)
+        pred
     }
 
-
-    /*
     fn expr_if(&mut self,
-               scope: &Vec<ast::Ident>,
+               expr: &P<ast::Expr>,
+               then: &P<ast::Block>,
+               else_: &Option<P<ast::Expr>>,
                pred: NodeIndex,
-               expr: P<ast::Expr>,
-               then: P<ast::Block>,
-               else_: P<ast::Expr>) -> (P<ast::Expr>, NodeIndex) {
+               scope: &Vec<ast::Ident>) -> NodeIndex {
         assert!(!self.contains_transition_expr(expr));
+        assert!(then.expr.is_none());
 
         let builder = AstBuilder::new();
 
-        let entry_bb = self.add_bb("IfEntry", scope);
-        let then_bb = self.add_bb("IfThen", scope);
-        let else_bb = self.add_bb("IfElse", scope);
+        let then_nx = self.add_bb("Then", scope);
+        let else_nx = self.add_bb("Else", scope);
+        let endif_nx = self.add_bb("EndIf", scope);
 
+        self.add_stmt(pred, Stmt::If(expr.clone(), then_nx, else_nx));
+        self.add_edge(pred, then_nx);
+        self.add_edge(pred, else_nx);
 
+        let (_, pred) = self.block_inner(then, then_nx, scope);
+        self.goto(pred, endif_nx);
 
+        let else_ = match *else_ {
+            Some(ref else_) => {
+                builder.block()
+                    .stmt().semi().build(else_.clone())
+                    .build()
+            }
+            None => {
+                builder.block().build()
+            }
+        };
 
-        pred
+        let (_, pred) = self.block_inner(&else_, else_nx, scope);
+        self.goto(pred, endif_nx);
+
+        endif_nx
     }
-    */
 
     fn add_bb<T>(&mut self, name: T, scope: &Vec<ast::Ident>) -> NodeIndex
         where T: Into<String>
@@ -350,4 +357,5 @@ pub enum Stmt {
     Stmt(P<ast::Stmt>),
     Goto(NodeIndex),
     Yield(NodeIndex, P<ast::Expr>),
+    If(P<ast::Expr>, NodeIndex, NodeIndex),
 }

@@ -85,7 +85,7 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
             let block = match *node {
                 cfg::Node::BasicBlock(ref bb) => {
                     let stmts = bb.stmts.iter()
-                        .map(|stmt| make_stmt(cx, cfg, stmt))
+                        .flat_map(|stmt| make_stmt(cx, cfg, stmt))
                         .collect::<Vec<_>>();
 
                     quote_block!(cx, {
@@ -227,38 +227,68 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     }
 }
 
-fn make_goto(cx: &ExtCtxt,
-             cfg: &cfg::CFG,
-             next_state: NodeIndex) -> P<ast::Stmt> {
+fn make_goto(cfg: &cfg::CFG,
+             next_state: NodeIndex) -> Vec<P<ast::Stmt>> {
+    let builder = aster::AstBuilder::new();
+
     let next_state = make_state_expr(cfg, next_state);
 
-    quote_stmt!(cx, {
-        state = $next_state;
-        continue;
-    }).expect("continue to stmt")
+    vec![
+        builder.stmt().expr().assign()
+            .id("state")
+            .build(next_state),
+        builder.stmt().expr().continue_(),
+    ]
 }
 
 fn make_yield(cx: &ExtCtxt,
               cfg: &cfg::CFG,
               data: &P<ast::Expr>,
-              next_state: NodeIndex) -> P<ast::Stmt> {
+              next_state: NodeIndex) -> Vec<P<ast::Stmt>> {
     let next_state = make_state_expr(cfg, next_state);
 
-    quote_stmt!(cx,
-        return (
-            ::std::option::Option::Some($data),
-            $next_state,
-        );
-    ).expect("return and goto stmt")
+    vec![
+        quote_stmt!(cx,
+            return (
+                ::std::option::Option::Some($data),
+                $next_state,
+            );
+        ).expect("yield stmt"),
+    ]
+}
+
+fn make_if(cfg: &cfg::CFG,
+           expr: &P<ast::Expr>,
+           then: NodeIndex,
+           else_: NodeIndex) -> Vec<P<ast::Stmt>> {
+    let builder = aster::AstBuilder::new();
+
+    let then = make_goto(cfg, then);
+    let then = builder.block()
+        .with_stmts(then)
+        .build();
+
+    let else_ = make_goto(cfg, else_);
+    let else_ = builder.block()
+        .with_stmts(else_)
+        .build();
+
+    vec![
+        builder.stmt().expr().if_()
+            .build(expr.clone())
+            .build_then(then)
+            .build_else(else_),
+    ]
 }
 
 fn make_stmt(cx: &ExtCtxt,
              cfg: &cfg::CFG,
-             stmt: &cfg::Stmt) -> P<ast::Stmt> {
+             stmt: &cfg::Stmt) -> Vec<P<ast::Stmt>> {
     match *stmt {
-        cfg::Stmt::Stmt(ref stmt) => stmt.clone(),
-        cfg::Stmt::Goto(nx) => make_goto(cx, cfg, nx),
+        cfg::Stmt::Stmt(ref stmt) => vec![stmt.clone()],
+        cfg::Stmt::Goto(nx) => make_goto(cfg, nx),
         cfg::Stmt::Yield(nx, ref expr) => make_yield(cx, cfg, expr, nx),
+        cfg::Stmt::If(ref expr, then, else_) => make_if(cfg, expr, then, else_),
     }
 }
 
