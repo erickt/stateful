@@ -5,7 +5,7 @@ use syntax::visit;
 use syntax::ptr::P;
 
 use petgraph::EdgeDirection;
-use petgraph::graph::{Graph, NodeIndex};
+use petgraph::graph::{self, Graph, NodeIndex};
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -31,8 +31,8 @@ impl CFGBuilder {
         let entry = self.add_bb("Entry", &scope);
         let exit = self.graph.add_node(Node::Exit);
 
-        let pred = self.block(block, entry, &scope);
-        self.goto(pred, exit);
+        let (_, block_exit) = self.block(block, entry, &scope);
+        self.goto(block_exit, exit);
 
         CFG {
             graph: self.graph,
@@ -41,16 +41,46 @@ impl CFGBuilder {
         }
     }
 
-    fn block(&mut self, block: &ast::Block,
-             mut pred: NodeIndex,
-             parent_scope: &Vec<ast::Ident>) -> NodeIndex {
+    fn block(&mut self,
+             block: &ast::Block,
+             pred: NodeIndex,
+             scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
+        let (entry, pred) = self.block_inner(block, pred, scope);
+
+        /*
+        let exit = self.add_bb("BlockExit", &scope);
+        self.goto(pred, exit);
+
+        (entry, exit)
+        */
+
+        (entry, pred)
+    }
+
+    fn loop_(&mut self,
+             block: &ast::Block,
+             pred: NodeIndex,
+             scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
+        let (entry, pred) = self.block_inner(block, pred, scope);
+        self.goto(pred, entry);
+
+        (entry, pred)
+    }
+
+    fn block_inner(&mut self,
+                   block: &ast::Block,
+                   mut pred: NodeIndex,
+                   parent_scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
         // Create a new scope so that all our declarations will be dropped when it goes out of
         // bounds.
         let mut scope = parent_scope.clone();
 
+        let entry = pred;
+        /*
         let entry = self.add_bb("BlockEntry", &scope);
         self.goto(pred, entry);
         pred = entry;
+        */
 
         for stmt in block.stmts.iter() {
             pred = self.stmt(stmt, pred, &mut scope);
@@ -60,9 +90,7 @@ impl CFGBuilder {
             panic!("cannot handle block expressions yet");
         }
 
-        let exit = self.add_bb("BlockExit", &parent_scope);
-        self.goto(pred, exit);
-        exit
+        (entry, pred)
     }
 
     fn add_edge(&mut self, src: NodeIndex, dst: NodeIndex, edge: Edge) -> NodeIndex {
@@ -110,7 +138,7 @@ impl CFGBuilder {
                 }
             }
 
-            ast::Stmt_::StmtSemi(ref expr, _) => {
+            ast::Stmt_::StmtSemi(ref expr, _) if self.contains_transition(expr) => {
                 let nx = self.expr(expr, pred, &*scope);
                 if pred != nx {
                     return nx;
@@ -137,7 +165,12 @@ impl CFGBuilder {
                 panic!("cannot handle empty returns yet");
             }
             ast::Expr_::ExprBlock(ref block) => {
-                self.block(block, pred, scope)
+                let (_, exit) = self.block(block, pred, scope);
+                exit
+            }
+            ast::Expr_::ExprLoop(ref block, _) => {
+                let (_, pred) = self.loop_(block, pred, scope);
+                pred
             }
             _ => pred,
         }
@@ -182,6 +215,27 @@ impl CFGBuilder {
         visit::Visitor::visit_pat(&mut visitor, pat);
         visitor.0
     }
+
+    fn contains_transition(&self, expr: &ast::Expr) -> bool {
+        struct Visitor(bool);
+
+        impl<'a> visit::Visitor<'a> for Visitor {
+            fn visit_expr(&mut self, expr: &ast::Expr) {
+                match expr.node {
+                    ast::Expr_::ExprRet(Some(_)) => {
+                        self.0 = true;
+                    }
+                    _ => {
+                        visit::walk_expr(self, expr)
+                    }
+                }
+            }
+        }
+
+        let mut visitor = Visitor(false);
+        visit::Visitor::visit_expr(&mut visitor, expr);
+        visitor.0
+    }
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -201,20 +255,12 @@ impl CFG {
         self.get_node(nx).decls()
     }
 
-    pub fn get_edge(&self, nx: NodeIndex, direction: EdgeDirection) -> Option<(NodeIndex, &Edge)> {
-        let mut edges = self.graph.edges_directed(nx, direction);
-
-        match edges.next() {
-            Some(edge) => {
-                assert!(edges.next().is_none());
-                Some(edge)
-            }
-            None => None,
-        }
+    pub fn get_edges(&self, nx: NodeIndex, direction: EdgeDirection) -> graph::Edges<Edge> {
+        self.graph.edges_directed(nx, direction)
     }
 
-    pub fn get_child_edge(&self, nx: NodeIndex) -> Option<(NodeIndex, &Edge)> {
-        self.get_edge(nx, EdgeDirection::Outgoing)
+    pub fn get_child_edges(&self, nx: NodeIndex) -> graph::Edges<Edge> {
+        self.get_edges(nx, EdgeDirection::Outgoing)
     }
 }
 

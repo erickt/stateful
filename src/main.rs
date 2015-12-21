@@ -6,21 +6,16 @@ fn increment(x: usize) -> usize { x + 1 }
 
 #[state_machine]
 fn yield_(a: usize) -> usize {
-    let x = increment(a);
-
-    {
-        let y = increment(x);
-        return x + y;
-
-        let z = increment(y);
-        return x + y + z;
+    let x = 1;
+    loop {
+        return a;
     };
-
-    return x;
+    let y = 2;
+    return y;
 }
 
 fn main() {
-    for value in yield_(1) {
+    for value in yield_(1).take(20) {
         println!("yield_: {:?}", value);
     }
 }

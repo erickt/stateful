@@ -1,4 +1,5 @@
 #![feature(plugin)]
+#![allow(unused_variables)]
 #![plugin(stateful)]
 
 fn a() -> usize { 0 }

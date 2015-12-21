@@ -82,49 +82,59 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
 
     for nx in DfsIter::new(&cfg.graph, cfg.entry) {
         let node = cfg.get_node(nx);
-        let edge = cfg.get_child_edge(nx);
-        
-        let block = match *node {
-            cfg::Node::BasicBlock(ref bb) => {
-                let stmts = &bb.stmts;
-                let expr = &bb.expr;
 
-                let transition = edge.map(|(edge_nx, edge)| {
-                    make_transition_stmt(cx, cfg, edge_nx, edge)
-                });
+        for (edge_nx, edge) in cfg.get_child_edges(nx) {
+            let block = match *node {
+                cfg::Node::BasicBlock(ref bb) => {
+                    let stmts = &bb.stmts;
+                    let expr = &bb.expr;
 
-                quote_block!(cx, {
-                    $stmts
-                    $expr
-                    $transition
-                })
-            }
-            cfg::Node::Exit => {
-                assert!(edge.is_none());
+                    let transition = make_transition_stmt(cx, cfg, edge_nx, edge);
 
-                let next_state = make_state_expr(cfg, nx);
+                    quote_block!(cx, {
+                        $stmts
+                        $expr
+                        $transition
+                    })
+                }
+                cfg::Node::Exit => {
+                    let next_state = make_state_expr(cfg, nx);
 
-                quote_block!(cx, {
-                    return (
-                        ::std::option::Option::None,
-                        $next_state,
-                    );
-                })
-            }
-        };
+                    quote_block!(cx, {
+                        return (
+                            ::std::option::Option::None,
+                            $next_state,
+                        );
+                    })
+                }
+            };
 
-        state_map.insert(nx, block);
+            state_map.insert(nx, block);
+        }
     }
 
     state_map
 }
+
+
+fn make_exit_block(cx: &ExtCtxt, cfg: &cfg::CFG) -> P<ast::Block> {
+    let next_state = make_state_expr(cfg, cfg.exit);
+
+    quote_block!(cx, {
+        return (
+            ::std::option::Option::None,
+            $next_state,
+        );
+    })
+}
+
 
 fn make_state_enum_and_arms(cx: &ExtCtxt,
                             cfg: &cfg::CFG) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
     let ast_builder = aster::AstBuilder::new();
 
     let state_map = make_state_map(cx, &cfg);
-    let exit_block = state_map.get(&cfg.exit).expect("exit block");
+    let exit_block = make_exit_block(cx, cfg);
 
     let mut state_variables = Vec::new();;
     let mut state_variants = Vec::new();
@@ -133,7 +143,7 @@ fn make_state_enum_and_arms(cx: &ExtCtxt,
     for (nx, block) in state_map.iter()
             .map(|(nx, block)| (*nx, block))
             .filter(|&(nx, _)| nx.index() != cfg.exit.index())
-            .chain(Some((cfg.exit, exit_block))) {
+            .chain(Some((cfg.exit, &exit_block))) {
         let (variant, variables) = make_state_variant(cfg, nx, state_variables.len());
         state_variables.extend(variables);
 
