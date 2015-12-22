@@ -12,12 +12,14 @@ use syntax::ptr::P;
 
 pub struct CFGBuilder {
     graph: Graph<Node, ()>,
+    inside_loop: bool,
 }
 
 impl CFGBuilder {
     pub fn new() -> Self {
         CFGBuilder {
             graph: Graph::new(),
+            inside_loop: false,
         }
     }
 
@@ -32,8 +34,7 @@ impl CFGBuilder {
         let entry = self.add_bb("Entry", &scope);
         let exit = self.graph.add_node(Node::Exit);
 
-        let (_, block_exit) = self.block(block, entry, &scope);
-        self.goto(block_exit, exit);
+        self.block(entry, exit, &scope, block);
 
         CFG {
             graph: self.graph,
@@ -43,34 +44,29 @@ impl CFGBuilder {
     }
 
     fn block(&mut self,
-             block: &ast::Block,
              pred: NodeIndex,
-             scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
-        let (entry, pred) = self.block_inner(block, pred, scope);
+             next: NodeIndex,
+             scope: &Vec<ast::Ident>,
+             block: &ast::Block) -> NodeIndex {
+        let (_, pred) = self.block_inner(block, pred, next, scope);
 
         let exit = self.add_bb("BlockExit", &scope);
-        self.goto(pred, exit);
-
-        (entry, exit)
+        self.goto(pred, exit)
     }
 
     fn block_inner(&mut self,
                    block: &ast::Block,
                    mut pred: NodeIndex,
+                   next: NodeIndex,
                    parent_scope: &Vec<ast::Ident>) -> (NodeIndex, NodeIndex) {
         // Create a new scope so that all our declarations will be dropped when it goes out of
         // bounds.
         let mut scope = parent_scope.clone();
 
         let entry = pred;
-        /*
-        let entry = self.add_bb("BlockEntry", &scope);
-        self.goto(pred, entry);
-        pred = entry;
-        */
 
         for stmt in block.stmts.iter() {
-            pred = self.stmt(pred, &mut scope, stmt);
+            pred = self.stmt(pred, next, &mut scope, stmt);
         }
 
         if block.expr.is_some() {
@@ -120,6 +116,7 @@ impl CFGBuilder {
 
     fn stmt(&mut self,
             pred: NodeIndex,
+            next: NodeIndex,
             scope: &mut Vec<ast::Ident>,
             stmt: &P<ast::Stmt>) -> NodeIndex {
         match stmt.node {
@@ -137,16 +134,18 @@ impl CFGBuilder {
                 pred
             }
             ast::Stmt_::StmtSemi(ref expr, _) if self.contains_transition_expr(expr) => {
-                self.stmt_semi(pred, &*scope, expr)
+                self.stmt_semi(pred, next, &*scope, expr)
             }
             _ => {
-                panic!("Cannot handle this statement yet: {:?}", stmt);
+                self.add_stmt(pred, Stmt::Stmt(stmt.clone()));
+                pred
             }
         }
     }
 
     fn stmt_semi(&mut self,
                  pred: NodeIndex,
+                 next: NodeIndex,
                  scope: &Vec<ast::Ident>,
                  expr: &P<ast::Expr>) -> NodeIndex {
         match expr.node {
@@ -156,15 +155,23 @@ impl CFGBuilder {
             ast::Expr_::ExprRet(None) => {
                 panic!("cannot handle empty returns yet");
             }
+            ast::Expr_::ExprBreak(None) => {
+                self.goto(pred, next)
+            }
             ast::Expr_::ExprBlock(ref block) => {
-                let (_, exit) = self.block(block, pred, scope);
-                exit
+                self.block(pred, next, scope, block)
             }
             ast::Expr_::ExprLoop(ref block, _) => {
-                self.expr_loop(block, pred, scope)
+                let old_inside_loop = self.inside_loop;
+                self.inside_loop = true;
+
+                let pred = self.expr_loop(pred, next, scope, block);
+
+                self.inside_loop = old_inside_loop;
+                pred
             }
             ast::Expr_::ExprIf(ref expr, ref then, ref else_) => {
-                self.expr_if(expr, then, else_, pred, scope)
+                self.expr_if(pred, next, scope, expr, then, else_)
             }
             ref expr => {
                 panic!("cannot handle {:?} yet", expr);
@@ -173,21 +180,23 @@ impl CFGBuilder {
     }
 
     fn expr_loop(&mut self,
-                 block: &ast::Block,
                  pred: NodeIndex,
-                 scope: &Vec<ast::Ident>) -> NodeIndex {
-        let (entry, pred) = self.block_inner(block, pred, scope);
+                 next: NodeIndex,
+                 scope: &Vec<ast::Ident>,
+                 block: &ast::Block) -> NodeIndex {
+        let (entry, pred) = self.block_inner(block, pred, next, scope);
         self.goto(pred, entry);
 
         pred
     }
 
     fn expr_if(&mut self,
+               pred: NodeIndex,
+               next: NodeIndex,
+               scope: &Vec<ast::Ident>,
                expr: &P<ast::Expr>,
                then: &P<ast::Block>,
-               else_: &Option<P<ast::Expr>>,
-               pred: NodeIndex,
-               scope: &Vec<ast::Ident>) -> NodeIndex {
+               else_: &Option<P<ast::Expr>>) -> NodeIndex {
         assert!(!self.contains_transition_expr(expr));
         assert!(then.expr.is_none());
 
@@ -201,8 +210,8 @@ impl CFGBuilder {
         self.add_edge(pred, then_nx);
         self.add_edge(pred, else_nx);
 
-        let (_, pred) = self.block_inner(then, then_nx, scope);
-        self.goto(pred, endif_nx);
+        let (_, pred) = self.block_inner(then, then_nx, next, scope);
+        //self.goto(pred, endif_nx);
 
         let else_ = match *else_ {
             Some(ref else_) => {
@@ -215,8 +224,7 @@ impl CFGBuilder {
             }
         };
 
-        let (_, pred) = self.block_inner(&else_, else_nx, scope);
-        self.goto(pred, endif_nx);
+        self.block_inner(&else_, else_nx, next, scope);
 
         endif_nx
     }
@@ -261,13 +269,22 @@ impl CFGBuilder {
     }
 
     fn contains_transition_expr(&self, expr: &ast::Expr) -> bool {
-        struct Visitor(bool);
+        struct Visitor {
+            contains_transition: bool,
+            inside_loop: bool,
+        }
 
         impl<'a> visit::Visitor<'a> for Visitor {
             fn visit_expr(&mut self, expr: &ast::Expr) {
                 match expr.node {
                     ast::Expr_::ExprRet(Some(_)) => {
-                        self.0 = true;
+                        self.contains_transition = true;
+                    }
+                    ast::Expr_::ExprBreak(_) if self.inside_loop => {
+                        self.contains_transition = true;
+                    }
+                    ast::Expr_::ExprAgain(_) if self.inside_loop => {
+                        self.contains_transition = true;
                     }
                     _ => {
                         visit::walk_expr(self, expr)
@@ -276,9 +293,13 @@ impl CFGBuilder {
             }
         }
 
-        let mut visitor = Visitor(false);
+        let mut visitor = Visitor {
+            contains_transition: false,
+            inside_loop: self.inside_loop,
+        };
+
         visit::Visitor::visit_expr(&mut visitor, expr);
-        visitor.0
+        visitor.contains_transition
     }
 }
 
