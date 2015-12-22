@@ -17,6 +17,7 @@ use syntax::ext::base::{
 use syntax::ext::build::AstBuilder;
 use syntax::ptr::P;
 
+use petgraph::EdgeDirection;
 use petgraph::graph::NodeIndex;
 use petgraph::visit::DfsIter;
 
@@ -78,33 +79,35 @@ fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
 fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
     let mut state_map = BTreeMap::new();
 
-    for nx in DfsIter::new(&cfg.graph, cfg.entry) {
-        let node = cfg.get_node(nx);
+    for root_nx in cfg.graph.externals(EdgeDirection::Incoming) {
+        for nx in DfsIter::new(&cfg.graph, root_nx) {
+            let node = cfg.get_node(nx);
 
-        for _ in cfg.get_child_edges(nx) {
-            let block = match *node {
-                cfg::Node::BasicBlock(ref bb) => {
-                    let stmts = bb.stmts.iter()
-                        .flat_map(|stmt| make_stmt(cx, cfg, stmt))
-                        .collect::<Vec<_>>();
+            for _ in cfg.get_child_edges(nx) {
+                let block = match *node {
+                    cfg::Node::BasicBlock(ref bb) => {
+                        let stmts = bb.stmts.iter()
+                            .flat_map(|stmt| make_stmt(cx, cfg, stmt))
+                            .collect::<Vec<_>>();
 
-                    quote_block!(cx, {
-                        $stmts
-                    })
-                }
-                cfg::Node::Exit => {
-                    let next_state = make_state_expr(cfg, nx);
+                        quote_block!(cx, {
+                            $stmts
+                        })
+                    }
+                    cfg::Node::Exit => {
+                        let next_state = make_state_expr(cfg, nx);
 
-                    quote_block!(cx, {
-                        return (
-                            ::std::option::Option::None,
-                            $next_state,
-                        );
-                    })
-                }
-            };
+                        quote_block!(cx, {
+                            return (
+                                ::std::option::Option::None,
+                                $next_state,
+                            );
+                        })
+                    }
+                };
 
-            state_map.insert(nx, block);
+                state_map.insert(nx, block);
+            }
         }
     }
 
@@ -336,7 +339,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         ast::FunctionRetTy::Return(ref ty) => ty.clone(),
     };
 
-    let cfg_builder = cfg::CFGBuilder::new();
+    let cfg_builder = cfg::CFGBuilder::new(cx);
     let cfg = cfg_builder.build(fn_decl, block);
 
     let (state_enum, state_default, state_arms) = make_state_enum_and_arms(cx, &cfg);

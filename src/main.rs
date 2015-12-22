@@ -7,19 +7,12 @@ fn increment(x: usize) -> usize { x + 1 }
 #[state_machine]
 fn yield_(mut i: usize, then: usize, else_: usize) -> usize {
     loop {
-        if i < 5 {
-            i += 1;
-        } else {
-            break;
-        };
-    };
-
-    loop {
         if i < 10 {
             break;
         } else {
             i += 1;
             return else_;
+            i += 2;
         };
     };
 }
