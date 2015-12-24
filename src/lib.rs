@@ -30,7 +30,7 @@ fn make_state_variant(cfg: &cfg::CFG,
                       state_variables: usize) -> (P<ast::Variant>, Vec<ast::Ident>) {
     let ast_builder = aster::AstBuilder::new();
 
-    let decl_idents = cfg.get_node_decls(nx);
+    let decl_idents = cfg.get_node_decl_idents(nx);
 
     let state_id = make_state_id(cfg, nx);
 
@@ -69,10 +69,16 @@ fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
     let ast_builder = aster::AstBuilder::new();
 
     let state_id_path = make_state_id_path(cfg, nx);
-    let decl_idents = cfg.get_node_decls(nx);
+    let decl_idents = cfg.get_node_decl_idents(nx);
 
     ast_builder.pat().enum_().build(state_id_path)
-        .with_ids(decl_idents)
+        .with_pats(
+            decl_idents.iter()
+                .map(|&(mutability, ident)| {
+                    let mode = ast::BindingMode::ByValue(mutability);
+                    ast_builder.pat().build_id(mode, ident, None)
+                })
+        )
         .build()
 }
 
@@ -216,7 +222,7 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     let ast_builder = aster::AstBuilder::new();
 
     let state_id_path = make_state_id_path(cfg, nx);
-    let decl_idents = cfg.get_node_decls(nx);
+    let decl_idents = cfg.get_node_decl_idents(nx);
 
     if decl_idents.is_empty() {
         ast_builder.expr().path().build(state_id_path)
@@ -224,7 +230,7 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
         ast_builder.expr().call().path().build(state_id_path)
             .with_args(
                 decl_idents.iter()
-                    .map(|ident| ast_builder.expr().id(ident))
+                    .map(|&(_, ident)| ast_builder.expr().id(ident))
             )
             .build()
     }

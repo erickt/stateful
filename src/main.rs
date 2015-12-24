@@ -3,12 +3,13 @@
 #![allow(unused_variables)]
 
 #[state_machine]
-fn yield_(i: usize, then: usize, else_: usize) -> usize {
+fn yield_(mut i: usize, then: usize, else_: usize) -> usize {
     loop {
         if i < 10 {
-            break;
+            i += 1;
+            return i;
         } else {
-            return else_;
+            break;
         };
     };
 }
