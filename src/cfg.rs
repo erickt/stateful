@@ -8,7 +8,7 @@ use petgraph::graph::{self, Graph, NodeIndex};
 
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
-use syntax::codemap::{DUMMY_SP, Span};
+use syntax::codemap::DUMMY_SP;
 use syntax::visit;
 use syntax::ptr::P;
 
@@ -178,6 +178,9 @@ impl<'a> CFGBuilder<'a> {
             ast::Expr_::ExprIf(ref expr, ref then, ref else_) => {
                 self.expr_if(pred, expr, then, else_)
             }
+            ast::Expr_::ExprMatch(ref expr, ref arms) => {
+                self.expr_match(pred, expr, arms)
+            }
             ref expr => {
                 panic!("cannot handle {:?} yet", expr);
             }
@@ -268,6 +271,51 @@ impl<'a> CFGBuilder<'a> {
         self.goto(pred, endif_nx);
 
         endif_nx
+    }
+
+    fn expr_match(&mut self,
+                  pred: NodeIndex,
+                  expr: &P<ast::Expr>,
+                  arms: &[ast::Arm]) -> NodeIndex {
+        assert!(!self.contains_transition_expr(expr));
+
+        let arm_nxs = arms.iter()
+            .map(|arm| {
+                Arm {
+                    pats: arm.pats.clone(),
+                    guard: arm.guard.clone(),
+                    nx: self.add_bb("Arm"),
+                }
+            })
+            .collect::<Vec<_>>();
+
+        let endmatch_nx = self.add_bb("EndMatch");
+
+        for (arm, arm_node) in arms.iter().zip(arm_nxs.iter()) {
+            let mut scope = arm.pats.iter()
+                .map(|pat| self.get_decl(pat))
+                .collect::<Vec<_>>();
+
+            self.scopes.push(scope);
+
+            self.add_edge(pred, arm_node.nx);
+
+            let block = match arm.body.node {
+                ast::ExprBlock(ref block) => block,
+                _ => {
+                    panic!("only support match arm blocks at the moment");
+                }
+            };
+
+            let pred = self.block_inner(block, arm_node.nx);
+            self.goto(pred, endmatch_nx);
+
+            self.scopes.pop();
+        }
+
+        self.add_stmt(pred, Stmt::Match(expr.clone(), arm_nxs));
+
+        endmatch_nx
     }
 
     fn add_bb<T>(&mut self, name: T) -> NodeIndex
@@ -458,9 +506,17 @@ pub struct Decl {
 }
 
 #[derive(Debug)]
+pub struct Arm {
+    pub pats: Vec<P<ast::Pat>>,
+    pub guard: Option<P<ast::Expr>>,
+    pub nx: NodeIndex,
+}
+
+#[derive(Debug)]
 pub enum Stmt {
     Stmt(P<ast::Stmt>),
     Goto(NodeIndex),
     Yield(NodeIndex, P<ast::Expr>),
     If(P<ast::Expr>, NodeIndex, NodeIndex),
+    Match(P<ast::Expr>, Vec<Arm>),
 }

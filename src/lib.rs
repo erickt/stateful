@@ -290,6 +290,32 @@ fn make_if(cfg: &cfg::CFG,
     ]
 }
 
+fn make_match(cfg: &cfg::CFG,
+              expr: &P<ast::Expr>,
+              arms: &Vec<cfg::Arm>) -> Vec<P<ast::Stmt>> {
+    let builder = aster::AstBuilder::new();
+
+    let arms = arms.iter()
+        .map(|arm| {
+            let next = make_goto(cfg, arm.nx);
+            let body = builder.expr().block()
+                .with_stmts(next)
+                .build();
+
+            builder.arm()
+                .with_pats(arm.pats.clone())
+                .with_guard(arm.guard.clone())
+                .build(body)
+        });
+
+    vec![
+        builder.stmt().expr().match_()
+            .build(expr.clone())
+            .with_arms(arms)
+            .build(),
+    ]
+}
+
 fn make_stmt(cx: &ExtCtxt,
              cfg: &cfg::CFG,
              stmt: &cfg::Stmt) -> Vec<P<ast::Stmt>> {
@@ -298,6 +324,7 @@ fn make_stmt(cx: &ExtCtxt,
         cfg::Stmt::Goto(nx) => make_goto(cfg, nx),
         cfg::Stmt::Yield(nx, ref expr) => make_yield(cx, cfg, expr, nx),
         cfg::Stmt::If(ref expr, then, else_) => make_if(cfg, expr, then, else_),
+        cfg::Stmt::Match(ref expr, ref arms) => make_match(cfg, expr, arms),
     }
 }
 
