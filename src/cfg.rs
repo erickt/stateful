@@ -1,5 +1,7 @@
-use std::collections::HashMap;
+use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::Entry;
+use std::collections::hash_set;
+use std::iter;
 
 use aster::AstBuilder;
 
@@ -19,7 +21,7 @@ pub struct CFGBuilder<'a> {
     graph: Graph<Node, ()>,
     labeled_loop_map: HashMap<ast::Ident, Vec<(NodeIndex, NodeIndex)>>,
     unlabeled_loop_stack: Vec<(NodeIndex, NodeIndex)>,
-    scopes: Vec<Vec<Decl>>,
+    scopes: Vec<Scope>,
 }
 
 impl<'a> CFGBuilder<'a> {
@@ -34,7 +36,7 @@ impl<'a> CFGBuilder<'a> {
     }
 
     pub fn build(mut self, fn_decl: &ast::FnDecl, block: &ast::Block) -> CFG {
-        self.scopes.push(Vec::new());
+        self.scopes.push(Scope::new());
 
         // The initial scope is the function scope arguments.
         for arg in fn_decl.inputs.iter() {
@@ -57,7 +59,7 @@ impl<'a> CFGBuilder<'a> {
         }
     }
 
-    fn scope(&mut self) -> &mut Vec<Decl> {
+    fn scope(&mut self) -> &mut Scope {
         self.scopes.last_mut().unwrap()
     }
 
@@ -73,7 +75,7 @@ impl<'a> CFGBuilder<'a> {
     fn block_inner(&mut self, block: &ast::Block, mut pred: NodeIndex) -> NodeIndex {
         // Create a new scope so that all our declarations will be dropped when it goes out of
         // bounds.
-        self.scopes.push(Vec::new());
+        self.scopes.push(Scope::new());
 
         for stmt in block.stmts.iter() {
             pred = self.stmt(pred, stmt);
@@ -157,17 +159,13 @@ impl<'a> CFGBuilder<'a> {
                 panic!("cannot handle labeled continues yet");
             }
             ast::Expr_::ExprAgain(None) => {
-                let entry = self.unlabeled_loop_stack.last().unwrap().0;
-                self.goto(pred, entry);
-                pred
+                self.expr_continue(pred)
             }
             ast::Expr_::ExprBreak(Some(_)) => {
                 panic!("cannot handle labeled breaks yet");
             }
             ast::Expr_::ExprBreak(None) => {
-                let exit = self.unlabeled_loop_stack.last().unwrap().1;
-                self.goto(pred, exit);
-                pred
+                self.expr_break(pred)
             }
             ast::Expr_::ExprBlock(ref block) => {
                 self.expr_block(pred, block)
@@ -181,10 +179,32 @@ impl<'a> CFGBuilder<'a> {
             ast::Expr_::ExprMatch(ref expr, ref arms) => {
                 self.expr_match(pred, expr, arms)
             }
+            ast::Expr_::ExprCall(ref func, ref args) => {
+                match func.node {
+                    ast::Expr_::ExprPath(None, ref path) if is_yield(path) => {
+                        self.expr_yield(pred, args)
+                    }
+                    _ => {
+                        panic!("cannot handle {:?} yet", expr);
+                    }
+                }
+            }
             ref expr => {
                 panic!("cannot handle {:?} yet", expr);
             }
         }
+    }
+
+    fn expr_continue(&mut self, pred: NodeIndex) -> NodeIndex {
+        let entry = self.unlabeled_loop_stack.last().unwrap().0;
+        self.goto(pred, entry);
+        pred
+    }
+
+    fn expr_break(&mut self, pred: NodeIndex) -> NodeIndex {
+        let exit = self.unlabeled_loop_stack.last().unwrap().1;
+        self.goto(pred, exit);
+        pred
     }
 
     fn expr_block(&mut self, pred: NodeIndex, block: &ast::Block) -> NodeIndex {
@@ -292,9 +312,9 @@ impl<'a> CFGBuilder<'a> {
         let endmatch_nx = self.add_bb("EndMatch");
 
         for (arm, arm_node) in arms.iter().zip(arm_nxs.iter()) {
-            let mut scope = arm.pats.iter()
+            let scope = arm.pats.iter()
                 .map(|pat| self.get_decl(pat))
-                .collect::<Vec<_>>();
+                .collect::<Scope>();
 
             self.scopes.push(scope);
 
@@ -318,6 +338,48 @@ impl<'a> CFGBuilder<'a> {
         endmatch_nx
     }
 
+    fn expr_yield(&mut self, pred: NodeIndex, args: &[P<ast::Expr>]) -> NodeIndex {
+        let mut iter = args.iter();
+
+        let expr = match iter.next() {
+            Some(arg) => arg,
+            None => { panic!("yield needs an argument"); }
+        };
+
+        let mut state_ids = Vec::new();
+
+        for arg in iter {
+            match arg.node {
+                ast::Expr_::ExprPath(None, ast::Path {
+                    global: false,
+                    ref segments,
+                    ..
+                }) => {
+                    if segments.len() != 1 {
+                        panic!("must pass in identifiers: `{:?}`", arg);
+                    }
+
+                    let segment = &segments[0];
+
+                    if segment.parameters.is_empty() {
+                        state_ids.push(segment.identifier);
+                    } else {
+                        panic!("state id cannot have parameters: `{:?}`", arg);
+                    }
+                }
+                _ => {
+                    panic!("don't know how to handle `{:?}`", arg);
+                }
+            }
+        }
+
+        let dst = self.add_bb("Yield");
+        self.add_edge(pred, dst);
+        self.add_stmt(pred, Stmt::Yield(dst, expr.clone())); //, state_ids));
+
+        dst
+    }
+
     fn add_bb<T>(&mut self, name: T) -> NodeIndex
         where T: Into<String>
     {
@@ -325,7 +387,7 @@ impl<'a> CFGBuilder<'a> {
         let scope = self.scopes.iter()
             .flat_map(|scope| scope.iter())
             .map(|scope| scope.clone())
-            .collect::<Vec<_>>();
+            .collect::<Scope>();
 
         let bb = BasicBlock::new(name, scope);
 
@@ -368,7 +430,6 @@ impl<'a> CFGBuilder<'a> {
         visit::Visitor::visit_pat(&mut visitor, pat);
 
         Decl {
-            pat: pat.clone(),
             idents: visitor.0,
         }
     }
@@ -391,6 +452,9 @@ impl<'a> CFGBuilder<'a> {
                     ast::Expr_::ExprAgain(_) if self.inside_loop => {
                         self.contains_transition = true;
                     }
+                    ast::Expr_::ExprPath(None, ref path) if is_transition_path(path) => {
+                        self.contains_transition = true;
+                    }
                     _ => {
                         visit::walk_expr(self, expr)
                     }
@@ -408,6 +472,25 @@ impl<'a> CFGBuilder<'a> {
     }
 }
 
+fn is_transition_path(path: &ast::Path) -> bool {
+    if is_yield(path) {
+        true
+    } else {
+        false
+    }
+}
+
+fn is_yield(path: &ast::Path) -> bool {
+    let builder = AstBuilder::new();
+    let yield_ = builder.path()
+        .global()
+        .id("stateful")
+        .id("yield_")
+        .build();
+
+    path.global && path.segments == yield_.segments
+}
+
 //////////////////////////////////////////////////////////////////////////////
 
 pub struct CFG {
@@ -421,9 +504,11 @@ impl CFG {
         &self.graph[nx]
     }
 
+    /*
     pub fn get_node_decl_pats(&self, nx: NodeIndex) -> Vec<P<ast::Pat>> {
         self.get_node(nx).decl_pats()
     }
+    */
 
     pub fn get_node_decl_idents(&self, nx: NodeIndex) -> Vec<(ast::Mutability, ast::Ident)> {
         self.get_node(nx).decl_idents()
@@ -454,12 +539,14 @@ impl Node {
         }
     }
 
+    /*
     pub fn decl_pats(&self) -> Vec<P<ast::Pat>> {
         match *self {
             Node::BasicBlock(ref bb) => bb.decl_pats(),
             Node::Exit => Vec::new(),
         }
     }
+    */
 
     pub fn decl_idents(&self) -> Vec<(ast::Mutability, ast::Ident)> {
         match *self {
@@ -472,36 +559,35 @@ impl Node {
 #[derive(Debug)]
 pub struct BasicBlock {
     name: String,
-    decls: Vec<Decl>,
+    scope: Scope,
     pub stmts: Vec<Stmt>,
 }
 
 impl BasicBlock {
-    fn new(name: String, decls: Vec<Decl>) -> Self {
+    fn new(name: String, scope: Scope) -> Self {
         BasicBlock {
             name: name,
-            decls: decls,
+            scope: scope,
             stmts: Vec::new(),
         }
     }
 
+    /*
     fn decl_pats(&self) -> Vec<P<ast::Pat>> {
         self.decls.iter()
             .map(|decl| decl.pat.clone())
             .collect::<Vec<_>>()
     }
+    */
 
     fn decl_idents(&self) -> Vec<(ast::Mutability, ast::Ident)> {
-        self.decls.iter()
-            .flat_map(|decl| decl.idents.iter())
-            .map(|ident| *ident)
-            .collect::<Vec<_>>()
+        self.scope.idents()
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Decl {
-    pat: P<ast::Pat>,
+    //pat: P<ast::Pat>,
     idents: Vec<(ast::Mutability, ast::Ident)>,
 }
 
@@ -519,4 +605,41 @@ pub enum Stmt {
     Yield(NodeIndex, P<ast::Expr>),
     If(P<ast::Expr>, NodeIndex, NodeIndex),
     Match(P<ast::Expr>, Vec<Arm>),
+}
+
+#[derive(Debug, Clone)]
+pub struct Scope {
+    decls: HashSet<Decl>,
+}
+
+impl Scope {
+    fn new() -> Self {
+        Scope {
+            decls: HashSet::new(),
+        }
+    }
+
+    fn push(&mut self, decl: Decl) {
+        self.decls.insert(decl);
+    }
+
+    fn iter<'a>(&'a self) -> hash_set::Iter<'a, Decl> {
+        self.decls.iter()
+    }
+
+    fn idents<'a>(&'a self) -> Vec<(ast::Mutability, ast::Ident)> {
+        self.decls.iter()
+            .flat_map(|decl| decl.idents.iter())
+            .map(|ident| *ident)
+            .collect()
+    }
+}
+
+
+impl iter::FromIterator<Decl> for Scope {
+    fn from_iter<T: IntoIterator<Item=Decl>>(iter: T) -> Self {
+        Scope {
+            decls: iter.into_iter().collect(),
+        }
+    }
 }

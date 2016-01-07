@@ -2,8 +2,17 @@
 #![plugin(stateful)]
 #![allow(unused_variables)]
 
+extern crate stateful;
+
 #[state_machine]
-fn yield_(items: &[usize]) -> usize {
+fn yield_() -> usize {
+    let x = 1;
+    ::stateful::yield_(1, x);
+    return x;
+}
+
+/*
+fn foo() {
     let mut iter = items.iter();
     loop {
         match iter.next() {
@@ -12,9 +21,10 @@ fn yield_(items: &[usize]) -> usize {
         };
     };
 }
+*/
 
 fn main() {
-    for value in yield_(&[1, 2, 3, 4, 5]).take(20) {
+    for value in yield_().take(20) {
         println!("yield_: {:?}", value);
     }
 }
