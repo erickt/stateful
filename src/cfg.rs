@@ -1,6 +1,5 @@
 use std::collections::{HashSet, HashMap};
 use std::collections::hash_map::Entry;
-use std::collections::hash_set;
 use std::iter;
 
 use aster::AstBuilder;
@@ -9,10 +8,15 @@ use petgraph::EdgeDirection;
 use petgraph::graph::{self, Graph, NodeIndex};
 
 use syntax::ast;
-use syntax::ext::base::ExtCtxt;
 use syntax::codemap::DUMMY_SP;
-use syntax::visit;
+use syntax::ext::base::ExtCtxt;
+use syntax::ext::tt::transcribe::new_tt_reader;
+use syntax::parse::lexer::{Reader, TokenAndSpan};
+use syntax::parse::token::Token;
+use syntax::parse::parser::Parser;
+use syntax::parse::common::seq_sep_trailing_allowed;
 use syntax::ptr::P;
+use syntax::visit;
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -36,12 +40,13 @@ impl<'a> CFGBuilder<'a> {
     }
 
     pub fn build(mut self, fn_decl: &ast::FnDecl, block: &ast::Block) -> CFG {
+        println!("build!");
+
         self.scopes.push(Scope::new());
 
         // The initial scope is the function scope arguments.
         for arg in fn_decl.inputs.iter() {
-            let decl = self.get_decl(&arg.pat);
-            self.scope().push(decl);
+            self.scope().extend(get_decl_from_pat(&arg.pat));
         }
 
         let entry = self.add_bb("Entry");
@@ -51,6 +56,8 @@ impl<'a> CFGBuilder<'a> {
         self.goto(pred, exit);
 
         self.scopes.pop();
+
+        println!("build end!");
 
         CFG {
             graph: self.graph,
@@ -82,7 +89,8 @@ impl<'a> CFGBuilder<'a> {
         }
 
         if block.expr.is_some() {
-            panic!("cannot handle block expressions yet");
+            self.cx.span_fatal(block.span,
+                               "cannot handle block expressions yet");
         }
 
         self.scopes.pop();
@@ -126,8 +134,7 @@ impl<'a> CFGBuilder<'a> {
             ast::Stmt_::StmtDecl(ref decl, _) => {
                 match decl.node {
                     ast::Decl_::DeclLocal(ref local) => {
-                        let decl = self.get_decl(&local.pat);
-                        self.scope().push(decl);
+                        self.scope().extend(get_decl_from_pat(&local.pat));
                     }
                     _ => {
                         panic!("cannot handle item declarations yet");
@@ -139,6 +146,9 @@ impl<'a> CFGBuilder<'a> {
             }
             ast::Stmt_::StmtSemi(ref expr, _) if self.contains_transition_expr(expr) => {
                 self.stmt_semi(pred, expr)
+            }
+            ast::Stmt_::StmtMac(ref mac, _, _) if is_yield_path(&mac.node.path) => {
+                self.mac_yield(pred, mac)
             }
             _ => {
                 self.add_stmt(pred, Stmt::Stmt(stmt.clone()));
@@ -179,9 +189,12 @@ impl<'a> CFGBuilder<'a> {
             ast::Expr_::ExprMatch(ref expr, ref arms) => {
                 self.expr_match(pred, expr, arms)
             }
+            ast::Expr_::ExprMac(ref mac) if is_yield_path(&mac.node.path) => {
+                self.mac_yield(pred, mac)
+            }
             ast::Expr_::ExprCall(ref func, ref args) => {
                 match func.node {
-                    ast::Expr_::ExprPath(None, ref path) if is_yield(path) => {
+                    ast::Expr_::ExprPath(None, ref path) if is_yield_path(path) => {
                         self.expr_yield(pred, args)
                     }
                     _ => {
@@ -299,6 +312,35 @@ impl<'a> CFGBuilder<'a> {
                   arms: &[ast::Arm]) -> NodeIndex {
         assert!(!self.contains_transition_expr(expr));
 
+        /*
+        let endmatch_nx = self.add_bb("EndMatch");
+
+        let arms = arms.iter()
+            .map(|arm| {
+                let block = match arm.body.node {
+                    ast::ExprBlock(ref block) => block,
+                    _ => {
+                        self.cx.span_fatal(arm.body.span,
+                                           "only support match arm blocks at the moment");
+                    }
+                };
+
+                let pred = self.block_inner(block, arm_node.nx);
+                self.goto(pred, endmatch_nx);
+
+                Arm {
+                    pats: arm.pats.clone(),
+                    guard: arm.guard.clone(),
+                    body: body,
+                }
+            })
+            .collect();
+
+        self.add_stmt(pred, Stmt::Match(expr.clone(), arms));
+
+        endmatch_nx
+        */
+
         let arm_nxs = arms.iter()
             .map(|arm| {
                 Arm {
@@ -313,7 +355,7 @@ impl<'a> CFGBuilder<'a> {
 
         for (arm, arm_node) in arms.iter().zip(arm_nxs.iter()) {
             let scope = arm.pats.iter()
-                .map(|pat| self.get_decl(pat))
+                .flat_map(|pat| get_decl_from_pat(pat))
                 .collect::<Scope>();
 
             self.scopes.push(scope);
@@ -336,6 +378,100 @@ impl<'a> CFGBuilder<'a> {
         self.add_stmt(pred, Stmt::Match(expr.clone(), arm_nxs));
 
         endmatch_nx
+    }
+
+    fn mac_yield(&mut self, pred: NodeIndex, mac: &ast::Mac) -> NodeIndex {
+        let mut rdr = new_tt_reader(&self.cx.parse_sess().span_diagnostic,
+                                    None,
+                                    None,
+                                    mac.node.tts.clone());
+
+        let mut parser = Parser::new(self.cx.parse_sess(), self.cx.cfg(), Box::new(rdr.clone()));
+
+        let expr = panictry!(parser.parse_expr());
+        println!("expr: {:?}", expr);
+
+        for _ in 0..parser.tokens_consumed {
+            let _ = rdr.next_token();
+        }
+
+        let TokenAndSpan { tok, sp } = rdr.peek();
+
+        let idents = match tok {
+            Token::Eof => Vec::new(),
+            Token::Comma => {
+                panictry!(parser.bump());
+
+                let seq_sep = seq_sep_trailing_allowed(Token::Comma);
+                let idents = panictry!(parser.parse_seq_to_end(&Token::Eof,
+                                                               seq_sep,
+                                                               |p| p.parse_ident()));
+
+                if idents.is_empty() {
+                    self.cx.span_fatal(sp, &format!("unexpected end of macro"));
+                }
+
+                idents
+            }
+            _ => {
+                let token_str = parser.this_token_to_string();
+                self.cx.span_fatal(sp, &format!("expected ident, found `{}`", token_str));
+            }
+        };
+
+        println!("idents: {:?}", idents);
+
+        self.scope().extend(
+            idents.into_iter().map(|ident| (ast::Mutability::MutImmutable, ident))
+        );
+
+        let dst = self.add_bb("Yield");
+        self.add_edge(pred, dst);
+        self.add_stmt(pred, Stmt::Yield(dst, expr.clone())); //, state_ids));
+
+        dst
+
+        /*
+        let mut iter = args.iter();
+
+        let expr = match iter.next() {
+            Some(arg) => arg,
+            None => { panic!("yield needs an argument"); }
+        };
+
+        let mut state_ids = Vec::new();
+
+        for arg in iter {
+            match arg.node {
+                ast::Expr_::ExprPath(None, ast::Path {
+                    global: false,
+                    ref segments,
+                    ..
+                }) => {
+                    if segments.len() != 1 {
+                        panic!("must pass in identifiers: `{:?}`", arg);
+                    }
+
+                    let segment = &segments[0];
+
+                    if segment.parameters.is_empty() {
+                        state_ids.push(segment.identifier);
+                    } else {
+                        panic!("state id cannot have parameters: `{:?}`", arg);
+                    }
+                }
+                _ => {
+                    panic!("don't know how to handle `{:?}`", arg);
+                }
+            }
+        }
+
+        let dst = self.add_bb("Yield");
+        self.add_edge(pred, dst);
+        self.add_stmt(pred, Stmt::Yield(dst, expr.clone())); //, state_ids));
+
+        dst
+        */
     }
 
     fn expr_yield(&mut self, pred: NodeIndex, args: &[P<ast::Expr>]) -> NodeIndex {
@@ -385,8 +521,8 @@ impl<'a> CFGBuilder<'a> {
     {
         let name = name.into();
         let scope = self.scopes.iter()
-            .flat_map(|scope| scope.iter())
-            .map(|scope| scope.clone())
+            .flat_map(|scope| scope.decls.iter())
+            .map(|decl| decl.clone())
             .collect::<Scope>();
 
         let bb = BasicBlock::new(name, scope);
@@ -410,30 +546,6 @@ impl<'a> CFGBuilder<'a> {
         }
     }
 
-    fn get_decl(&self, pat: &P<ast::Pat>) -> Decl {
-        struct Visitor(Vec<(ast::Mutability, ast::Ident)>);
-
-        impl<'a> visit::Visitor<'a> for Visitor {
-            fn visit_pat(&mut self, pat: &ast::Pat) {
-                match pat.node {
-                    ast::PatIdent(ast::BindingMode::ByValue(mutability), id, _) => {
-                        self.0.push((mutability, id.node));
-                    }
-                    _ => { }
-                }
-
-                visit::walk_pat(self, pat);
-            }
-        }
-
-        let mut visitor = Visitor(Vec::new());
-        visit::Visitor::visit_pat(&mut visitor, pat);
-
-        Decl {
-            idents: visitor.0,
-        }
-    }
-
     fn contains_transition_expr(&self, expr: &ast::Expr) -> bool {
         struct Visitor {
             contains_transition: bool,
@@ -441,6 +553,17 @@ impl<'a> CFGBuilder<'a> {
         }
 
         impl<'a> visit::Visitor<'a> for Visitor {
+            fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+                match stmt.node {
+                    ast::Stmt_::StmtMac(ref mac, _, _) if is_yield_path(&mac.node.path) => {
+                        self.contains_transition = true;
+                    }
+                    _ => {
+                        visit::walk_stmt(self, stmt)
+                    }
+                }
+            }
+
             fn visit_expr(&mut self, expr: &ast::Expr) {
                 match expr.node {
                     ast::Expr_::ExprRet(Some(_)) => {
@@ -452,6 +575,9 @@ impl<'a> CFGBuilder<'a> {
                     ast::Expr_::ExprAgain(_) if self.inside_loop => {
                         self.contains_transition = true;
                     }
+                    ast::Expr_::ExprMac(ref mac) if is_transition_path(&mac.node.path) => {
+                        self.contains_transition = true;
+                    }
                     ast::Expr_::ExprPath(None, ref path) if is_transition_path(path) => {
                         self.contains_transition = true;
                     }
@@ -460,6 +586,8 @@ impl<'a> CFGBuilder<'a> {
                     }
                 }
             }
+
+            fn visit_mac(&mut self, _mac: &ast::Mac) { }
         }
 
         let mut visitor = Visitor {
@@ -472,23 +600,45 @@ impl<'a> CFGBuilder<'a> {
     }
 }
 
+fn get_decl_from_pat(pat: &P<ast::Pat>) -> Vec<(ast::Mutability, ast::Ident)> {
+    struct Visitor(Vec<(ast::Mutability, ast::Ident)>);
+
+    impl<'a> visit::Visitor<'a> for Visitor {
+        fn visit_pat(&mut self, pat: &ast::Pat) {
+            match pat.node {
+                ast::PatIdent(ast::BindingMode::ByValue(mutability), id, _) => {
+                    self.0.push((mutability, id.node));
+                }
+                _ => { }
+            }
+
+            visit::walk_pat(self, pat);
+        }
+
+        fn visit_mac(&mut self, _mac: &ast::Mac) { }
+    }
+
+    let mut visitor = Visitor(Vec::new());
+    visit::Visitor::visit_pat(&mut visitor, pat);
+
+    visitor.0
+}
+
 fn is_transition_path(path: &ast::Path) -> bool {
-    if is_yield(path) {
+    if is_yield_path(path) {
         true
     } else {
         false
     }
 }
 
-fn is_yield(path: &ast::Path) -> bool {
+fn is_yield_path(path: &ast::Path) -> bool {
     let builder = AstBuilder::new();
     let yield_ = builder.path()
-        .global()
-        .id("stateful")
         .id("yield_")
         .build();
 
-    path.global && path.segments == yield_.segments
+    !path.global && path.segments == yield_.segments
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -596,6 +746,7 @@ pub struct Arm {
     pub pats: Vec<P<ast::Pat>>,
     pub guard: Option<P<ast::Expr>>,
     pub nx: NodeIndex,
+    //pub body: P<ast::Expr>,
 }
 
 #[derive(Debug)]
@@ -609,37 +760,60 @@ pub enum Stmt {
 
 #[derive(Debug, Clone)]
 pub struct Scope {
-    decls: HashSet<Decl>,
+    decls: Vec<(ast::Mutability, ast::Ident)>,
+    set: HashSet<ast::Ident>,
 }
 
 impl Scope {
     fn new() -> Self {
         Scope {
-            decls: HashSet::new(),
+            decls: Vec::new(),
+            set: HashSet::new(),
         }
     }
 
-    fn push(&mut self, decl: Decl) {
-        self.decls.insert(decl);
-    }
-
-    fn iter<'a>(&'a self) -> hash_set::Iter<'a, Decl> {
-        self.decls.iter()
+    fn push(&mut self, mutability: ast::Mutability, ident: ast::Ident) {
+        if !self.set.contains(&ident) {
+            self.set.insert(ident);
+            self.decls.push((mutability, ident));
+        }
     }
 
     fn idents<'a>(&'a self) -> Vec<(ast::Mutability, ast::Ident)> {
-        self.decls.iter()
-            .flat_map(|decl| decl.idents.iter())
-            .map(|ident| *ident)
-            .collect()
+        self.decls.clone()
     }
 }
 
-
+/*
 impl iter::FromIterator<Decl> for Scope {
     fn from_iter<T: IntoIterator<Item=Decl>>(iter: T) -> Self {
-        Scope {
-            decls: iter.into_iter().collect(),
+        let mut scope = Scope::new();
+
+        for decl in iter.into_iter() {
+            scope.push(decl);
+        }
+
+        scope
+    }
+}
+*/
+
+impl iter::FromIterator<(ast::Mutability, ast::Ident)> for Scope {
+    fn from_iter<T: IntoIterator<Item=(ast::Mutability, ast::Ident)>>(iter: T) -> Self {
+        let mut scope = Scope::new();
+
+        for (mutability, ident) in iter.into_iter() {
+            scope.push(mutability, ident);
+        }
+
+        scope
+    }
+}
+
+impl iter::Extend<(ast::Mutability, ast::Ident)> for Scope {
+    fn extend<T: IntoIterator<Item=(ast::Mutability, ast::Ident)>>(&mut self, iter: T) {
+        for (mutability, ident) in iter {
+            self.push(mutability, ident);
         }
     }
 }

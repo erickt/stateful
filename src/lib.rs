@@ -3,6 +3,8 @@
 extern crate aster;
 extern crate petgraph;
 extern crate rustc_plugin;
+
+#[macro_use]
 extern crate syntax;
 
 use std::collections::BTreeMap;
@@ -306,6 +308,7 @@ fn make_match(cfg: &cfg::CFG,
                 .with_pats(arm.pats.clone())
                 .with_guard(arm.guard.clone())
                 .build(body)
+                //.build(arm.body.clone())
         });
 
     vec![
