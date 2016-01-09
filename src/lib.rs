@@ -84,7 +84,7 @@ fn make_state_pat(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Pat> {
         .build()
 }
 
-fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
+fn make_state_map(cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Block>> {
     let mut state_map = BTreeMap::new();
 
     for root_nx in cfg.graph.externals(EdgeDirection::Incoming) {
@@ -94,23 +94,10 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
             for _ in cfg.get_child_edges(nx) {
                 let block = match *node {
                     cfg::Node::BasicBlock(ref bb) => {
-                        let stmts = bb.stmts.iter()
-                            .flat_map(|stmt| make_stmt(cx, cfg, stmt))
-                            .collect::<Vec<_>>();
-
-                        quote_block!(cx, {
-                            $stmts
-                        })
+                        make_block(cfg, &bb.block)
                     }
                     cfg::Node::Exit => {
-                        let next_state = make_state_expr(cfg, nx);
-
-                        quote_block!(cx, {
-                            return (
-                                ::std::option::Option::None,
-                                $next_state,
-                            );
-                        })
+                        make_exit_block(cfg, nx)
                     }
                 };
 
@@ -123,15 +110,11 @@ fn make_state_map(cx: &ExtCtxt, cfg: &cfg::CFG) -> BTreeMap<NodeIndex, P<ast::Bl
 }
 
 
-fn make_exit_block(cx: &ExtCtxt, cfg: &cfg::CFG) -> P<ast::Block> {
-    let next_state = make_state_expr(cfg, cfg.exit);
-
-    quote_block!(cx, {
-        return (
-            ::std::option::Option::None,
-            $next_state,
-        );
-    })
+fn make_exit_block(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Block> {
+    let builder = aster::AstBuilder::new();
+    builder.block()
+        .with_stmt(make_return(cfg, nx))
+        .build()
 }
 
 
@@ -139,8 +122,8 @@ fn make_state_enum_and_arms(cx: &ExtCtxt,
                             cfg: &cfg::CFG) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
     let ast_builder = aster::AstBuilder::new();
 
-    let state_map = make_state_map(cx, &cfg);
-    let exit_block = make_exit_block(cx, cfg);
+    let state_map = make_state_map(cfg);
+    let exit_block = make_exit_block(cfg, cfg.exit);
 
     let mut state_variables = Vec::new();;
     let mut state_variants = Vec::new();
@@ -209,16 +192,14 @@ fn make_state_id_path(cfg: &cfg::CFG, nx: NodeIndex) -> ast::Path {
         .build()
 }
 
-/*
-fn make_return(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Stmt> {
-    quote_stmt!(cx,
-        return (
-            ::std::option::Option::Some($expr),
-            State::Exit,
-        );
-    ).unwrap()
+fn make_return(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Stmt> {
+    let builder = aster::AstBuilder::new();
+    let next_state = make_state_expr(cfg, nx);
+    builder.stmt().semi().return_expr().tuple()
+        .expr().none()
+        .expr().build(next_state)
+        .build()
 }
-*/
 
 fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
     let ast_builder = aster::AstBuilder::new();
@@ -252,19 +233,19 @@ fn make_goto(cfg: &cfg::CFG,
     ]
 }
 
-fn make_yield(cx: &ExtCtxt,
-              cfg: &cfg::CFG,
+fn make_yield(cfg: &cfg::CFG,
               data: &P<ast::Expr>,
               next_state: NodeIndex) -> Vec<P<ast::Stmt>> {
+    let builder = aster::AstBuilder::new();
+
     let next_state = make_state_expr(cfg, next_state);
 
     vec![
-        quote_stmt!(cx,
-            return (
-                ::std::option::Option::Some($data),
-                $next_state,
-            );
-        ).expect("yield stmt"),
+        builder.stmt().semi().return_expr()
+            .tuple()
+                .expr().some().build(data.clone())
+                .expr().build(next_state)
+                .build(),
     ]
 }
 
@@ -297,19 +278,7 @@ fn make_match(cfg: &cfg::CFG,
               arms: &Vec<cfg::Arm>) -> Vec<P<ast::Stmt>> {
     let builder = aster::AstBuilder::new();
 
-    let arms = arms.iter()
-        .map(|arm| {
-            let next = make_goto(cfg, arm.nx);
-            let body = builder.expr().block()
-                .with_stmts(next)
-                .build();
-
-            builder.arm()
-                .with_pats(arm.pats.clone())
-                .with_guard(arm.guard.clone())
-                .build(body)
-                //.build(arm.body.clone())
-        });
+    let arms = arms.iter().map(|arm| make_arm(cfg, arm));
 
     vec![
         builder.stmt().expr().match_()
@@ -319,16 +288,41 @@ fn make_match(cfg: &cfg::CFG,
     ]
 }
 
-fn make_stmt(cx: &ExtCtxt,
-             cfg: &cfg::CFG,
-             stmt: &cfg::Stmt) -> Vec<P<ast::Stmt>> {
+fn make_arm(cfg: &cfg::CFG, arm: &cfg::Arm) -> ast::Arm {
+    let builder = aster::AstBuilder::new();
+
+    /*
+    let next = make_goto(cfg, arm.nx);
+    let body = builder.expr().block()
+        .with_stmts(next)
+        .build();
+        */
+
+    let body = make_block(cfg, &arm.body);
+
+    builder.arm()
+        .with_pats(arm.pats.clone())
+        .with_guard(arm.guard.clone())
+        .body().build_block(body)
+        //.build(arm.body.clone())
+}
+
+fn make_stmt(cfg: &cfg::CFG, stmt: &cfg::Stmt) -> Vec<P<ast::Stmt>> {
     match *stmt {
         cfg::Stmt::Stmt(ref stmt) => vec![stmt.clone()],
+        cfg::Stmt::Return => vec![make_return(cfg, cfg.exit)],
         cfg::Stmt::Goto(nx) => make_goto(cfg, nx),
-        cfg::Stmt::Yield(nx, ref expr) => make_yield(cx, cfg, expr, nx),
+        cfg::Stmt::Yield(nx, ref expr) => make_yield(cfg, expr, nx),
         cfg::Stmt::If(ref expr, then, else_) => make_if(cfg, expr, then, else_),
         cfg::Stmt::Match(ref expr, ref arms) => make_match(cfg, expr, arms),
     }
+}
+
+fn make_block(cfg: &cfg::CFG, block: &cfg::Block) -> P<ast::Block> {
+    let builder = aster::AstBuilder::new();
+    builder.block()
+        .with_stmts(block.stmts.iter().flat_map(|stmt| make_stmt(cfg, stmt)))
+        .build()
 }
 
 //////////////////////////////////////////////////////////////////////////////
