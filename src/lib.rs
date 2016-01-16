@@ -1,13 +1,10 @@
 #![feature(plugin_registrar, rustc_private, quote)]
 
 extern crate aster;
-extern crate petgraph;
 extern crate rustc_plugin;
 
 #[macro_use]
 extern crate syntax;
-
-use std::collections::BTreeMap;
 
 use syntax::ast;
 use syntax::codemap::Span;
@@ -16,17 +13,13 @@ use syntax::ext::base::{
     ExtCtxt,
     MultiModifier,
 };
-use syntax::ext::build::AstBuilder;
-use syntax::ptr::P;
-
-use petgraph::EdgeDirection;
-use petgraph::graph::NodeIndex;
-use petgraph::visit::DfsIter;
 
 //////////////////////////////////////////////////////////////////////////////
 
-mod cfg;
+//mod cfg;
+pub mod smir;
 
+/*
 fn make_state_variant(cfg: &cfg::CFG,
                       nx: NodeIndex,
                       state_variables: usize) -> (P<ast::Variant>, Vec<ast::Ident>) {
@@ -324,6 +317,7 @@ fn make_block(cfg: &cfg::CFG, block: &cfg::Block) -> P<ast::Block> {
         .with_stmts(block.stmts.iter().flat_map(|stmt| make_stmt(cfg, stmt)))
         .build()
 }
+*/
 
 //////////////////////////////////////////////////////////////////////////////
 
@@ -331,7 +325,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
                         _sp: Span,
                         meta_item: &ast::MetaItem,
                         annotatable: Annotatable) -> Annotatable {
-    let builder = aster::AstBuilder::new();
+    //let builder = aster::AstBuilder::new();
 
     let item = match annotatable {
         Annotatable::Item(item) => item,
@@ -344,7 +338,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
-    let ident = item.ident;
+    //let ident = item.ident;
 
     let (fn_decl, block) = match item.node {
         ast::ItemFn(ref fn_decl, _, _, _, _, ref block) => (fn_decl, block),
@@ -357,6 +351,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
+    /*
     let ret_ty = match fn_decl.output {
         ast::FunctionRetTy::NoReturn(..) => {
             cx.span_err(
@@ -368,7 +363,25 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         ast::FunctionRetTy::DefaultReturn(span) => builder.ty().span(span).unit(),
         ast::FunctionRetTy::Return(ref ty) => ty.clone(),
     };
+    */
 
+    let smir = smir::build::construct(cx,
+                                      meta_item.span,
+                                      item.ident,
+                                      fn_decl,
+                                      block);
+
+    match smir::trans::translate(cx, &smir) {
+        Some(item) => {
+            Annotatable::Item(item)
+        }
+        None => {
+            // We had an error, so just return the input item for a lack of a better option.
+            Annotatable::Item(item.clone())
+        }
+    }
+
+    /*
     let cfg_builder = cfg::CFGBuilder::new(cx);
     let cfg = cfg_builder.build(fn_decl, block);
 
@@ -430,6 +443,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         .build(block);
 
     Annotatable::Item(item)
+    */
 }
 
 #[plugin_registrar]

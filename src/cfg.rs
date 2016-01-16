@@ -116,10 +116,12 @@ impl<'a> CFGBuilder<'a> {
         self.push_block();
     }
 
+    /*
     fn make_goto(&mut self, src: NodeIndex, dst: NodeIndex) -> Stmt {
         self.add_edge(src, dst);
         Stmt::Goto(dst)
     }
+    */
 
     fn goto(&mut self, src: NodeIndex, dst: NodeIndex) {
         self.add_edge(src, dst);
@@ -729,7 +731,7 @@ fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> (P<ast::Expr>, Vec<ast::Iden
     let idents = match tok {
         Token::Eof => Vec::new(),
         Token::Comma => {
-            panictry!(parser.bump());
+            parser.bump();
 
             let seq_sep = seq_sep_trailing_allowed(Token::Comma);
             let idents = panictry!(parser.parse_seq_to_end(&Token::Eof,
