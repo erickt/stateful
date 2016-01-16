@@ -1,5 +1,5 @@
-use smir::build::Builder;
-use smir::repr::*;
+use mar::build::Builder;
+use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;

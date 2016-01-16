@@ -1,6 +1,6 @@
-use smir::build::Builder;
-use smir::build::scope::LoopScope;
-use smir::repr::*;
+use mar::build::Builder;
+use mar::build::scope::LoopScope;
+use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;

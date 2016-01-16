@@ -1,16 +1,16 @@
 use aster::AstBuilder;
-use smir::repr::*;
+use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
 
-pub fn translate(cx: &ExtCtxt, smir: &Smir) -> Option<P<ast::Item>> {
+pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let ast_builder = AstBuilder::new();
 
-    let item_builder = ast_builder.item().fn_(smir.ident)
-        .with_args(smir.fn_decl.inputs.iter().cloned());
+    let item_builder = ast_builder.item().fn_(mar.ident)
+        .with_args(mar.fn_decl.inputs.iter().cloned());
 
-    let item_builder = match smir.fn_decl.output {
+    let item_builder = match mar.fn_decl.output {
         ast::FunctionRetTy::NoReturn(..) => item_builder.no_return(),
         ast::FunctionRetTy::DefaultReturn(_) => {
             let ty = quote_ty!(cx, ::std::boxed::Box<::std::iter::Iterator<Item=()>>);
@@ -25,7 +25,7 @@ pub fn translate(cx: &ExtCtxt, smir: &Smir) -> Option<P<ast::Item>> {
     let builder = Builder {
         cx: cx,
         ast_builder: ast_builder,
-        smir: smir,
+        mar: mar,
     };
 
     let start_state_expr = builder.state_expr(START_BLOCK);
@@ -86,7 +86,7 @@ pub fn translate(cx: &ExtCtxt, smir: &Smir) -> Option<P<ast::Item>> {
 pub struct Builder<'a> {
     cx: &'a ExtCtxt<'a>,
     ast_builder: AstBuilder,
-    smir: &'a Smir,
+    mar: &'a Mar,
 }
 
 mod block;

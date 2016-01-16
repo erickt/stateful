@@ -17,7 +17,7 @@ use syntax::ext::base::{
 //////////////////////////////////////////////////////////////////////////////
 
 //mod cfg;
-pub mod smir;
+pub mod mar;
 
 /*
 fn make_state_variant(cfg: &cfg::CFG,
@@ -365,13 +365,13 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     };
     */
 
-    let smir = smir::build::construct(cx,
-                                      meta_item.span,
-                                      item.ident,
-                                      fn_decl,
-                                      block);
+    let mar = mar::build::construct(cx,
+                                    meta_item.span,
+                                    item.ident,
+                                    fn_decl,
+                                    block);
 
-    match smir::trans::translate(cx, &smir) {
+    match mar::trans::translate(cx, &mar) {
         Some(item) => {
             Annotatable::Item(item)
         }

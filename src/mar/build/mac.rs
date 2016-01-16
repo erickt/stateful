@@ -1,6 +1,6 @@
-use smir::build::Builder;
-use smir::build::transition;
-use smir::repr::*;
+use mar::build::Builder;
+use mar::build::transition;
+use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;

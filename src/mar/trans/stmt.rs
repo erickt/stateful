@@ -1,5 +1,5 @@
-use smir::repr::*;
-use smir::trans::Builder;
+use mar::repr::*;
+use mar::trans::Builder;
 use syntax::ast;
 use syntax::ptr::P;
 

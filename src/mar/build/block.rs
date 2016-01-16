@@ -1,5 +1,5 @@
-use smir::build::Builder;
-use smir::repr::*;
+use mar::build::Builder;
+use mar::repr::*;
 use syntax::ast;
 
 impl<'a> Builder<'a> {

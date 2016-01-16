@@ -1,5 +1,5 @@
-use smir::build::CFG;
-use smir::repr::*;
+use mar::build::CFG;
+use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 

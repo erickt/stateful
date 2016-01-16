@@ -1,11 +1,11 @@
-use smir::repr::*;
-use smir::trans::Builder;
+use mar::repr::*;
+use mar::trans::Builder;
 use syntax::ast;
 use syntax::ptr::P;
 
 impl<'a> Builder<'a> {
     pub fn block(&self, block: BasicBlock) -> Vec<P<ast::Stmt>> {
-        let block_data = self.smir.basic_block_data(block);
+        let block_data = self.mar.basic_block_data(block);
 
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");

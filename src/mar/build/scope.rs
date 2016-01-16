@@ -13,8 +13,8 @@ In addition to the normal scope stack, we track a loop scope stack that contains
 tracks where a `break` and `continue` should go to.
 */
 
-use smir::build::Builder;
-use smir::repr::*;
+use mar::build::Builder;
+use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 

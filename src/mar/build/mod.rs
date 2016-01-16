@@ -1,7 +1,7 @@
+use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
-use smir::repr::*;
 
 pub struct CFG {
     basic_blocks: Vec<BasicBlockData>,
@@ -23,7 +23,7 @@ pub fn construct(cx: &ExtCtxt,
                  ident: ast::Ident,
                  fn_decl: &ast::FnDecl,
                  ast_block: &ast::Block)
-                 -> Smir {
+                 -> Mar {
     let mut builder = Builder {
         cx: cx,
         cfg: CFG {
@@ -45,7 +45,7 @@ pub fn construct(cx: &ExtCtxt,
     builder.cfg.terminate(block, Terminator::Goto { target: END_BLOCK });
     builder.cfg.terminate(END_BLOCK, Terminator::Return);
 
-    Smir {
+    Mar {
         ident: ident,
         span: span,
         fn_decl: fn_decl.clone(),

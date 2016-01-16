@@ -1,11 +1,11 @@
-use smir::repr::*;
-use smir::trans::Builder;
+use mar::repr::*;
+use mar::trans::Builder;
 use syntax::ast;
 use syntax::ptr::P;
 
 impl<'a> Builder<'a> {
     fn state_id(&self, block: BasicBlock) -> ast::Ident {
-        match self.smir.basic_block_data(block).name {
+        match self.mar.basic_block_data(block).name {
             Some(name) => {
                 self.ast_builder.id(format!("State{}{}", block.index(), name))
             }
@@ -29,7 +29,7 @@ impl<'a> Builder<'a> {
     }
 
     pub fn state_enum_default_and_arms(&self) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
-        let all_basic_blocks = self.smir.all_basic_blocks();
+        let all_basic_blocks = self.mar.all_basic_blocks();
         let mut state_variants = Vec::with_capacity(all_basic_blocks.len());
         let mut state_arms = Vec::with_capacity(all_basic_blocks.len());
 

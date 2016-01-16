@@ -5,7 +5,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 
 /// Lowered representation of a single function.
-pub struct Smir {
+pub struct Mar {
     pub span: Span,
 
     pub ident: ast::Ident,
@@ -21,7 +21,7 @@ pub struct Smir {
     pub extents: Vec<CodeExtentData>,
 }
 
-impl Smir {
+impl Mar {
     pub fn all_basic_blocks(&self) -> Vec<BasicBlock> {
         (0..self.basic_blocks.len())
             .map(|i| BasicBlock::new(i))
@@ -70,7 +70,7 @@ pub enum Mutability {
 // BasicBlock
 
 /// The index of a particular basic block. The index is into the `basic_blocks`
-/// list of the `Smir`.
+/// list of the `Mar`.
 ///
 /// (We use a `u32` internally just to save memory.)
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -162,7 +162,7 @@ pub enum Statement {
 }
 
 /// The index of a particular basic block. The index is into the `basic_blocks`
-/// list of the `Smir`.
+/// list of the `Mar`.
 ///
 /// (We use a `u32` internally just to save memory.)
 #[derive(Copy, Clone, PartialEq, Eq)]
