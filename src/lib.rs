@@ -340,16 +340,6 @@ fn expand_state_machine(cx: &mut ExtCtxt,
 
     //let ident = item.ident;
 
-    let (fn_decl, block) = match item.node {
-        ast::ItemFn(ref fn_decl, _, _, _, _, ref block) => (fn_decl, block),
-        _ => {
-            cx.span_err(
-                meta_item.span,
-                "`state_machine` may only be applied to functions");
-
-            return Annotatable::Item(item.clone());
-        }
-    };
 
     /*
     let ret_ty = match fn_decl.output {
@@ -365,11 +355,12 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     };
     */
 
-    let mar = mar::build::construct(cx,
-                                    meta_item.span,
-                                    item.ident,
-                                    fn_decl,
-                                    block);
+    let mar = match mar::build::construct(cx, item.clone()) {
+        Ok(mar) => mar,
+        Err(mar::build::Error) => {
+            return Annotatable::Item(item);
+        }
+    };
 
     match mar::trans::translate(cx, &mar) {
         Some(item) => {

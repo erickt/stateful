@@ -10,7 +10,7 @@ pub struct Mar {
 
     pub ident: ast::Ident,
 
-    pub fn_decl: ast::FnDecl,
+    pub fn_decl: P<ast::FnDecl>,
 
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
     /// that indexes into this vector.
@@ -158,8 +158,22 @@ pub struct Arm {
 
 pub enum Statement {
     Expr(P<ast::Stmt>),
-    Drop(Span, ast::Ident),
+    Let {
+        span: Span,
+        pat: P<ast::Pat>,
+        ty: Option<P<ast::Ty>>,
+        init: Option<P<ast::Expr>>,
+    },
+    Drop {
+        span: Span,
+        lvalue: ast::Ident,
+        alias: Option<ast::Ident>,
+    },
 }
+
+
+///////////////////////////////////////////////////////////////////////////
+// Code Extents
 
 /// The index of a particular basic block. The index is into the `basic_blocks`
 /// list of the `Mar`.
@@ -185,4 +199,32 @@ impl fmt::Debug for CodeExtent {
     }
 }
 
-pub struct CodeExtentData;
+pub enum CodeExtentData {
+    Misc(ast::NodeId),
+
+    // extent of code following a `let id = expr;` binding in a block
+    Remainder(BlockRemainder),
+}
+
+/// Represents a subscope of `block` for a binding that is introduced
+/// by `block.stmts[first_statement_index]`. Such subscopes represent
+/// a suffix of the block. Note that each subscope does not include
+/// the initializer expression, if any, for the statement indexed by
+/// `first_statement_index`.
+///
+/// For example, given `{ let (a, b) = EXPR_1; let c = EXPR_2; ... }`:
+///
+/// * the subscope with `first_statement_index == 0` is scope of both
+///   `a` and `b`; it does not include EXPR_1, but does include
+///   everything after that first `let`. (If you want a scope that
+///   includes EXPR_1 as well, then do not use `CodeExtentData::Remainder`,
+///   but instead another `CodeExtent` that encompasses the whole block,
+///   e.g. `CodeExtentData::Misc`.
+///
+/// * the subscope with `first_statement_index == 1` is scope of `c`,
+///   and thus does not include EXPR_2, but covers the `...`.
+#[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, Copy)]
+pub struct BlockRemainder {
+    pub block: ast::NodeId,
+    pub first_statement_index: u32,
+}

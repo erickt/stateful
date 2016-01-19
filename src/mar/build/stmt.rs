@@ -1,5 +1,7 @@
+use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
+use std::ascii::AsciiExt;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
@@ -30,6 +32,7 @@ impl<'a> Builder<'a> {
                 match decl.node {
                     ast::DeclLocal(ref local) => {
                         self.local(extent, block, stmt.span, local)
+                        
                     }
                     ast::DeclItem(..) => {
                         self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
@@ -49,14 +52,44 @@ impl<'a> Builder<'a> {
              extent: CodeExtent,
              block: BasicBlock,
              span: Span,
-             local: &ast::Local) -> BasicBlock {
+             local: &P<ast::Local>) -> BasicBlock {
         if local.init.is_none() {
             self.cx.span_bug(span, &format!("Local variables need initializers at the moment"));
         }
 
-        let idents = self.get_idents_from_pat(&local.pat);
+        for (_, lvalue) in self.get_idents_from_pat(&local.pat) {
+            let alias = if self.lvalue_exists(lvalue) {
+                Some(self.alias(block, span, lvalue))
+            } else {
+                None
+            };
 
-        self.cx.span_bug(span, &format!("Cannot handle locals yet: {:?}", idents));
+            self.schedule_drop(span, extent, lvalue, alias);
+        }
+
+        self.cfg.push(block, Statement::Let {
+            span: span,
+            pat: local.pat.clone(),
+            ty: local.ty.clone(),
+            init: local.init.clone(),
+        });
+
+        block
+    }
+
+    fn alias(&mut self, block: BasicBlock, span: Span, lvalue: ast::Ident) -> ast::Ident {
+        let ast_builder = AstBuilder::new();
+        let alias = ast_builder.id(format!("{}_mar_{}", lvalue, self.aliases));
+        self.aliases += 1;
+
+        self.cfg.push(block, Statement::Let {
+            span: span,
+            pat: ast_builder.pat().id(alias),
+            ty: None,
+            init: Some(ast_builder.expr().id(lvalue)),
+        });
+
+        alias
     }
 
     fn get_idents_from_pat(&self, pat: &ast::Pat) -> Vec<(ast::Mutability, ast::Ident)> {
@@ -69,7 +102,13 @@ impl<'a> Builder<'a> {
             fn visit_pat(&mut self, pat: &ast::Pat) {
                 match pat.node {
                     ast::PatIdent(ast::BindingMode::ByValue(mutability), id, _) => {
-                        self.idents.push((mutability, id.node));
+                        // Consider only lower case identities as a variable.
+                        let id_str = id.node.name.as_str();
+                        let first_char = id_str.chars().next().unwrap();
+
+                        if first_char == first_char.to_ascii_lowercase() {
+                            self.idents.push((mutability, id.node));
+                        }
                     }
                     ast::PatIdent(..) => {
                         self.cx.span_bug(pat.span,

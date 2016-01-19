@@ -22,8 +22,16 @@ impl CFG {
         self.block_data_mut(block).statements.push(statement);
     }
 
-    pub fn push_drop(&mut self, block: BasicBlock, span: Span, id: ast::Ident) {
-        self.block_data_mut(block).statements.push(Statement::Drop(span, id));
+    pub fn push_drop(&mut self,
+                     block: BasicBlock,
+                     span: Span,
+                     lvalue: ast::Ident,
+                     alias: Option<ast::Ident>) {
+        self.block_data_mut(block).statements.push(Statement::Drop {
+            span: span,
+            lvalue: lvalue,
+            alias: alias,
+        });
     }
 
     pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {

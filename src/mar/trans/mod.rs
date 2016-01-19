@@ -2,6 +2,7 @@ use aster::AstBuilder;
 use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
+use syntax::fold::Folder;
 use syntax::ptr::P;
 
 pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
@@ -80,7 +81,26 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
 
     let item = item_builder.build(block);
 
+    // Syntax extensions are not allowed to have any node ids, so we need to remove them before we
+    // return the item to the caller.
+    let item = strip_node_ids(item);
+
     Some(item)
+}
+
+fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
+    struct Stripper;
+
+    impl Folder for Stripper {
+        fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
+            //assert!(old_id != ast::DUMMY_NODE_ID);
+            ast::DUMMY_NODE_ID
+        }
+    }
+
+    let mut items = Stripper.fold_item(item);
+    assert_eq!(items.len(), 1);
+    items.pop().unwrap()
 }
 
 pub struct Builder<'a> {

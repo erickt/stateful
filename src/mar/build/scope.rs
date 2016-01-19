@@ -20,7 +20,7 @@ use syntax::codemap::Span;
 
 pub struct Scope {
     extent: CodeExtent,
-    drops: Vec<(Span, ast::Ident)>,
+    drops: Vec<(Span, ast::Ident, Option<ast::Ident>)>,
 }
 
 #[derive(Clone)]
@@ -90,8 +90,8 @@ impl<'a> Builder<'a> {
         // add in any drops needed on the fallthrough path (any other
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
-        for (span, lvalue) in scope.drops {
-            self.cfg.push_drop(block, span, lvalue);
+        for (span, lvalue, alias) in scope.drops.into_iter().rev() {
+            self.cfg.push_drop(block, span, lvalue, alias);
         }
     }
 
@@ -145,12 +145,25 @@ impl<'a> Builder<'a> {
             };
 
         for scope in self.scopes.iter_mut().rev().take(popped_scopes) {
-            for &(drop_span, lvalue) in &scope.drops {
-                self.cfg.push_drop(block, drop_span, lvalue);
+            for &(drop_span, lvalue, alias) in &scope.drops {
+                self.cfg.push_drop(block, drop_span, lvalue, alias);
             }
         }
 
         self.cfg.terminate(block, Terminator::Goto { target: target })
+    }
+
+    pub fn lvalue_exists(&self, lvalue: ast::Ident) -> bool {
+        for scope in self.scopes.iter().rev() {
+            // Check if we are shadowing another variable.
+            for &(_, id, _) in scope.drops.iter() {
+                if lvalue == id {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Indicates that `lvalue` should be dropped on exit from
@@ -158,10 +171,11 @@ impl<'a> Builder<'a> {
     pub fn schedule_drop(&mut self,
                          span: Span,
                          extent: CodeExtent,
-                         lvalue: ast::Ident) {
+                         lvalue: ast::Ident,
+                         alias: Option<ast::Ident>) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
-                scope.drops.push((span, lvalue.clone()));
+                scope.drops.push((span, lvalue, alias));
                 return;
             }
         }
