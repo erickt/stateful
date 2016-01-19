@@ -25,8 +25,9 @@ impl CFG {
     pub fn push_drop(&mut self,
                      block: BasicBlock,
                      span: Span,
-                     lvalue: ast::Ident,
-                     alias: Option<ast::Ident>) {
+                     decl: VarDecl,
+                     alias: Option<Alias>) {
+        let lvalue = self.var_decl_data(decl).ident;
         self.block_data_mut(block).statements.push(Statement::Drop {
             span: span,
             lvalue: lvalue,
@@ -38,5 +39,18 @@ impl CFG {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
         self.block_data_mut(block).terminator = Some(terminator);
+    }
+
+    pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
+        &self.var_decls[decl.index()]
+    }
+
+    pub fn push_decl(&mut self,
+                     mutability: ast::Mutability,
+                     ident: ast::Ident) -> VarDecl {
+        let decl = VarDecl::new(self.var_decls.len());
+        let decl_data = VarDeclData::new(mutability, ident);
+        self.var_decls.push(decl_data);
+        decl
     }
 }

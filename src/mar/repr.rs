@@ -12,6 +12,8 @@ pub struct Mar {
 
     pub fn_decl: P<ast::FnDecl>,
 
+    pub var_decls: Vec<VarDeclData>,
+
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
     /// that indexes into this vector.
     pub basic_blocks: Vec<BasicBlockData>,
@@ -39,6 +41,10 @@ impl Mar {
     pub fn code_extent_data(&self, extent: CodeExtent) -> &CodeExtentData {
         &self.extents[extent.index()]
     }
+
+    pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
+        &self.var_decls[decl.index()]
+    }
 }
 
 /// Where execution begins
@@ -50,21 +56,35 @@ pub const END_BLOCK: BasicBlock = BasicBlock(1);
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
-/*
-pub struct VarDecl {
-    pub mutability: Mutability,
+#[derive(Clone, Copy, Debug)]
+pub struct VarDecl(u32);
+
+impl VarDecl {
+    pub fn new(index: usize) -> Self {
+        assert!(index < (u32::MAX as usize));
+        VarDecl(index as u32)
+    }
+
+    /// Extract the index.
+    pub fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+#[derive(Debug)]
+pub struct VarDeclData {
+    pub mutability: ast::Mutability,
     pub ident: ast::Ident,
-    pub ty: Option<ast::Ty>,
 }
 
-///////////////////////////////////////////////////////////////////////////
-// Mutability
-
-pub enum Mutability {
-    Mut,
-    Not,
+impl VarDeclData {
+    pub fn new(mutability: ast::Mutability, ident: ast::Ident) -> Self {
+        VarDeclData {
+            mutability: mutability,
+            ident: ident,
+        }
+    }
 }
-*/
 
 ///////////////////////////////////////////////////////////////////////////
 // BasicBlock
@@ -167,10 +187,15 @@ pub enum Statement {
     Drop {
         span: Span,
         lvalue: ast::Ident,
-        alias: Option<ast::Ident>,
+        alias: Option<Alias>,
     },
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct Alias {
+    pub lvalue: ast::Ident,
+    pub decl: VarDecl,
+}
 
 ///////////////////////////////////////////////////////////////////////////
 // Code Extents

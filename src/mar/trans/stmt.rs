@@ -29,8 +29,15 @@ impl<'a> Builder<'a> {
 
                 match *alias {
                     Some(ref alias) => {
-                        stmts.push(self.ast_builder.span(span).stmt().let_id(lvalue)
-                            .id(alias)
+                        let (mode, ident) = {
+                            let decl = self.mar.var_decl_data(alias.decl);
+                            let mode = ast::BindingMode::ByValue(decl.mutability);
+                            (mode, decl.ident)
+                        };
+
+                        stmts.push(self.ast_builder.span(span).stmt()
+                            .let_().build_id(mode, ident, None)
+                            .expr().id(alias.lvalue)
                         );
                     }
                     None => { }

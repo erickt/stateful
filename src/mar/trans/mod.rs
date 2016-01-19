@@ -92,8 +92,7 @@ fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
     struct Stripper;
 
     impl Folder for Stripper {
-        fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
-            //assert!(old_id != ast::DUMMY_NODE_ID);
+        fn new_id(&mut self, _old_id: ast::NodeId) -> ast::NodeId {
             ast::DUMMY_NODE_ID
         }
     }

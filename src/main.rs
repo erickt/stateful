@@ -4,7 +4,7 @@
 
 #[state_machine]
 fn yield_() -> usize {
-    let a = 0;
+    let mut a = 0;
 
     {
         let a = 1;

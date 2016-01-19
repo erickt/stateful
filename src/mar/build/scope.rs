@@ -20,7 +20,7 @@ use syntax::codemap::Span;
 
 pub struct Scope {
     extent: CodeExtent,
-    drops: Vec<(Span, ast::Ident, Option<ast::Ident>)>,
+    drops: Vec<(Span, VarDecl, Option<Alias>)>,
 }
 
 #[derive(Clone)]
@@ -90,8 +90,8 @@ impl<'a> Builder<'a> {
         // add in any drops needed on the fallthrough path (any other
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
-        for (span, lvalue, alias) in scope.drops.into_iter().rev() {
-            self.cfg.push_drop(block, span, lvalue, alias);
+        for (span, decl, alias) in scope.drops.into_iter().rev() {
+            self.cfg.push_drop(block, span, decl, alias);
         }
     }
 
@@ -153,17 +153,18 @@ impl<'a> Builder<'a> {
         self.cfg.terminate(block, Terminator::Goto { target: target })
     }
 
-    pub fn lvalue_exists(&self, lvalue: ast::Ident) -> bool {
+    pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
-            for &(_, id, _) in scope.drops.iter() {
-                if lvalue == id {
-                    return true;
+            for &(_, decl, _) in scope.drops.iter() {
+                let decl_data = self.cfg.var_decl_data(decl);
+                if lvalue == decl_data.ident {
+                    return Some(decl);
                 }
             }
         }
 
-        false
+        None
     }
 
     /// Indicates that `lvalue` should be dropped on exit from
@@ -171,15 +172,15 @@ impl<'a> Builder<'a> {
     pub fn schedule_drop(&mut self,
                          span: Span,
                          extent: CodeExtent,
-                         lvalue: ast::Ident,
-                         alias: Option<ast::Ident>) {
+                         decl: VarDecl,
+                         alias: Option<Alias>) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
-                scope.drops.push((span, lvalue, alias));
+                scope.drops.push((span, decl, alias));
                 return;
             }
         }
         self.cx.span_bug(span,
-                          &format!("extent {:?} not in scope to drop {:?}", extent, lvalue));
+                          &format!("extent {:?} not in scope to drop {:?}", extent, decl));
     }
 }

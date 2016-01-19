@@ -6,6 +6,7 @@ use syntax::ptr::P;
 
 pub struct CFG {
     basic_blocks: Vec<BasicBlockData>,
+    var_decls: Vec<VarDeclData>,
 }
 
 pub struct Builder<'a> {
@@ -14,7 +15,6 @@ pub struct Builder<'a> {
     scopes: Vec<scope::Scope>,
     loop_scopes: Vec<scope::LoopScope>,
     extents: Vec<CodeExtentData>,
-    aliases: u32,
 }
 
 pub struct Error;
@@ -37,11 +37,11 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         cx: cx,
         cfg: CFG {
             basic_blocks: vec![],
+            var_decls: vec![],
         },
         scopes: vec![],
         loop_scopes: vec![],
         extents: vec![],
-        aliases: 0,
     };
 
     let extent = builder.start_new_extent();
@@ -62,6 +62,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         span: item.span,
         fn_decl: fn_decl.clone(),
         basic_blocks: builder.cfg.basic_blocks,
+        var_decls: builder.cfg.var_decls,
         extents: builder.extents,
     })
 }
