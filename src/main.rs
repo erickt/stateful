@@ -2,7 +2,7 @@
 #![plugin(stateful)]
 #![allow(unused_variables)]
 
-#[state_machine]
+#[generator]
 fn yield_() -> usize {
     let mut a = 0;
 

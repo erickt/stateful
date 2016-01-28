@@ -321,10 +321,10 @@ fn make_block(cfg: &cfg::CFG, block: &cfg::Block) -> P<ast::Block> {
 
 //////////////////////////////////////////////////////////////////////////////
 
-fn expand_state_machine(cx: &mut ExtCtxt,
-                        _sp: Span,
-                        meta_item: &ast::MetaItem,
-                        annotatable: Annotatable) -> Annotatable {
+fn expand_generator(cx: &mut ExtCtxt,
+                    _sp: Span,
+                    meta_item: &ast::MetaItem,
+                    annotatable: Annotatable) -> Annotatable {
     //let builder = aster::AstBuilder::new();
 
     let item = match annotatable {
@@ -442,6 +442,6 @@ fn expand_state_machine(cx: &mut ExtCtxt,
 pub fn plugin_registrar(registry: &mut rustc_plugin::Registry) {
     let builder = aster::AstBuilder::new();
 
-    registry.register_syntax_extension(builder.name("state_machine"),
-                                       MultiModifier(Box::new(expand_state_machine)));
+    registry.register_syntax_extension(builder.name("generator"),
+                                       MultiModifier(Box::new(expand_generator)));
 }
