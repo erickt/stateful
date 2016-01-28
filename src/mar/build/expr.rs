@@ -1,5 +1,6 @@
 use mar::build::Builder;
 use mar::build::scope::LoopScope;
+use mar::build::transition::ContainsTransition;
 use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -10,6 +11,12 @@ impl<'a> Builder<'a> {
                 extent: CodeExtent,
                 block: BasicBlock,
                 expr: &P<ast::Expr>) -> BasicBlock {
+
+        // There's no reason for us to transform expressions if they don't contain any transitions.
+        if !self.contains_transition(expr) {
+            return self.into(extent, block, expr.clone());
+        }
+
         match expr.node {
             ast::ExprBlock(ref ast_block) => {
                 self.ast_block(extent, block, ast_block)
@@ -35,7 +42,7 @@ impl<'a> Builder<'a> {
             }
             ast::ExprIf(ref cond_expr, ref then_expr, ref else_expr) => {
                 // FIXME: This does not handle the `cond_expr` containing a transition yet.
-                
+
                 let mut then_block = self.cfg.start_new_block(Some("Then"));
                 let mut else_block = self.cfg.start_new_block(Some("Else"));
 
@@ -60,7 +67,8 @@ impl<'a> Builder<'a> {
                 self.expr_loop(extent, block, Some(cond_expr), body, label)
             }
             _ => {
-                self.into(extent, block, expr.clone())
+                self.cx.span_bug(expr.span,
+                                 &format!("don't know how to handle {:#?} yet", expr))
             }
         }
     }
@@ -96,7 +104,7 @@ impl<'a> Builder<'a> {
             let body_block;
             if let Some(cond_expr) = condition {
                 // FIXME: This does not yet handle the expr having a transition.
-                
+
                 body_block = this.cfg.start_new_block(Some("LoopBody"));
 
                 this.cfg.terminate(loop_block, Terminator::If {

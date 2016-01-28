@@ -1,9 +1,23 @@
 use aster::AstBuilder;
+use mar::build::Builder;
 use syntax::ast;
+use syntax::ptr::P;
 use syntax::visit;
+
+impl<'a> Builder<'a> {
+    pub fn contains_transition<E: ContainsTransition>(&self, expr: E) -> bool {
+        expr.contains_transition(self.is_inside_loop())
+    }
+}
 
 pub trait ContainsTransition {
     fn contains_transition(&self, inside_loop: bool) -> bool;
+}
+
+impl<'a> ContainsTransition for &'a P<ast::Block> {
+    fn contains_transition(&self, inside_loop: bool) -> bool {
+        (**self).contains_transition(inside_loop)
+    }
 }
 
 impl ContainsTransition for ast::Block {
@@ -21,6 +35,12 @@ impl ContainsTransition for ast::Stmt {
 
         visit::Visitor::visit_stmt(&mut visitor, self);
         visitor.contains_transition
+    }
+}
+
+impl<'a> ContainsTransition for &'a P<ast::Expr> {
+    fn contains_transition(&self, inside_loop: bool) -> bool {
+        (**self).contains_transition(inside_loop)
     }
 }
 

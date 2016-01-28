@@ -6,7 +6,8 @@
 fn yield_() -> usize {
     let mut a = 0;
 
-    {
+    if true {
+        yield_!(1);
         let a = 1;
     };
 

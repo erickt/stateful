@@ -1,7 +1,7 @@
 use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
-use syntax::fold::Folder;
+use syntax::fold;
 use syntax::ptr::P;
 
 pub struct CFG {
@@ -72,7 +72,7 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
         next_node_id: ast::NodeId,
     }
 
-    impl Folder for Assigner {
+    impl fold::Folder for Assigner {
         fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
             assert_eq!(old_id, ast::DUMMY_NODE_ID);
             let node_id = self.next_node_id;
@@ -85,9 +85,14 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
 
             node_id
         }
+
+        fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
+            fold::noop_fold_mac(mac, self)
+        }
     }
 
-    let mut items = Assigner { next_node_id: 1 }.fold_item(item);
+    let mut assigner = Assigner { next_node_id: 1 };
+    let mut items = fold::Folder::fold_item(&mut assigner, item);
     assert_eq!(items.len(), 1);
     items.pop().unwrap()
 }
@@ -106,6 +111,10 @@ impl<'a> Builder<'a> {
         self.extents.push(CodeExtentData::Misc(0));
 
         extent
+    }
+
+    pub fn is_inside_loop(&self) -> bool {
+        !self.loop_scopes.is_empty()
     }
 }
 
