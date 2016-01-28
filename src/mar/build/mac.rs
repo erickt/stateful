@@ -52,7 +52,7 @@ fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> (P<ast::Expr>, Vec<ast::Iden
 
     let idents = match tok {
         Token::Eof => Vec::new(),
-        Token::Comma => {
+        Token::Semi => {
             parser.bump();
 
             let seq_sep = seq_sep_trailing_allowed(Token::Comma);
