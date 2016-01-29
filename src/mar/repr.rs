@@ -56,7 +56,7 @@ pub const END_BLOCK: BasicBlock = BasicBlock(1);
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct VarDecl(u32);
 
 impl VarDecl {
@@ -71,7 +71,7 @@ impl VarDecl {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct VarDeclData {
     pub mutability: ast::Mutability,
     pub ident: ast::Ident,
@@ -119,6 +119,7 @@ impl fmt::Debug for BasicBlock {
 
 pub struct BasicBlockData {
     pub name: Option<&'static str>,
+    pub live_decls: Vec<VarDecl>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
@@ -127,6 +128,7 @@ impl BasicBlockData {
     pub fn new(name: Option<&'static str>, terminator: Option<Terminator>) -> Self {
         BasicBlockData {
             name: name,
+            live_decls: vec![],
             statements: vec![],
             terminator: terminator,
         }

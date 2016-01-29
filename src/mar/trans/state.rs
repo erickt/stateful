@@ -24,8 +24,23 @@ impl<'a> Builder<'a> {
 
     pub fn state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
         let state_path = self.state_path(block);
+        let block_data = self.mar.basic_block_data(block);
 
-        self.ast_builder.expr().path().build(state_path)
+        if block_data.live_decls.is_empty() {
+            self.ast_builder.expr().path()
+                .build(state_path)
+        } else {
+            let id_exprs = block_data.live_decls.iter()
+                .map(|decl| {
+                    let decl_data = self.mar.var_decl_data(*decl);
+                    (decl_data.ident, self.ast_builder.expr().id(decl_data.ident))
+                });
+
+            self.ast_builder.expr().struct_path(state_path)
+                .with_id_exprs(id_exprs)
+                .build()
+        }
+
     }
 
     pub fn state_enum_default_and_arms(&self) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
@@ -41,20 +56,33 @@ impl<'a> Builder<'a> {
             state_arms.push(arm);
         }
 
+        let state_variables = (0..self.mar.var_decls.len())
+            .map(|index| format!("T{}", index))
+            .collect::<Vec<_>>();
+
+        let generics = self.ast_builder.generics()
+            .with_ty_param_ids(state_variables.iter())
+            .build();
+
         let state_enum = self.ast_builder.item().enum_("State")
+            .generics().with(generics.clone()).build()
             .with_variants(state_variants)
             .build();
 
         let state_path = self.ast_builder.path()
-            .segment("State").build()
+            .segment("State")
+                .with_tys(
+                    state_variables.iter()
+                        .map(|variable| self.ast_builder.ty().id(variable))
+                )
+            .build()
             .build();
 
         let end_expr = self.ast_builder.block()
-            .with_stmts(self.block(END_BLOCK))
-            .build();
+            .expr().build(self.state_expr(END_BLOCK));
 
         let state_default = quote_item!(self.cx,
-            impl Default for $state_path {
+            impl $generics Default for $state_path {
                 fn default() -> Self {
                     $end_expr
                 }
@@ -66,9 +94,23 @@ impl<'a> Builder<'a> {
 
     fn state_variant(&self, block: BasicBlock) -> P<ast::Variant> {
         let state_id = self.state_id(block);
+        let block_data = self.mar.basic_block_data(block);
 
-        self.ast_builder.variant(state_id)
-            .unit()
+        if block_data.live_decls.is_empty() {
+            self.ast_builder.variant(state_id).unit()
+        } else {
+            let fields = block_data.live_decls.iter()
+                .map(|decl| {
+                    let decl_data = self.mar.var_decl_data(*decl);
+                    self.ast_builder.struct_field(decl_data.ident)
+                        .ty().id(format!("T{}", decl.index()))
+                });
+
+            self.ast_builder.variant(state_id)
+                .struct_()
+                    .with_fields(fields)
+                .build()
+        }
     }
 
     fn state_arm(&self, block: BasicBlock) -> ast::Arm {
@@ -83,8 +125,27 @@ impl<'a> Builder<'a> {
 
     fn state_pat(&self, block: BasicBlock) -> P<ast::Pat> {
         let state_path = self.state_path(block);
+        let block_data = self.mar.basic_block_data(block);
 
-        self.ast_builder.pat().enum_().build(state_path)
-            .build()
+        if block_data.live_decls.is_empty() {
+            self.ast_builder.pat().enum_().build(state_path)
+                .build()
+        } else {
+            let field_pats = block_data.live_decls.iter()
+                .map(|decl| {
+                    let decl_data = self.mar.var_decl_data(*decl);
+
+                    let pat = match decl_data.mutability {
+                        ast::MutImmutable => self.ast_builder.pat().id(decl_data.ident),
+                        ast::MutMutable => self.ast_builder.pat().mut_id(decl_data.ident),
+                    };
+
+                    (decl_data.ident, pat)
+                });
+
+            self.ast_builder.pat().struct_().build(state_path)
+                .with_pats(field_pats)
+                .build()
+        }
     }
 }

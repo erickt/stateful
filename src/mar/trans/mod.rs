@@ -57,7 +57,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
             type Item = T;
 
             fn next(&mut self) -> Option<Self::Item> {
-                let old_state = mem::replace(&mut self.state, S::default());
+                let old_state = ::std::mem::replace(&mut self.state, S::default());
                 let (value, next_state) = (self.next)(old_state);
                 self.state = next_state;
                 value

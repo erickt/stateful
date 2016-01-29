@@ -3,7 +3,7 @@ use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 
-impl CFG {
+impl<'a> CFG<'a> {
     pub fn block_data(&self, block: BasicBlock) -> &BasicBlockData {
         &self.basic_blocks[block.index()]
     }
@@ -38,7 +38,49 @@ impl CFG {
     pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
-        self.block_data_mut(block).terminator = Some(terminator);
+
+        let live_decls = (0..self.var_decls.len())
+            .map(|decl| VarDecl::new(decl))
+            .collect::<Vec<_>>();
+
+        // Push the live decls into the terminating block.
+        match terminator {
+            Terminator::Goto { target } => {
+                self.set_live_decls(target, live_decls);
+            }
+            Terminator::Yield { target, .. } => {
+                self.set_live_decls(target, live_decls);
+            }
+            Terminator::If { targets: (then_block, else_block), .. } => {
+                self.set_live_decls(then_block, live_decls.clone());
+                self.set_live_decls(else_block, live_decls);
+            }
+            Terminator::Return => {
+            }
+        }
+
+        let block_data = self.block_data_mut(block);
+        block_data.terminator = Some(terminator);
+    }
+
+    fn set_live_decls(&mut self, block: BasicBlock, live_decls: Vec<VarDecl>) {
+        if block == END_BLOCK {
+            return;
+        }
+
+        let block_data = self.block_data_mut(block);
+
+        // It's possible another block created an edge to this block. If this is the case, make
+        // sure we're passing in the same idents.
+        if !block_data.live_decls.is_empty() {
+            if live_decls != block_data.live_decls {
+                self.cx.bug("Block has different live declarations");
+            }
+
+            return;
+        }
+
+        block_data.live_decls = live_decls;
     }
 
     pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
