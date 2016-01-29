@@ -19,7 +19,7 @@ impl<'a> Builder<'a> {
 
         match expr.node {
             ast::ExprBlock(ref ast_block) => {
-                self.ast_block(extent, block, ast_block)
+                self.into(extent, block, ast_block)
             }
             ast::ExprAgain(label) => {
                 self.break_or_continue(expr.span,
@@ -34,7 +34,7 @@ impl<'a> Builder<'a> {
                                        |loop_scope| loop_scope.break_block)
             }
             ast::ExprRet(Some(_)) => {
-                self.cx.span_bug(expr.span, "cannot return a value");
+                self.cx.span_fatal(expr.span, "cannot return a value");
             }
             ast::ExprRet(None) => {
                 self.exit_scope(expr.span, extent, block, END_BLOCK);

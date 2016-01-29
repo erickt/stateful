@@ -66,7 +66,7 @@ impl<'a> EvalInto for &'a Option<P<ast::Expr>> {
                  extent: CodeExtent,
                  block: BasicBlock) -> BasicBlock {
         if let Some(ref expr) = *self {
-            expr.eval_into(builder, extent, block)
+            builder.expr(extent, block, expr)
         } else {
             block
         }
@@ -78,8 +78,8 @@ impl EvalInto for Option<P<ast::Expr>> {
                  builder: &mut Builder,
                  extent: CodeExtent,
                  block: BasicBlock) -> BasicBlock {
-        if let Some(expr) = self {
-            expr.eval_into(builder, extent, block)
+        if let Some(ref expr) = self {
+            builder.expr(extent, block, expr)
         } else {
             block
         }

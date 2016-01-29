@@ -2,7 +2,7 @@ use aster::AstBuilder;
 use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
-use syntax::fold::Folder;
+use syntax::fold;
 use syntax::ptr::P;
 
 pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
@@ -91,13 +91,17 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
 fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
     struct Stripper;
 
-    impl Folder for Stripper {
+    impl fold::Folder for Stripper {
         fn new_id(&mut self, _old_id: ast::NodeId) -> ast::NodeId {
             ast::DUMMY_NODE_ID
         }
+
+        fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
+            fold::noop_fold_mac(mac, self)
+        }
     }
 
-    let mut items = Stripper.fold_item(item);
+    let mut items = fold::Folder::fold_item(&mut Stripper, item);
     assert_eq!(items.len(), 1);
     items.pop().unwrap()
 }

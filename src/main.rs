@@ -8,7 +8,10 @@ fn yield_() -> usize {
 
     if true {
         yield_!(1);
-        let a = 1;
+    } else if false {
+        yield_!(2);
+    } else {
+        yield_!(3);
     };
 
     a + 1;
