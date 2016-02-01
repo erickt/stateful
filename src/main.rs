@@ -6,13 +6,18 @@
 
 #[generator]
 fn yield_() -> usize {
-    let mut a = 0;
+    let a = 0;
+    yield_!(a);
 
+    {
+        let a = 1;
         yield_!(a);
-        a += 1;
-        yield_!(a);
-        a += 1;
-        yield_!(a);
+    }
+    yield_!(a);
+    let a = 3;
+    let a = 4;
+    yield_!(a);
+
 
     /*
     if true {

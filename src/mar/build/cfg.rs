@@ -3,7 +3,7 @@ use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
 
-impl<'a> CFG<'a> {
+impl CFG {
     pub fn block_data(&self, block: BasicBlock) -> &BasicBlockData {
         &self.basic_blocks[block.index()]
     }
@@ -35,56 +35,42 @@ impl<'a> CFG<'a> {
         });
     }
 
-    pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
+    pub fn terminate(&mut self,
+                     block: BasicBlock,
+                     live_decls: Vec<(VarDecl, ast::Ident)>,
+                     terminator: Terminator) {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
-
-        let live_decls = (0..self.var_decls.len())
-            .map(|decl| VarDecl::new(decl))
-            .collect::<Vec<_>>();
-
-        // Push the live decls into the terminating block.
-        match terminator {
-            Terminator::Goto { target } => {
-                self.set_live_decls(target, live_decls);
-            }
-            Terminator::Yield { target, .. } => {
-                self.set_live_decls(target, live_decls);
-            }
-            Terminator::If { targets: (then_block, else_block), .. } => {
-                self.set_live_decls(then_block, live_decls.clone());
-                self.set_live_decls(else_block, live_decls);
-            }
-            Terminator::Return => {
-            }
-        }
-
+        self.add_incoming_block(&terminator, block);
         let block_data = self.block_data_mut(block);
         block_data.terminator = Some(terminator);
+        block_data.live_decls = live_decls;
     }
 
-    fn set_live_decls(&mut self, block: BasicBlock, live_decls: Vec<VarDecl>) {
-        if block == END_BLOCK {
-            return;
-        }
-
-        let block_data = self.block_data_mut(block);
-
-        // It's possible another block created an edge to this block. If this is the case, make
-        // sure we're passing in the same idents.
-        if !block_data.live_decls.is_empty() {
-            if live_decls != block_data.live_decls {
-                self.cx.bug("Block has different live declarations");
+    fn add_incoming_block(&mut self, terminator: &Terminator, block: BasicBlock) {
+        match *terminator {
+            Terminator::Goto { target } => {
+                self.block_data_mut(target).incoming_blocks.push(block);
             }
-
-            return;
+            Terminator::Yield { target, .. } => {
+                self.block_data_mut(target).incoming_blocks.push(block);
+            }
+            Terminator::If { targets: (then_block, else_block), .. } => {
+                self.block_data_mut(then_block).incoming_blocks.push(block);
+                self.block_data_mut(else_block).incoming_blocks.push(block);
+            }
+            Terminator::Return => {
+                self.block_data_mut(END_BLOCK).incoming_blocks.push(block);
+            }
         }
-
-        block_data.live_decls = live_decls;
     }
 
     pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
         &self.var_decls[decl.index()]
+    }
+
+    pub fn var_decl_data_mut(&mut self, decl: VarDecl) -> &mut VarDeclData {
+        &mut self.var_decls[decl.index()]
     }
 
     pub fn push_decl(&mut self,

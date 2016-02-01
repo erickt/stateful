@@ -46,7 +46,7 @@ impl<'a> Builder<'a> {
                 let mut then_block = self.cfg.start_new_block(Some("Then"));
                 let mut else_block = self.cfg.start_new_block(Some("Else"));
 
-                self.cfg.terminate(block, Terminator::If {
+                self.terminate(block, Terminator::If {
                     cond: cond_expr.clone(),
                     targets: (then_block, else_block),
                 });
@@ -55,8 +55,8 @@ impl<'a> Builder<'a> {
                 else_block = self.into(extent, else_block, else_expr);
 
                 let join_block = self.cfg.start_new_block(Some("Join"));
-                self.cfg.terminate(then_block, Terminator::Goto { target: join_block });
-                self.cfg.terminate(else_block, Terminator::Goto { target: join_block });
+                self.terminate(then_block, Terminator::Goto { target: join_block });
+                self.terminate(else_block, Terminator::Goto { target: join_block });
 
                 join_block
             }
@@ -97,7 +97,7 @@ impl<'a> Builder<'a> {
         let exit_block = self.cfg.start_new_block(Some("LoopExit"));
 
         // start the loop
-        self.cfg.terminate(block, Terminator::Goto { target: loop_block });
+        self.terminate(block, Terminator::Goto { target: loop_block });
 
         self.in_loop_scope(extent, label, loop_block, exit_block, |this| {
             // conduct the test, if necessary
@@ -107,7 +107,7 @@ impl<'a> Builder<'a> {
 
                 body_block = this.cfg.start_new_block(Some("LoopBody"));
 
-                this.cfg.terminate(loop_block, Terminator::If {
+                this.terminate(loop_block, Terminator::If {
                     cond: cond_expr.clone(),
                     targets: (body_block, exit_block),
                 });
@@ -117,7 +117,7 @@ impl<'a> Builder<'a> {
 
             // execute the body, branching back to the test
             let body_block_end = this.into(extent, body_block, body);
-            this.cfg.terminate(body_block_end, Terminator::Goto { target: loop_block });
+            this.terminate(body_block_end, Terminator::Goto { target: loop_block });
 
             // final point is exit_block
             exit_block

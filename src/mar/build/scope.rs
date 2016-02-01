@@ -13,8 +13,10 @@ In addition to the normal scope stack, we track a loop scope stack that contains
 tracks where a `break` and `continue` should go to.
 */
 
+use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
+use std::collections::HashSet;
 use syntax::ast;
 use syntax::codemap::Span;
 
@@ -150,13 +152,13 @@ impl<'a> Builder<'a> {
             }
         }
 
-        self.cfg.terminate(block, Terminator::Goto { target: target })
+        self.terminate(block, Terminator::Goto { target: target });
     }
 
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
-            for &(_, decl, _) in scope.drops.iter() {
+            for &(_, decl, _) in scope.drops.iter().rev() {
                 let decl_data = self.cfg.var_decl_data(decl);
                 if lvalue == decl_data.ident {
                     return Some(decl);
@@ -165,6 +167,42 @@ impl<'a> Builder<'a> {
         }
 
         None
+    }
+
+    pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
+        let live_decls = self.find_live_decls();
+        self.cfg.terminate(block, live_decls, terminator)
+    }
+
+    /// This function constructs a vector of all of the variables in scope, and returns if the
+    /// variables are currently shadowed.
+    pub fn find_live_decls(&self) -> Vec<(VarDecl, ast::Ident)> {
+        let mut decls = vec![];
+        let mut visited_decls = HashSet::new();
+
+        // We build up the list of declarations by walking up the scopes, and walking through each
+        // scope backwards. If this is the first time we've seen a variable with this name, we just
+        // add it to our list. However, if we've seen it before, then we need to rename it so that
+        // it'll be accessible once the shading variable goes out of scope.
+        for scope in self.scopes.iter().rev() {
+            for &(_, decl, _) in scope.drops.iter().rev() {
+                let ident = self.cfg.var_decl_data(decl).ident;
+
+                if visited_decls.insert(ident) {
+                    // We haven't seen this decl before, so keep it's name.
+                    decls.push((decl, ident));
+                } else {
+                    // Otherwise, we need to rename it.
+                    let shadowed_ident = AstBuilder::new().id(
+                        format!("{}_mar_{}", ident, decl.index()));
+
+                    decls.push((decl, shadowed_ident));
+                }
+            }
+        }
+
+        decls.reverse();
+        decls
     }
 
     /// Indicates that `lvalue` should be dropped on exit from

@@ -22,18 +22,29 @@ impl<'a> Builder<'a> {
             .build()
     }
 
-    pub fn state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
-        let state_path = self.state_path(block);
+    fn get_incoming_decls(&self, block: BasicBlock) -> &[(VarDecl, ast::Ident)] {
         let block_data = self.mar.basic_block_data(block);
 
-        if block_data.live_decls.is_empty() {
+        match block_data.incoming_blocks.first() {
+            Some(block) => {
+                let block_data = self.mar.basic_block_data(*block);
+                &block_data.live_decls
+            }
+            None => &[]
+        }
+    }
+
+    pub fn state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
+        let state_path = self.state_path(block);
+        let incoming_decls = self.get_incoming_decls(block);
+
+        if incoming_decls.is_empty() {
             self.ast_builder.expr().path()
                 .build(state_path)
         } else {
-            let id_exprs = block_data.live_decls.iter()
-                .map(|decl| {
-                    let decl_data = self.mar.var_decl_data(*decl);
-                    (decl_data.ident, self.ast_builder.expr().id(decl_data.ident))
+            let id_exprs = incoming_decls.iter()
+                .map(|&(_, ident)| {
+                    (ident, self.ast_builder.expr().id(ident))
                 });
 
             self.ast_builder.expr().struct_path(state_path)
@@ -94,15 +105,14 @@ impl<'a> Builder<'a> {
 
     fn state_variant(&self, block: BasicBlock) -> P<ast::Variant> {
         let state_id = self.state_id(block);
-        let block_data = self.mar.basic_block_data(block);
+        let incoming_decls = self.get_incoming_decls(block);
 
-        if block_data.live_decls.is_empty() {
+        if incoming_decls.is_empty() {
             self.ast_builder.variant(state_id).unit()
         } else {
-            let fields = block_data.live_decls.iter()
-                .map(|decl| {
-                    let decl_data = self.mar.var_decl_data(*decl);
-                    self.ast_builder.struct_field(decl_data.ident)
+            let fields = incoming_decls.iter()
+                .map(|&(decl, ident)| {
+                    self.ast_builder.struct_field(ident)
                         .ty().id(format!("T{}", decl.index()))
                 });
 
@@ -125,22 +135,22 @@ impl<'a> Builder<'a> {
 
     fn state_pat(&self, block: BasicBlock) -> P<ast::Pat> {
         let state_path = self.state_path(block);
-        let block_data = self.mar.basic_block_data(block);
+        let incoming_decls = self.get_incoming_decls(block);
 
-        if block_data.live_decls.is_empty() {
+        if incoming_decls.is_empty() {
             self.ast_builder.pat().enum_().build(state_path)
                 .build()
         } else {
-            let field_pats = block_data.live_decls.iter()
-                .map(|decl| {
-                    let decl_data = self.mar.var_decl_data(*decl);
+            let field_pats = incoming_decls.iter()
+                .map(|&(decl, ident)| {
+                    let decl_data = self.mar.var_decl_data(decl);
 
                     let pat = match decl_data.mutability {
-                        ast::MutImmutable => self.ast_builder.pat().id(decl_data.ident),
-                        ast::MutMutable => self.ast_builder.pat().mut_id(decl_data.ident),
+                        ast::MutImmutable => self.ast_builder.pat().id(ident),
+                        ast::MutMutable => self.ast_builder.pat().mut_id(ident),
                     };
 
-                    (decl_data.ident, pat)
+                    (ident, pat)
                 });
 
             self.ast_builder.pat().struct_().build(state_path)

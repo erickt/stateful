@@ -4,15 +4,14 @@ use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
 
-pub struct CFG<'a> {
-    cx: &'a ExtCtxt<'a>,
+pub struct CFG {
     basic_blocks: Vec<BasicBlockData>,
     var_decls: Vec<VarDeclData>,
 }
 
 pub struct Builder<'a> {
     cx: &'a ExtCtxt<'a>,
-    cfg: CFG<'a>,
+    cfg: CFG,
     scopes: Vec<scope::Scope>,
     loop_scopes: Vec<scope::LoopScope>,
     extents: Vec<CodeExtentData>,
@@ -37,7 +36,6 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     let mut builder = Builder {
         cx: cx,
         cfg: CFG {
-            cx: cx,
             basic_blocks: vec![],
             var_decls: vec![],
         },
@@ -56,8 +54,8 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     let mut block = START_BLOCK;
     block = builder.args_and_body(extent, block, fn_decl, ast_block);
 
-    builder.cfg.terminate(block, Terminator::Goto { target: END_BLOCK });
-    builder.cfg.terminate(END_BLOCK, Terminator::Return);
+    builder.terminate(block, Terminator::Goto { target: END_BLOCK });
+    builder.terminate(END_BLOCK, Terminator::Return);
 
     Ok(Mar {
         ident: item.ident,
