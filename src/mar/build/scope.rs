@@ -194,7 +194,7 @@ impl<'a> Builder<'a> {
                 } else {
                     // Otherwise, we need to rename it.
                     let shadowed_ident = AstBuilder::new().id(
-                        format!("{}_mar_{}", ident, decl.index()));
+                        format!("{}_shadowed_{}", ident, decl.index()));
 
                     decls.push((decl, shadowed_ident));
                 }

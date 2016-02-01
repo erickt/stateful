@@ -1,5 +1,6 @@
 use mar::repr::*;
 use mar::trans::Builder;
+use std::collections::HashSet;
 use syntax::ast;
 use syntax::ptr::P;
 
@@ -56,23 +57,33 @@ impl<'a> Builder<'a> {
 
     pub fn state_enum_default_and_arms(&self) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
         let all_basic_blocks = self.mar.all_basic_blocks();
+
+        let mut ty_param_ids = Vec::new();
+        let mut seen_ty_param_ids = HashSet::new();
         let mut state_variants = Vec::with_capacity(all_basic_blocks.len());
         let mut state_arms = Vec::with_capacity(all_basic_blocks.len());
 
         for block in all_basic_blocks {
-            let variant = self.state_variant(block);
+            let (variant, tp) = self.state_variant(block);
+
+            // It's possible for a declaration to be created but not actually get used in the state
+            // variables, so we only create a type parameter for a declaration if it's actually
+            // used.
+            for ty_param_id in tp {
+                if !seen_ty_param_ids.contains(&ty_param_id) {
+                    seen_ty_param_ids.insert(ty_param_id);
+                    ty_param_ids.push(ty_param_id);
+                }
+            }
+
             state_variants.push(variant);
 
             let arm = self.state_arm(block);
             state_arms.push(arm);
         }
 
-        let state_variables = (0..self.mar.var_decls.len())
-            .map(|index| format!("T{}", index))
-            .collect::<Vec<_>>();
-
         let generics = self.ast_builder.generics()
-            .with_ty_param_ids(state_variables.iter())
+            .with_ty_param_ids(ty_param_ids.iter())
             .build();
 
         let state_enum = self.ast_builder.item().enum_("State")
@@ -83,7 +94,7 @@ impl<'a> Builder<'a> {
         let state_path = self.ast_builder.path()
             .segment("State")
                 .with_tys(
-                    state_variables.iter()
+                    ty_param_ids.iter()
                         .map(|variable| self.ast_builder.ty().id(variable))
                 )
             .build()
@@ -103,24 +114,31 @@ impl<'a> Builder<'a> {
         (state_enum, state_default, state_arms)
     }
 
-    fn state_variant(&self, block: BasicBlock) -> P<ast::Variant> {
+    fn state_variant(&self, block: BasicBlock) -> (P<ast::Variant>, Vec<ast::Ident>) {
         let state_id = self.state_id(block);
         let incoming_decls = self.get_incoming_decls(block);
+        let ty_param_ids = incoming_decls.iter()
+            .map(|&(decl, _)| {
+                self.ast_builder.id(format!("T{}", decl.index()))
+            })
+            .collect::<Vec<_>>();
 
-        if incoming_decls.is_empty() {
+        let variant = if incoming_decls.is_empty() {
             self.ast_builder.variant(state_id).unit()
         } else {
             let fields = incoming_decls.iter()
-                .map(|&(decl, ident)| {
-                    self.ast_builder.struct_field(ident)
-                        .ty().id(format!("T{}", decl.index()))
+                .zip(ty_param_ids.iter())
+                .map(|(&(_, ident), ty_param)| {
+                    self.ast_builder.struct_field(ident).ty().id(ty_param)
                 });
 
             self.ast_builder.variant(state_id)
                 .struct_()
                     .with_fields(fields)
                 .build()
-        }
+        };
+
+        (variant, ty_param_ids)
     }
 
     fn state_arm(&self, block: BasicBlock) -> ast::Arm {

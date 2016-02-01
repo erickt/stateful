@@ -7,16 +7,14 @@
 #[generator]
 fn yield_() -> usize {
     let a = 0;
-    yield_!(a);
 
     {
-        let a = 1;
-        yield_!(a);
-    }
-    yield_!(a);
-    let a = 3;
-    let a = 4;
-    yield_!(a);
+        let b = 1;
+        yield_!(b);
+    };
+
+    let c = 2;
+    yield_!(c);
 
 
     /*

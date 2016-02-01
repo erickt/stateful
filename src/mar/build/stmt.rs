@@ -82,7 +82,7 @@ impl<'a> Builder<'a> {
         let lvalue = self.cfg.var_decl_data(decl).ident;
 
         let ast_builder = AstBuilder::new();
-        let alias = ast_builder.id(format!("{}_mar_{}", lvalue, decl.index()));
+        let alias = ast_builder.id(format!("{}_shadowed_{}", lvalue, decl.index()));
 
         self.cfg.push(block, Statement::Let {
             span: span,

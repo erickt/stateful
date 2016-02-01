@@ -15,6 +15,9 @@ impl<'a> Builder<'a> {
 
             }
             Statement::Drop { span, ref lvalue, ref alias } => {
+                // We need an explicit drop here to make sure we drop variables as they go out of
+                // a block scope. Otherwise, they won't be dropped until the next yield point,
+                // which wouldn't match the Rust semantics.
                 let mut stmts = vec![
                     self.ast_builder
                         .span(span)
