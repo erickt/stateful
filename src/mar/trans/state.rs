@@ -26,12 +26,16 @@ impl<'a> Builder<'a> {
     fn get_incoming_decls(&self, block: BasicBlock) -> &[(VarDecl, ast::Ident)] {
         let block_data = self.mar.basic_block_data(block);
 
-        match block_data.incoming_blocks.first() {
-            Some(block) => {
-                let block_data = self.mar.basic_block_data(*block);
-                &block_data.live_decls
+        if block == START_BLOCK {
+            &self.mar.input_decls
+        } else {
+            match block_data.incoming_blocks.first() {
+                Some(block) => {
+                    let block_data = self.mar.basic_block_data(*block);
+                    &block_data.live_decls
+                }
+                None => &[]
             }
-            None => &[]
         }
     }
 

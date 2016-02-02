@@ -49,10 +49,20 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     assert_eq!(builder.cfg.start_new_block(Some("Start")), START_BLOCK);
     assert_eq!(builder.cfg.start_new_block(Some("End")), END_BLOCK);
 
-    // Add node ids.
-
     let mut block = START_BLOCK;
-    block = builder.args_and_body(extent, block, fn_decl, ast_block);
+
+    builder.push_scope(extent, block);
+
+    for arg in fn_decl.inputs.iter() {
+        for decl in builder.get_decls_from_pat(&arg.pat) {
+            builder.schedule_drop(item.span, extent, decl, None);
+        }
+    }
+    block = builder.ast_block(extent, block, ast_block);
+
+    let live_decls = builder.find_live_decls();
+
+    builder.pop_scope(extent, block);
 
     builder.terminate(block, Terminator::Goto { target: END_BLOCK });
     builder.terminate(END_BLOCK, Terminator::Return);
@@ -61,6 +71,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         ident: item.ident,
         span: item.span,
         fn_decl: fn_decl.clone(),
+        input_decls: live_decls,
         basic_blocks: builder.cfg.basic_blocks,
         var_decls: builder.cfg.var_decls,
         extents: builder.extents,
@@ -98,14 +109,6 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
 }
 
 impl<'a> Builder<'a> {
-    fn args_and_body(&mut self,
-                     extent: CodeExtent,
-                     block: BasicBlock,
-                     _fn_decl: &ast::FnDecl,
-                     ast_block: &ast::Block) -> BasicBlock {
-        self.ast_block(extent, block, ast_block)
-    }
-
     pub fn start_new_extent(&mut self) -> CodeExtent {
         let extent = CodeExtent::new(self.extents.len());
         self.extents.push(CodeExtentData::Misc(0));

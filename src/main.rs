@@ -5,16 +5,22 @@
 #![allow(non_shorthand_field_patterns)]
 
 #[generator]
-fn yield_() -> usize {
+fn yield_(a: usize) -> usize {
     let a = 0;
+    yield_!(a);
 
     {
-        let b = 1;
-        yield_!(b);
+        let a = 1;
+        yield_!(a);
     };
 
-    let c = 2;
-    yield_!(c);
+    yield_!(a);
+
+    /*
+    let a = 2;
+    let a = 3;
+    yield_!(a);
+    */
 
 
     /*
@@ -31,7 +37,7 @@ fn yield_() -> usize {
 }
 
 fn main() {
-    for value in yield_().take(20) {
+    for value in yield_(0).take(20) {
         println!("yield_: {:?}", value);
     }
 }

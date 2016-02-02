@@ -12,6 +12,8 @@ pub struct Mar {
 
     pub fn_decl: P<ast::FnDecl>,
 
+    pub input_decls: Vec<(VarDecl, ast::Ident)>,
+
     pub var_decls: Vec<VarDeclData>,
 
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`

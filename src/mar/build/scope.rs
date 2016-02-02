@@ -16,9 +16,11 @@ tracks where a `break` and `continue` should go to.
 use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
+use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use syntax::ast;
 use syntax::codemap::Span;
+use syntax::visit;
 
 pub struct Scope {
     extent: CodeExtent,
@@ -219,6 +221,49 @@ impl<'a> Builder<'a> {
             }
         }
         self.cx.span_bug(span,
-                          &format!("extent {:?} not in scope to drop {:?}", extent, decl));
+                         &format!("extent {:?} not in scope to drop {:?}", extent, decl));
     }
+
+    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<VarDecl> {
+        struct Visitor<'a, 'b: 'a> {
+            builder: &'a mut Builder<'b>,
+            var_decls: Vec<VarDecl>,
+        }
+
+        impl<'a, 'b, 'c> visit::Visitor<'a> for Visitor<'b, 'c> {
+            fn visit_pat(&mut self, pat: &ast::Pat) {
+                match pat.node {
+                    ast::PatIdent(ast::BindingMode::ByValue(mutability), id, _) => {
+                        // Consider only lower case identities as a variable.
+                        let id_str = id.node.name.as_str();
+                        let first_char = id_str.chars().next().unwrap();
+
+                        if first_char == first_char.to_ascii_lowercase() {
+                            let decl = self.builder.cfg.push_decl(mutability, id.node);
+                            self.var_decls.push(decl);
+                        }
+                    }
+                    ast::PatIdent(..) => {
+                        self.builder.cx.span_bug(pat.span,
+                                                 &format!("Canot handle pat {:?}", pat))
+                    }
+                    _ => { }
+                }
+
+                visit::walk_pat(self, pat);
+            }
+
+            fn visit_mac(&mut self, _mac: &ast::Mac) { }
+        }
+
+        let mut visitor = Visitor {
+            builder: self,
+            var_decls: Vec::new(),
+        };
+
+        visit::Visitor::visit_pat(&mut visitor, pat);
+
+        visitor.var_decls
+    }
+
 }
