@@ -20,6 +20,7 @@ use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use syntax::ast;
 use syntax::codemap::Span;
+use syntax::ptr::P;
 use syntax::visit;
 
 pub struct Scope {
@@ -222,6 +223,32 @@ impl<'a> Builder<'a> {
         }
         self.cx.span_bug(span,
                          &format!("extent {:?} not in scope to drop {:?}", extent, decl));
+    }
+
+    pub fn add_decls_from_pats<'b, I>(&mut self,
+                                      span: Span,
+                                      extent: CodeExtent,
+                                      block: BasicBlock,
+                                      pats: I)
+        where I: Iterator<Item=&'b P<ast::Pat>>,
+    {
+        for pat in pats {
+            let decls = self.add_decls_from_pat(span, extent, pat);
+            self.cfg.block_data_mut(block).new_decls.extend(decls);
+        }
+    }
+
+    pub fn add_decls_from_pat(&mut self,
+                              span: Span,
+                              extent: CodeExtent,
+                              pat: &P<ast::Pat>) -> Vec<VarDecl> {
+        let decls = self.get_decls_from_pat(pat);
+
+        for decl in decls.iter() {
+            self.schedule_drop(span, extent, *decl, None);
+        }
+
+        decls
     }
 
     pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<VarDecl> {

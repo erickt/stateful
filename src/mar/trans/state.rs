@@ -23,20 +23,39 @@ impl<'a> Builder<'a> {
             .build()
     }
 
-    fn get_incoming_decls(&self, block: BasicBlock) -> &[(VarDecl, ast::Ident)] {
+    fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(VarDecl, ast::Ident)> {
         let block_data = self.mar.basic_block_data(block);
 
-        if block == START_BLOCK {
-            &self.mar.input_decls
-        } else {
-            match block_data.incoming_blocks.first() {
-                Some(block) => {
-                    let block_data = self.mar.basic_block_data(*block);
-                    &block_data.live_decls
+        let mut incoming_blocks = block_data.incoming_blocks.iter();
+
+        let mut decls = match incoming_blocks.next() {
+            Some(block) => {
+                let block_data = self.mar.basic_block_data(*block);
+                let decls = block_data.live_decls.clone();
+
+                // Make sure the rest of the incoming blocks have identical decls.
+                for block in incoming_blocks {
+                    if decls != self.mar.basic_block_data(*block).live_decls {
+                        self.cx.bug("block has different incoming decls");
+                    }
                 }
-                None => &[]
+
+                decls
             }
-        }
+            None => {
+                vec![]
+            }
+        };
+
+        decls.extend(
+            block_data.new_decls.iter()
+                .map(|decl| {
+                    let ident = self.mar.var_decl_data(*decl).ident;
+                    (*decl, ident)
+                })
+        );
+
+        decls
     }
 
     pub fn state_expr(&self, block: BasicBlock) -> P<ast::Expr> {

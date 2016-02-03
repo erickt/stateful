@@ -40,6 +40,26 @@ impl<'a> Builder<'a> {
                         .build_else(else_block),
                 ]
             }
+            Terminator::Match { ref discr, ref targets } => {
+                let arms = targets.iter()
+                    .map(|target| {
+                        let block = self.ast_builder.block()
+                            .with_stmts(self.goto(target.block))
+                            .build();
+
+                        self.ast_builder.arm()
+                            .with_pats(target.pats.iter().cloned())
+                            .with_guard(target.guard.clone())
+                            .body().build_block(block)
+                    });
+
+                vec![
+                    self.ast_builder.stmt().expr().match_()
+                        .build(discr.clone())
+                        .with_arms(arms)
+                        .build()
+                ]
+            }
             Terminator::Yield { ref expr, target } => {
                 let next_state = self.state_expr(target);
 

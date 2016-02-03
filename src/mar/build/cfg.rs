@@ -59,6 +59,11 @@ impl CFG {
                 self.block_data_mut(then_block).incoming_blocks.push(block);
                 self.block_data_mut(else_block).incoming_blocks.push(block);
             }
+            Terminator::Match { ref targets, .. } => {
+                for target in targets.iter() {
+                    self.block_data_mut(target.block).incoming_blocks.push(block);
+                }
+            }
             Terminator::Return => {
                 self.block_data_mut(END_BLOCK).incoming_blocks.push(block);
             }

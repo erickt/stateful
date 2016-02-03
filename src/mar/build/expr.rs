@@ -54,9 +54,41 @@ impl<'a> Builder<'a> {
                 then_block = self.into(extent, then_block, then_expr);
                 else_block = self.into(extent, else_block, else_expr);
 
-                let join_block = self.cfg.start_new_block(Some("Join"));
+                let join_block = self.cfg.start_new_block(Some("IfJoin"));
                 self.terminate(then_block, Terminator::Goto { target: join_block });
                 self.terminate(else_block, Terminator::Goto { target: join_block });
+
+                join_block
+            }
+            ast::ExprMatch(ref discr, ref arms) => {
+                let targets = arms.iter()
+                    .map(|arm| {
+                        Arm {
+                            pats: arm.pats.clone(),
+                            guard: arm.guard.clone(),
+                            block: self.cfg.start_new_block(Some("Arm")),
+                        }
+                    })
+                    .collect::<Vec<_>>();
+
+                let join_block = self.cfg.start_new_block(Some("MatchJoin"));
+
+                for (arm, target) in arms.iter().zip(targets.iter()) {
+                    let arm_block = self.in_scope(extent, block, |this| {
+                        this.add_decls_from_pats(expr.span,
+                                                 extent,
+                                                 target.block,
+                                                 arm.pats.iter());
+                        this.expr(extent, target.block, &arm.body)
+                    });
+
+                    self.terminate(arm_block, Terminator::Goto { target: join_block });
+                }
+
+                self.terminate(block, Terminator::Match {
+                    discr: discr.clone(),
+                    targets: targets,
+                });
 
                 join_block
             }

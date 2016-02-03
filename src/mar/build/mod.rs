@@ -53,11 +53,13 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     builder.push_scope(extent, block);
 
-    for arg in fn_decl.inputs.iter() {
-        for decl in builder.get_decls_from_pat(&arg.pat) {
-            builder.schedule_drop(item.span, extent, decl, None);
-        }
-    }
+    // Register the arguments as declarations.
+    builder.add_decls_from_pats(
+        item.span,
+        extent,
+        block,
+        fn_decl.inputs.iter().map(|arg| &arg.pat));
+
     block = builder.ast_block(extent, block, ast_block);
 
     let live_decls = builder.find_live_decls();

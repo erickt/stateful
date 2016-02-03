@@ -122,6 +122,7 @@ impl fmt::Debug for BasicBlock {
 pub struct BasicBlockData {
     pub name: Option<&'static str>,
     pub incoming_blocks: Vec<BasicBlock>,
+    pub new_decls: Vec<VarDecl>,
     pub live_decls: Vec<(VarDecl, ast::Ident)>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
@@ -132,6 +133,7 @@ impl BasicBlockData {
         BasicBlockData {
             name: name,
             incoming_blocks: vec![],
+            new_decls: vec![],
             live_decls: vec![],
             statements: vec![],
             terminator: terminator,
@@ -157,13 +159,11 @@ pub enum Terminator {
         targets: (BasicBlock, BasicBlock),
     },
 
-    /*
     /// lvalue evaluates to some enum; jump depending on the branch
     Match {
         discr: P<ast::Expr>,
-        targets: Vec<BasicBlock>,
+        targets: Vec<Arm>,
     },
-    */
 
     /// Indicates a normal return. The ReturnPointer lvalue should
     /// have been filled in by now. This should only occur in the
@@ -171,13 +171,11 @@ pub enum Terminator {
     Return,
 }
 
-/*
 pub struct Arm {
     pub pats: Vec<P<ast::Pat>>,
     pub guard: Option<P<ast::Expr>>,
-    pub body: BasicBlock,
+    pub block: BasicBlock,
 }
-*/
 
 ///////////////////////////////////////////////////////////////////////////
 // Statements
