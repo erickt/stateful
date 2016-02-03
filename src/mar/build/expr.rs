@@ -167,6 +167,12 @@ impl<'a> Builder<'a> {
         let loop_scope = self.find_loop_scope(span, label);
         let exit_block = exit_selector(&loop_scope);
         self.exit_scope(span, loop_scope.extent, block, exit_block);
-        self.cfg.start_new_block(Some("AfterBreakOrContinue"))
+
+        // Even though we've exited `block`, there could be code following the break/continue. To
+        // keep rust happy, we'll create a new block that has an edge to `block`, even though
+        // control will never actually flow into this block.
+        let new_block = self.cfg.start_new_block(Some("AfterBreakOrContinue"));
+        self.cfg.block_data_mut(new_block).incoming_blocks.push(block);
+        new_block
     }
 }

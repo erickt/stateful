@@ -25,8 +25,10 @@ pub struct Error;
 pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     let item = assign_node_ids(item);
 
-    let (fn_decl, ast_block) = match item.node {
-        ast::ItemFn(ref fn_decl, _, _, _, _, ref block) => (fn_decl, block),
+    let (fn_decl, unsafety, constness, abi, generics, ast_block) = match item.node {
+        ast::ItemFn(ref fn_decl, unsafety, constness, abi, ref generics, ref block) => {
+            (fn_decl, unsafety, constness, abi, generics, block)
+        }
         _ => {
             cx.span_err(item.span, "`state_machine` may only be applied to functions");
             return Err(Error);
@@ -73,6 +75,10 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         ident: item.ident,
         span: item.span,
         fn_decl: fn_decl.clone(),
+        unsafety: unsafety,
+        constness: constness,
+        abi: abi,
+        generics: generics.clone(),
         input_decls: live_decls,
         basic_blocks: builder.cfg.basic_blocks,
         var_decls: builder.cfg.var_decls,

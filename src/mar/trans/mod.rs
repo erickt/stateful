@@ -11,17 +11,36 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let item_builder = ast_builder.item().fn_(mar.ident)
         .with_args(mar.fn_decl.inputs.iter().cloned());
 
+    let generics = &mar.generics;
+
     let item_builder = match mar.fn_decl.output {
         ast::FunctionRetTy::NoReturn(..) => item_builder.no_return(),
         ast::FunctionRetTy::DefaultReturn(_) => {
-            let ty = quote_ty!(cx, ::std::boxed::Box<::std::iter::Iterator<Item=()>>);
+            let iter_ty = ast_builder.ty().object_sum()
+                .iterator().unit()
+                .with_generics(generics.clone())
+                .build();
+
+            let ty = ast_builder.ty().box_()
+                .build(iter_ty);
+
             item_builder.build_return(ty)
         }
         ast::FunctionRetTy::Return(ref ty) => {
-            let ty = quote_ty!(cx, ::std::boxed::Box<::std::iter::Iterator<Item=$ty>>);
+            let iter_ty = ast_builder.ty().object_sum()
+                .iterator().build(ty.clone())
+                .with_generics(generics.clone())
+                .build();
+
+            let ty = ast_builder.ty().box_()
+                .build(iter_ty);
+
             item_builder.build_return(ty)
         }
     };
+
+    let item_builder = item_builder
+        .generics().with(mar.generics.clone()).build();
 
     let builder = Builder {
         cx: cx,

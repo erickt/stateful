@@ -1,5 +1,6 @@
 use std::fmt;
 use std::u32;
+use syntax::abi;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
@@ -11,6 +12,10 @@ pub struct Mar {
     pub ident: ast::Ident,
 
     pub fn_decl: P<ast::FnDecl>,
+    pub unsafety: ast::Unsafety,
+    pub constness: ast::Constness,
+    pub abi: abi::Abi,
+    pub generics: ast::Generics,
 
     pub input_decls: Vec<(VarDecl, ast::Ident)>,
 
