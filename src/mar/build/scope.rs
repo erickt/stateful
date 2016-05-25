@@ -4,7 +4,7 @@
 There are numerous "normal" ways to early exit a scope: `break`, `continue`, `return`. Whenever an
 early exit occurs, the method `exit_scope` is called. It is given the current point in execution
 where the early exit occurs, as well as the scope you want to branch to (note that all early exits
-from to some other enclosing scope). `exit_scope` will record thid exit point and also add all
+from to some other enclosing scope). `exit_scope` will record the exit point and also add all
 drops.
 
 ### Loop scopes
@@ -71,7 +71,12 @@ impl<'a> Builder<'a> {
         self.push_scope(extent, block);
         block = f(self);
         self.pop_scope(extent, block);
-        block
+
+        // At this point, we can't tell that variables are not being accessed. So we'll create a
+        // new block to make sure variables are properly not referenced.
+        let end_scope_block = self.start_new_block(Some("EndScope"));
+        self.terminate(block, Terminator::Goto { target: end_scope_block });
+        end_scope_block
     }
 
     /// Push a scope onto the stack. You can then build code in this
