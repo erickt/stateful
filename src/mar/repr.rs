@@ -100,7 +100,7 @@ impl VarDeclData {
 /// list of the `Mar`.
 ///
 /// (We use a `u32` internally just to save memory.)
-#[derive(Copy, Clone, PartialEq, Eq)]
+#[derive(Copy, Clone, Hash, PartialEq, Eq)]
 pub struct BasicBlock(u32);
 
 impl BasicBlock {
@@ -126,23 +126,41 @@ impl fmt::Debug for BasicBlock {
 
 pub struct BasicBlockData {
     pub name: Option<&'static str>,
-    pub incoming_blocks: Vec<BasicBlock>,
-    pub new_decls: Vec<VarDecl>,
-    pub live_decls: Vec<(VarDecl, ast::Ident)>,
+    pub decls: Vec<(VarDecl, ast::Ident)>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
 
 impl BasicBlockData {
-    pub fn new(name: Option<&'static str>, terminator: Option<Terminator>) -> Self {
+    pub fn new(name: Option<&'static str>,
+               decls: Vec<(VarDecl, ast::Ident)>,
+               terminator: Option<Terminator>) -> Self {
         BasicBlockData {
             name: name,
-            incoming_blocks: vec![],
-            new_decls: vec![],
-            live_decls: vec![],
+            decls: decls,
             statements: vec![],
             terminator: terminator,
         }
+    }
+
+    pub fn name(&self) -> Option<&'static str> {
+        self.name
+    }
+
+    pub fn decls(&self) -> &[(VarDecl, ast::Ident)] {
+        &self.decls
+    }
+
+    pub fn statements(&self) -> &[Statement] {
+        &self.statements
+    }
+
+    pub fn terminator(&self) -> &Terminator {
+        self.terminator.as_ref().expect("invalid terminator state")
+    }
+
+    pub fn terminator_mut(&mut self) -> &mut Terminator {
+        self.terminator.as_mut().expect("invalid terminator state")
     }
 }
 
@@ -174,6 +192,34 @@ pub enum Terminator {
     /// have been filled in by now. This should only occur in the
     /// `END_BLOCK`.
     Return,
+}
+
+impl Terminator {
+    pub fn successors(&self) -> Vec<BasicBlock> {
+        match *self {
+            Terminator::Goto { target } => vec![target],
+            Terminator::Yield { target, .. } => vec![target],
+            Terminator::Match { ref targets, .. } => {
+                targets.iter().map(|arm| arm.block).collect()
+            }
+            Terminator::If { targets: (then, else_), .. } => vec![then, else_],
+            Terminator::Return => vec![],
+        }
+    }
+
+    pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
+        match *self {
+            Terminator::Goto { ref mut target } => vec![target],
+            Terminator::Yield { ref mut target, .. } => vec![target],
+            Terminator::Match { ref mut targets, .. } => {
+                targets.iter_mut().map(|arm| &mut arm.block).collect()
+            }
+            Terminator::If { targets: (ref mut then, ref mut else_), .. } => {
+                vec![then, else_]
+            }
+            Terminator::Return => vec![],
+        }
+    }
 }
 
 pub struct Arm {

@@ -1,5 +1,5 @@
 use mar::repr::*;
-use mar::trans::Builder;
+use mar::translate::Builder;
 use syntax::ast;
 
 impl<'a> Builder<'a> {
@@ -9,7 +9,7 @@ impl<'a> Builder<'a> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        block_data.statements.iter()
+        block_data.statements().iter()
             .flat_map(|statement| self.stmt(block, statement))
             .chain(
                 block_data.terminator.iter()

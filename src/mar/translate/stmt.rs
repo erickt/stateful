@@ -1,5 +1,5 @@
 use mar::repr::*;
-use mar::trans::Builder;
+use mar::translate::Builder;
 use syntax::ast;
 
 impl<'a> Builder<'a> {

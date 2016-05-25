@@ -23,7 +23,7 @@ impl<'a> Builder<'a> {
         let (expr, idents) = parse_mac_yield(self.cx, mac);
         assert!(idents.is_empty());
 
-        let next_block = self.cfg.start_new_block(Some("AfterYield"));
+        let next_block = self.start_new_block(Some("AfterYield"));
 
         self.terminate(block, Terminator::Yield {
             expr: expr.clone(),

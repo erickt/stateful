@@ -132,6 +132,5 @@ pub struct Builder<'a> {
 }
 
 mod block;
-mod path;
 mod state;
 mod stmt;

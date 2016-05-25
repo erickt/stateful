@@ -6,6 +6,8 @@ extern crate rustc_plugin;
 #[macro_use]
 extern crate syntax;
 
+pub mod mar;
+
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::{
@@ -13,8 +15,7 @@ use syntax::ext::base::{
     ExtCtxt,
     MultiModifier,
 };
-
-pub mod mar;
+pub use mar::transform::pass::MarPass;
 
 fn expand_generator(cx: &mut ExtCtxt,
                     _sp: Span,
@@ -31,14 +32,22 @@ fn expand_generator(cx: &mut ExtCtxt,
         }
     };
 
-    let mar = match mar::build::construct(cx, item.clone()) {
+    let mut mar = match mar::build::construct(cx, item.clone()) {
         Ok(mar) => mar,
         Err(mar::build::Error) => {
             return Annotatable::Item(item);
         }
     };
 
-    match mar::trans::translate(cx, &mar) {
+    let mut passes = vec![
+        mar::transform::remove_dead_blocks::RemoveDeadBlocks::new(),
+    ];
+
+    for pass in passes.iter_mut() {
+        pass.run_pass(&mut mar);
+    }
+
+    match mar::translate::translate(cx, &mar) {
         Some(item) => {
             /*
             use syntax::print::pprust;

@@ -48,8 +48,8 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     let extent = builder.start_new_extent();
 
-    assert_eq!(builder.cfg.start_new_block(Some("Start")), START_BLOCK);
-    assert_eq!(builder.cfg.start_new_block(Some("End")), END_BLOCK);
+    assert_eq!(builder.start_new_block(Some("Start")), START_BLOCK);
+    assert_eq!(builder.start_new_block(Some("End")), END_BLOCK);
 
     let mut block = START_BLOCK;
 
@@ -117,6 +117,11 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
 }
 
 impl<'a> Builder<'a> {
+    pub fn start_new_block(&mut self, name: Option<&'static str>) -> BasicBlock {
+        let decls = self.find_live_decls();
+        self.cfg.start_new_block(name, decls)
+    }
+
     pub fn start_new_extent(&mut self) -> CodeExtent {
         let extent = CodeExtent::new(self.extents.len());
         self.extents.push(CodeExtentData::Misc(0));
@@ -138,6 +143,7 @@ mod cfg;
 mod expr;
 mod into;
 mod mac;
+mod matches;
 mod scope;
 mod stmt;
 mod transition;

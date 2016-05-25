@@ -1,5 +1,5 @@
 use mar::repr::*;
-use mar::trans::Builder;
+use mar::translate::Builder;
 use std::collections::HashSet;
 use syntax::ast::{self, Mutability};
 use syntax::ptr::P;
@@ -24,38 +24,7 @@ impl<'a> Builder<'a> {
     }
 
     fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(VarDecl, ast::Ident)> {
-        let block_data = self.mar.basic_block_data(block);
-
-        let mut incoming_blocks = block_data.incoming_blocks.iter();
-
-        let mut decls = match incoming_blocks.next() {
-            Some(block) => {
-                let block_data = self.mar.basic_block_data(*block);
-                let decls = block_data.live_decls.clone();
-
-                // Make sure the rest of the incoming blocks have identical decls.
-                for block in incoming_blocks {
-                    if decls != self.mar.basic_block_data(*block).live_decls {
-                        self.cx.bug("block has different incoming decls");
-                    }
-                }
-
-                decls
-            }
-            None => {
-                vec![]
-            }
-        };
-
-        decls.extend(
-            block_data.new_decls.iter()
-                .map(|decl| {
-                    let ident = self.mar.var_decl_data(*decl).ident;
-                    (*decl, ident)
-                })
-        );
-
-        decls
+        self.mar.basic_block_data(block).decls().to_vec()
     }
 
     pub fn state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
@@ -75,8 +44,8 @@ impl<'a> Builder<'a> {
                 .with_id_exprs(id_exprs)
                 .build()
         }
-
     }
+
 
     pub fn state_enum_default_and_arms(&self) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
         let all_basic_blocks = self.mar.all_basic_blocks();

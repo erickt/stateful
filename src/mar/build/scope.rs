@@ -23,6 +23,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::visit;
 
+#[derive(Debug)]
 pub struct Scope {
     extent: CodeExtent,
     drops: Vec<(Span, VarDecl, Option<Alias>)>,
@@ -173,8 +174,7 @@ impl<'a> Builder<'a> {
     }
 
     pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
-        let live_decls = self.find_live_decls();
-        self.cfg.terminate(block, live_decls, terminator)
+        self.cfg.terminate(block, terminator)
     }
 
     /// This function constructs a vector of all of the variables in scope, and returns if the
@@ -234,27 +234,27 @@ impl<'a> Builder<'a> {
     {
         for pat in pats {
             let decls = self.add_decls_from_pat(span, extent, pat);
-            self.cfg.block_data_mut(block).new_decls.extend(decls);
+            self.cfg.block_data_mut(block).decls.extend(decls);
         }
     }
 
     pub fn add_decls_from_pat(&mut self,
                               span: Span,
                               extent: CodeExtent,
-                              pat: &P<ast::Pat>) -> Vec<VarDecl> {
+                              pat: &P<ast::Pat>) -> Vec<(VarDecl, ast::Ident)> {
         let decls = self.get_decls_from_pat(pat);
 
-        for decl in decls.iter() {
-            self.schedule_drop(span, extent, *decl, None);
+        for &(decl, _) in decls.iter() {
+            self.schedule_drop(span, extent, decl, None);
         }
 
         decls
     }
 
-    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<VarDecl> {
+    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<(VarDecl, ast::Ident)> {
         struct Visitor<'a, 'b: 'a> {
             builder: &'a mut Builder<'b>,
-            var_decls: Vec<VarDecl>,
+            var_decls: Vec<(VarDecl, ast::Ident)>,
         }
 
         impl<'a, 'b, 'c> visit::Visitor<'a> for Visitor<'b, 'c> {
@@ -267,7 +267,7 @@ impl<'a> Builder<'a> {
 
                         if first_char == first_char.to_ascii_lowercase() {
                             let decl = self.builder.cfg.push_decl(mutability, id.node);
-                            self.var_decls.push(decl);
+                            self.var_decls.push((decl, id.node));
                         }
                     }
                     PatKind::Ident(..) => {

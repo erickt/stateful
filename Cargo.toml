@@ -12,5 +12,4 @@ unstable = ["compiletest_rs"]
 
 [dependencies]
 aster = "*"
-petgraph = "*"
 compiletest_rs = { version = "*", optional = true }

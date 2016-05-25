@@ -37,13 +37,13 @@ impl<'a> Builder<'a> {
             }
             ExprKind::Ret(None) => {
                 self.exit_scope(expr.span, extent, block, END_BLOCK);
-                self.cfg.start_new_block(Some("AfterReturn"))
+                self.start_new_block(Some("AfterReturn"))
             }
             ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {
                 // FIXME: This does not handle the `cond_expr` containing a transition yet.
 
-                let mut then_block = self.cfg.start_new_block(Some("Then"));
-                let mut else_block = self.cfg.start_new_block(Some("Else"));
+                let mut then_block = self.start_new_block(Some("Then"));
+                let mut else_block = self.start_new_block(Some("Else"));
 
                 self.terminate(block, Terminator::If {
                     cond: cond_expr.clone(),
@@ -53,43 +53,14 @@ impl<'a> Builder<'a> {
                 then_block = self.into(extent, then_block, then_expr);
                 else_block = self.into(extent, else_block, else_expr);
 
-                let join_block = self.cfg.start_new_block(Some("IfJoin"));
+                let join_block = self.start_new_block(Some("IfJoin"));
                 self.terminate(then_block, Terminator::Goto { target: join_block });
                 self.terminate(else_block, Terminator::Goto { target: join_block });
 
                 join_block
             }
-            ExprKind::Match(ref discr, ref arms) => {
-                let targets = arms.iter()
-                    .map(|arm| {
-                        Arm {
-                            pats: arm.pats.clone(),
-                            guard: arm.guard.clone(),
-                            block: self.cfg.start_new_block(Some("Arm")),
-                        }
-                    })
-                    .collect::<Vec<_>>();
-
-                let join_block = self.cfg.start_new_block(Some("MatchJoin"));
-
-                for (arm, target) in arms.iter().zip(targets.iter()) {
-                    let arm_block = self.in_scope(extent, block, |this| {
-                        this.add_decls_from_pats(expr.span,
-                                                 extent,
-                                                 target.block,
-                                                 arm.pats.iter());
-                        this.expr(extent, target.block, &arm.body)
-                    });
-
-                    self.terminate(arm_block, Terminator::Goto { target: join_block });
-                }
-
-                self.terminate(block, Terminator::Match {
-                    discr: discr.clone(),
-                    targets: targets,
-                });
-
-                join_block
+            ExprKind::Match(ref discriminant, ref arms) => {
+                self.match_expr(extent, expr.span, block, discriminant.clone(), &arms)
             }
             ExprKind::Loop(ref body, label) => {
                 self.expr_loop(extent, block, None, body, label)
@@ -124,8 +95,8 @@ impl<'a> Builder<'a> {
         //                         |                          |
         //                         +--------------------------+
 
-        let loop_block = self.cfg.start_new_block(Some("Loop"));
-        let exit_block = self.cfg.start_new_block(Some("LoopExit"));
+        let loop_block = self.start_new_block(Some("Loop"));
+        let exit_block = self.start_new_block(Some("LoopExit"));
 
         // start the loop
         self.terminate(block, Terminator::Goto { target: loop_block });
@@ -136,7 +107,7 @@ impl<'a> Builder<'a> {
             if let Some(cond_expr) = condition {
                 // FIXME: This does not yet handle the expr having a transition.
 
-                body_block = this.cfg.start_new_block(Some("LoopBody"));
+                body_block = this.start_new_block(Some("LoopBody"));
 
                 this.terminate(loop_block, Terminator::If {
                     cond: cond_expr.clone(),
@@ -170,8 +141,6 @@ impl<'a> Builder<'a> {
         // Even though we've exited `block`, there could be code following the break/continue. To
         // keep rust happy, we'll create a new block that has an edge to `block`, even though
         // control will never actually flow into this block.
-        let new_block = self.cfg.start_new_block(Some("AfterBreakOrContinue"));
-        self.cfg.block_data_mut(new_block).incoming_blocks.push(block);
-        new_block
+        self.start_new_block(Some("AfterBreakOrContinue"))
     }
 }

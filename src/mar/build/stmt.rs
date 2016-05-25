@@ -54,7 +54,7 @@ impl<'a> Builder<'a> {
             self.cx.span_bug(span, &format!("Local variables need initializers at the moment"));
         }
 
-        for decl in self.get_decls_from_pat(&local.pat) {
+        for (decl, _) in self.get_decls_from_pat(&local.pat) {
             let lvalue = self.cfg.var_decl_data(decl).ident;
             let alias = self.find_decl(lvalue).map(|alias| {
                 self.alias(block, span, alias)

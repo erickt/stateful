@@ -12,9 +12,11 @@ impl CFG {
         &mut self.basic_blocks[block.index()]
     }
 
-    pub fn start_new_block(&mut self, name: Option<&'static str>) -> BasicBlock {
+    pub fn start_new_block(&mut self,
+                           name: Option<&'static str>,
+                           decls: Vec<(VarDecl, ast::Ident)>) -> BasicBlock {
         let node_index = self.basic_blocks.len();
-        self.basic_blocks.push(BasicBlockData::new(name, None));
+        self.basic_blocks.push(BasicBlockData::new(name, decls, None));
         BasicBlock::new(node_index)
     }
 
@@ -35,39 +37,11 @@ impl CFG {
         });
     }
 
-    pub fn terminate(&mut self,
-                     block: BasicBlock,
-                     live_decls: Vec<(VarDecl, ast::Ident)>,
-                     terminator: Terminator) {
+    pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
-        self.add_incoming_block(&terminator, block);
         let block_data = self.block_data_mut(block);
         block_data.terminator = Some(terminator);
-        block_data.live_decls = live_decls;
-    }
-
-    fn add_incoming_block(&mut self, terminator: &Terminator, block: BasicBlock) {
-        match *terminator {
-            Terminator::Goto { target } => {
-                self.block_data_mut(target).incoming_blocks.push(block);
-            }
-            Terminator::Yield { target, .. } => {
-                self.block_data_mut(target).incoming_blocks.push(block);
-            }
-            Terminator::If { targets: (then_block, else_block), .. } => {
-                self.block_data_mut(then_block).incoming_blocks.push(block);
-                self.block_data_mut(else_block).incoming_blocks.push(block);
-            }
-            Terminator::Match { ref targets, .. } => {
-                for target in targets.iter() {
-                    self.block_data_mut(target.block).incoming_blocks.push(block);
-                }
-            }
-            Terminator::Return => {
-                self.block_data_mut(END_BLOCK).incoming_blocks.push(block);
-            }
-        }
     }
 
     pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
