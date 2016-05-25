@@ -181,21 +181,19 @@ impl<'a> Builder<'a> {
         if incoming_decls.is_empty() {
             self.ast_builder.pat().build_path(state_path)
         } else {
-            let field_pats = incoming_decls.iter()
-                .map(|&(decl, ident)| {
-                    let decl_data = self.mar.var_decl_data(decl);
+            let mut struct_pat_builder = self.ast_builder.pat().struct_()
+                .build(state_path);
 
-                    let pat = match decl_data.mutability {
-                        Mutability::Immutable => self.ast_builder.pat().id(ident),
-                        Mutability::Mutable => self.ast_builder.pat().mut_id(ident),
-                    };
+            for &(decl, ident) in incoming_decls.iter() {
+                let decl_data = self.mar.var_decl_data(decl);
 
-                    (ident, pat)
-                });
+                struct_pat_builder = match decl_data.mutability {
+                    Mutability::Immutable => struct_pat_builder.id(ident),
+                    Mutability::Mutable => struct_pat_builder.mut_id(ident),
+                };
+            }
 
-            self.ast_builder.pat().struct_().build(state_path)
-                .with_pats(field_pats)
-                .build()
+            struct_pat_builder.build()
         }
     }
 }
