@@ -1,5 +1,5 @@
 use mar::repr::*;
-use syntax::ast;
+use syntax::ast::{self, ItemKind};
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
@@ -26,7 +26,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     let item = assign_node_ids(item);
 
     let (fn_decl, unsafety, constness, abi, generics, ast_block) = match item.node {
-        ast::ItemFn(ref fn_decl, unsafety, constness, abi, ref generics, ref block) => {
+        ItemKind::Fn(ref fn_decl, unsafety, constness, abi, ref generics, ref block) => {
             (fn_decl, unsafety, constness, abi, generics, block)
         }
         _ => {

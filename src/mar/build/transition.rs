@@ -1,6 +1,6 @@
 use aster::AstBuilder;
 use mar::build::Builder;
-use syntax::ast;
+use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::ptr::P;
 use syntax::visit;
 
@@ -70,7 +70,7 @@ impl ContainsTransitionVisitor {
 impl<'a> visit::Visitor<'a> for ContainsTransitionVisitor {
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
         match stmt.node {
-            ast::Stmt_::StmtMac(ref mac, _, _) if is_yield_path(&mac.node.path) => {
+            StmtKind::Mac(ref mac, _, _) if is_yield_path(&mac.node.path) => {
                 self.contains_transition = true;
             }
             _ => {
@@ -81,19 +81,19 @@ impl<'a> visit::Visitor<'a> for ContainsTransitionVisitor {
 
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr.node {
-            ast::Expr_::ExprRet(Some(_)) => {
+            ExprKind::Ret(Some(_)) => {
                 self.contains_transition = true;
             }
-            ast::Expr_::ExprBreak(_) if self.inside_loop => {
+            ExprKind::Break(_) if self.inside_loop => {
                 self.contains_transition = true;
             }
-            ast::Expr_::ExprAgain(_) if self.inside_loop => {
+            ExprKind::Again(_) if self.inside_loop => {
                 self.contains_transition = true;
             }
-            ast::Expr_::ExprMac(ref mac) if is_transition_path(&mac.node.path) => {
+            ExprKind::Mac(ref mac) if is_transition_path(&mac.node.path) => {
                 self.contains_transition = true;
             }
-            ast::Expr_::ExprPath(None, ref path) if is_transition_path(path) => {
+            ExprKind::Path(None, ref path) if is_transition_path(path) => {
                 self.contains_transition = true;
             }
             _ => {

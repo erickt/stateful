@@ -1,8 +1,7 @@
 use mar::build::Builder;
 use mar::build::scope::LoopScope;
-use mar::build::transition::ContainsTransition;
 use mar::repr::*;
-use syntax::ast;
+use syntax::ast::{self, ExprKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
@@ -18,29 +17,29 @@ impl<'a> Builder<'a> {
         }
 
         match expr.node {
-            ast::ExprBlock(ref ast_block) => {
+            ExprKind::Block(ref ast_block) => {
                 self.into(extent, block, ast_block)
             }
-            ast::ExprAgain(label) => {
+            ExprKind::Again(label) => {
                 self.break_or_continue(expr.span,
                                        label.map(|label| label.node),
                                        block,
                                        |loop_scope| loop_scope.continue_block)
             }
-            ast::ExprBreak(label) => {
+            ExprKind::Break(label) => {
                 self.break_or_continue(expr.span,
                                        label.map(|label| label.node),
                                        block,
                                        |loop_scope| loop_scope.break_block)
             }
-            ast::ExprRet(Some(_)) => {
+            ExprKind::Ret(Some(_)) => {
                 self.cx.span_fatal(expr.span, "cannot return a value");
             }
-            ast::ExprRet(None) => {
+            ExprKind::Ret(None) => {
                 self.exit_scope(expr.span, extent, block, END_BLOCK);
                 self.cfg.start_new_block(Some("AfterReturn"))
             }
-            ast::ExprIf(ref cond_expr, ref then_expr, ref else_expr) => {
+            ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {
                 // FIXME: This does not handle the `cond_expr` containing a transition yet.
 
                 let mut then_block = self.cfg.start_new_block(Some("Then"));
@@ -60,7 +59,7 @@ impl<'a> Builder<'a> {
 
                 join_block
             }
-            ast::ExprMatch(ref discr, ref arms) => {
+            ExprKind::Match(ref discr, ref arms) => {
                 let targets = arms.iter()
                     .map(|arm| {
                         Arm {
@@ -92,10 +91,10 @@ impl<'a> Builder<'a> {
 
                 join_block
             }
-            ast::ExprLoop(ref body, label) => {
+            ExprKind::Loop(ref body, label) => {
                 self.expr_loop(extent, block, None, body, label)
             }
-            ast::ExprWhile(ref cond_expr, ref body, label) => {
+            ExprKind::While(ref cond_expr, ref body, label) => {
                 self.expr_loop(extent, block, Some(cond_expr), body, label)
             }
             _ => {

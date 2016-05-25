@@ -185,7 +185,7 @@ fn make_state_id_path(cfg: &cfg::CFG, nx: NodeIndex) -> ast::Path {
         .build()
 }
 
-fn make_return(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Stmt> {
+fn make_return(cfg: &cfg::CFG, nx: NodeIndex) -> ast::Stmt {
     let builder = aster::AstBuilder::new();
     let next_state = make_state_expr(cfg, nx);
     builder.stmt().semi().return_expr().tuple()
@@ -213,7 +213,7 @@ fn make_state_expr(cfg: &cfg::CFG, nx: NodeIndex) -> P<ast::Expr> {
 }
 
 fn make_goto(cfg: &cfg::CFG,
-             next_state: NodeIndex) -> Vec<P<ast::Stmt>> {
+             next_state: NodeIndex) -> Vec<ast::Stmt> {
     let builder = aster::AstBuilder::new();
 
     let next_state = make_state_expr(cfg, next_state);
@@ -228,7 +228,7 @@ fn make_goto(cfg: &cfg::CFG,
 
 fn make_yield(cfg: &cfg::CFG,
               data: &P<ast::Expr>,
-              next_state: NodeIndex) -> Vec<P<ast::Stmt>> {
+              next_state: NodeIndex) -> Vec<ast::Stmt> {
     let builder = aster::AstBuilder::new();
 
     let next_state = make_state_expr(cfg, next_state);
@@ -245,7 +245,7 @@ fn make_yield(cfg: &cfg::CFG,
 fn make_if(cfg: &cfg::CFG,
            expr: &P<ast::Expr>,
            then: NodeIndex,
-           else_: NodeIndex) -> Vec<P<ast::Stmt>> {
+           else_: NodeIndex) -> Vec<ast::Stmt> {
     let builder = aster::AstBuilder::new();
 
     let then = make_goto(cfg, then);
@@ -268,7 +268,7 @@ fn make_if(cfg: &cfg::CFG,
 
 fn make_match(cfg: &cfg::CFG,
               expr: &P<ast::Expr>,
-              arms: &Vec<cfg::Arm>) -> Vec<P<ast::Stmt>> {
+              arms: &Vec<cfg::Arm>) -> Vec<ast::Stmt> {
     let builder = aster::AstBuilder::new();
 
     let arms = arms.iter().map(|arm| make_arm(cfg, arm));
@@ -300,7 +300,7 @@ fn make_arm(cfg: &cfg::CFG, arm: &cfg::Arm) -> ast::Arm {
         //.build(arm.body.clone())
 }
 
-fn make_stmt(cfg: &cfg::CFG, stmt: &cfg::Stmt) -> Vec<P<ast::Stmt>> {
+fn make_stmt(cfg: &cfg::CFG, stmt: &cfg::Stmt) -> Vec<ast::Stmt> {
     match *stmt {
         cfg::Stmt::Stmt(ref stmt) => vec![stmt.clone()],
         cfg::Stmt::Return => vec![make_return(cfg, cfg.exit)],
@@ -364,6 +364,11 @@ fn expand_generator(cx: &mut ExtCtxt,
 
     match mar::trans::translate(cx, &mar) {
         Some(item) => {
+            /*
+            use syntax::print::pprust;
+            println!("{}", pprust::item_to_string(&item));
+            */
+
             Annotatable::Item(item)
         }
         None => {

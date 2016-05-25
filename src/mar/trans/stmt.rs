@@ -1,10 +1,9 @@
 use mar::repr::*;
 use mar::trans::Builder;
 use syntax::ast;
-use syntax::ptr::P;
 
 impl<'a> Builder<'a> {
-    pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<P<ast::Stmt>> {
+    pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
             Statement::Let { span, ref pat, ref ty, ref init } => {

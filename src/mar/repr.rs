@@ -186,7 +186,7 @@ pub struct Arm {
 // Statements
 
 pub enum Statement {
-    Expr(P<ast::Stmt>),
+    Expr(ast::Stmt),
     Let {
         span: Span,
         pat: P<ast::Pat>,

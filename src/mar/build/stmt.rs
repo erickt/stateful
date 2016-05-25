@@ -1,7 +1,7 @@
 use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
-use syntax::ast;
+use syntax::ast::{self, DeclKind, StmtKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
@@ -9,7 +9,7 @@ impl<'a> Builder<'a> {
     pub fn stmts(&mut self,
                  extent: CodeExtent,
                  mut block: BasicBlock,
-                 stmts: &[P<ast::Stmt>]) -> BasicBlock {
+                 stmts: &[ast::Stmt]) -> BasicBlock {
         for stmt in stmts {
             block = self.stmt(extent, block, stmt);
         }
@@ -20,23 +20,23 @@ impl<'a> Builder<'a> {
     pub fn stmt(&mut self,
                 extent: CodeExtent,
                 block: BasicBlock,
-                stmt: &P<ast::Stmt>) -> BasicBlock {
+                stmt: &ast::Stmt) -> BasicBlock {
         match stmt.node {
-            ast::StmtExpr(ref expr, _) | ast::StmtSemi(ref expr, _) => {
+            StmtKind::Expr(ref expr, _) | StmtKind::Semi(ref expr, _) => {
                 self.expr(extent, block, expr)
             }
-            ast::StmtDecl(ref decl, _) => {
+            StmtKind::Decl(ref decl, _) => {
                 match decl.node {
-                    ast::DeclLocal(ref local) => {
+                    DeclKind::Local(ref local) => {
                         self.local(extent, block, stmt.span, local)
                         
                     }
-                    ast::DeclItem(..) => {
+                    DeclKind::Item(..) => {
                         self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
                     }
                 }
             }
-            ast::StmtMac(ref mac, _, _) => {
+            StmtKind::Mac(ref mac, _, _) => {
                 match self.mac(block, mac) {
                     Some(block) => block,
                     None => self.into(extent, block, stmt.clone()),
@@ -98,7 +98,7 @@ impl<'a> Builder<'a> {
     pub fn into_stmt(&mut self,
                      _extent: CodeExtent,
                      block: BasicBlock,
-                     stmt: P<ast::Stmt>) -> BasicBlock {
+                     stmt: ast::Stmt) -> BasicBlock {
         self.cfg.push(block, Statement::Expr(stmt));
         block
     }

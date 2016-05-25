@@ -1,6 +1,6 @@
 use aster::AstBuilder;
 use mar::repr::*;
-use syntax::ast;
+use syntax::ast::{self, FunctionRetTy};
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
@@ -14,8 +14,8 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let generics = &mar.generics;
 
     let item_builder = match mar.fn_decl.output {
-        ast::FunctionRetTy::NoReturn(..) => item_builder.no_return(),
-        ast::FunctionRetTy::DefaultReturn(_) => {
+        FunctionRetTy::None(_) => item_builder.no_return(),
+        FunctionRetTy::Default(_) => {
             let iter_ty = ast_builder.ty().object_sum()
                 .iterator().unit()
                 .with_generics(generics.clone())
@@ -26,7 +26,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
 
             item_builder.build_return(ty)
         }
-        ast::FunctionRetTy::Return(ref ty) => {
+        FunctionRetTy::Ty(ref ty) => {
             let iter_ty = ast_builder.ty().object_sum()
                 .iterator().build(ty.clone())
                 .with_generics(generics.clone())

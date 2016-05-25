@@ -8,15 +8,15 @@ fn c(_: usize) -> usize { 2 }
 fn d(_: usize) -> usize { 3 }
 fn e(_: usize) -> usize { 4 }
 
-#[state_machine]
+#[generator]
 fn yield_() -> usize {
     let x = a();
     {
         let y = b(x);
-        return x + y;
+        yield_!(x + y);
 
         let z = c(y);
-        return x + y + z;
+        yield_!(x + y + z);
 
         let w = d(z);
     };

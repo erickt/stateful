@@ -1,10 +1,9 @@
 use mar::repr::*;
 use mar::trans::Builder;
 use syntax::ast;
-use syntax::ptr::P;
 
 impl<'a> Builder<'a> {
-    pub fn block(&self, block: BasicBlock) -> Vec<P<ast::Stmt>> {
+    pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
         let block_data = self.mar.basic_block_data(block);
 
         assert!(block_data.terminator.is_some(),
@@ -19,7 +18,7 @@ impl<'a> Builder<'a> {
             .collect()
     }
 
-    fn terminator(&self, terminator: &Terminator) -> Vec<P<ast::Stmt>> {
+    fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
         match *terminator {
             Terminator::Goto { target } => {
                 self.goto(target)
@@ -84,7 +83,7 @@ impl<'a> Builder<'a> {
         }
     }
 
-    fn goto(&self, target: BasicBlock) -> Vec<P<ast::Stmt>> {
+    fn goto(&self, target: BasicBlock) -> Vec<ast::Stmt> {
         let next_state = self.state_expr(target);
 
         vec![

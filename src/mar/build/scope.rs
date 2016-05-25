@@ -18,7 +18,7 @@ use mar::build::Builder;
 use mar::repr::*;
 use std::ascii::AsciiExt;
 use std::collections::HashSet;
-use syntax::ast;
+use syntax::ast::{self, PatKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::visit;
@@ -260,7 +260,7 @@ impl<'a> Builder<'a> {
         impl<'a, 'b, 'c> visit::Visitor<'a> for Visitor<'b, 'c> {
             fn visit_pat(&mut self, pat: &ast::Pat) {
                 match pat.node {
-                    ast::PatIdent(ast::BindingMode::ByValue(mutability), id, _) => {
+                    PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
                         // Consider only lower case identities as a variable.
                         let id_str = id.node.name.as_str();
                         let first_char = id_str.chars().next().unwrap();
@@ -270,7 +270,7 @@ impl<'a> Builder<'a> {
                             self.var_decls.push(decl);
                         }
                     }
-                    ast::PatIdent(..) => {
+                    PatKind::Ident(..) => {
                         self.builder.cx.span_bug(pat.span,
                                                  &format!("Canot handle pat {:?}", pat))
                     }

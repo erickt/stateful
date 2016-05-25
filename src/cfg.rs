@@ -154,7 +154,7 @@ impl<'a> CFGBuilder<'a> {
         bb.block.stmts.push(stmt);
     }
 
-    fn stmt(&mut self, pred: NodeIndex, stmt: &P<ast::Stmt>) -> NodeIndex {
+    fn stmt(&mut self, pred: NodeIndex, stmt: &ast::Stmt) -> NodeIndex {
         match stmt.node {
             ast::Stmt_::StmtDecl(ref decl, _) => {
                 match decl.node {
@@ -881,7 +881,7 @@ impl iter::Extend<Stmt> for Block {
 
 #[derive(Clone, Debug)]
 pub enum Stmt {
-    Stmt(P<ast::Stmt>),
+    Stmt(ast::Stmt),
     Return,
     Goto(NodeIndex),
     Yield(NodeIndex, P<ast::Expr>),

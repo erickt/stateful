@@ -5,7 +5,7 @@
 #![allow(non_shorthand_field_patterns)]
 
 #[generator]
-fn yield_<'a, T>(items: &'a [T]) -> &'a T {
+fn gen<'a, T>(items: &'a [T]) -> &'a T {
     let mut iter = items.iter();
     loop {
         match iter.next() {
@@ -21,7 +21,7 @@ fn yield_<'a, T>(items: &'a [T]) -> &'a T {
 
 fn main() {
     let items = &[1, 2, 3];
-    for value in yield_(items).take(20) {
-        println!("yield_: {:?}", value);
+    for value in gen(items) {
+        println!("{}", value);
     }
 }

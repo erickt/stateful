@@ -4,7 +4,7 @@ use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
-use syntax::parse::common::seq_sep_trailing_allowed;
+use syntax::parse::common::SeqSep;
 use syntax::parse::lexer::{Reader, TokenAndSpan};
 use syntax::parse::parser::Parser;
 use syntax::parse::token::Token;
@@ -55,7 +55,7 @@ fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> (P<ast::Expr>, Vec<ast::Iden
         Token::Semi => {
             parser.bump();
 
-            let seq_sep = seq_sep_trailing_allowed(Token::Comma);
+            let seq_sep = SeqSep::trailing_allowed(Token::Comma);
             let idents = panictry!(parser.parse_seq_to_end(&Token::Eof,
                                                            seq_sep,
                                                            |p| p.parse_ident()));

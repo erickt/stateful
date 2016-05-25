@@ -1,6 +1,6 @@
 use mar::build::Builder;
 use mar::repr::*;
-use syntax::ast;
+use syntax::ast::{self, StmtKind};
 use syntax::codemap::respan;
 use syntax::ptr::P;
 
@@ -31,7 +31,7 @@ impl<'a> EvalInto for &'a P<ast::Block> {
     }
 }
 
-impl EvalInto for P<ast::Stmt> {
+impl EvalInto for ast::Stmt {
     fn eval_into(self,
                  builder: &mut Builder,
                  extent: CodeExtent,
@@ -55,7 +55,7 @@ impl EvalInto for P<ast::Expr> {
                  builder: &mut Builder,
                  extent: CodeExtent,
                  block: BasicBlock) -> BasicBlock {
-        let stmt = P(respan(self.span, ast::StmtSemi(self, ast::DUMMY_NODE_ID)));
+        let stmt = respan(self.span, StmtKind::Semi(self, ast::DUMMY_NODE_ID));
         builder.into(extent, block, stmt)
     }
 }

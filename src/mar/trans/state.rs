@@ -1,7 +1,7 @@
 use mar::repr::*;
 use mar::trans::Builder;
 use std::collections::HashSet;
-use syntax::ast;
+use syntax::ast::{self, Mutability};
 use syntax::ptr::P;
 
 impl<'a> Builder<'a> {
@@ -137,7 +137,7 @@ impl<'a> Builder<'a> {
         (state_enum, state_default, state_arms)
     }
 
-    fn state_variant(&self, block: BasicBlock) -> (P<ast::Variant>, Vec<ast::Ident>) {
+    fn state_variant(&self, block: BasicBlock) -> (ast::Variant, Vec<ast::Ident>) {
         let state_id = self.state_id(block);
         let incoming_decls = self.get_incoming_decls(block);
         let ty_param_ids = incoming_decls.iter()
@@ -179,16 +179,15 @@ impl<'a> Builder<'a> {
         let incoming_decls = self.get_incoming_decls(block);
 
         if incoming_decls.is_empty() {
-            self.ast_builder.pat().enum_().build(state_path)
-                .build()
+            self.ast_builder.pat().build_path(state_path)
         } else {
             let field_pats = incoming_decls.iter()
                 .map(|&(decl, ident)| {
                     let decl_data = self.mar.var_decl_data(decl);
 
                     let pat = match decl_data.mutability {
-                        ast::MutImmutable => self.ast_builder.pat().id(ident),
-                        ast::MutMutable => self.ast_builder.pat().mut_id(ident),
+                        Mutability::Immutable => self.ast_builder.pat().id(ident),
+                        Mutability::Mutable => self.ast_builder.pat().mut_id(ident),
                     };
 
                     (ident, pat)
