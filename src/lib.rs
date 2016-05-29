@@ -3,8 +3,8 @@
 extern crate aster;
 extern crate rustc_plugin;
 
-#[macro_use]
-extern crate syntax;
+#[macro_use] extern crate log;
+#[macro_use] extern crate syntax;
 
 pub mod mar;
 
@@ -15,6 +15,7 @@ use syntax::ext::base::{
     ExtCtxt,
     MultiModifier,
 };
+use syntax::print::pprust;
 pub use mar::transform::pass::MarPass;
 
 fn expand_generator(cx: &mut ExtCtxt,
@@ -39,20 +40,22 @@ fn expand_generator(cx: &mut ExtCtxt,
         }
     };
 
-    let mut passes = vec![
-        mar::transform::remove_dead_blocks::RemoveDeadBlocks::new(),
-    ];
-
-    for pass in passes.iter_mut() {
-        pass.run_pass(&mut mar);
+    match mar::translate::translate(cx, &mar) {
+        Some(item) => {
+            debug!("{}", pprust::item_to_string(&item));
+        }
+        None => {}
     }
+
+    let mut pass_manager = mar::transform::pass_manager::PassManager::new();
+    pass_manager.add_pass(Box::new(mar::transform::remove_dead_blocks::RemoveDeadBlocks::new()));
+    pass_manager.add_pass(Box::new(mar::transform::simplify_cfg::SimplifyCfg::new()));
+    pass_manager.add_pass(Box::new(mar::transform::remove_dead_blocks::RemoveDeadBlocks::new()));
+    pass_manager.run(&mut mar);
 
     match mar::translate::translate(cx, &mar) {
         Some(item) => {
-            /*
-            use syntax::print::pprust;
-            println!("{}", pprust::item_to_string(&item));
-            */
+            debug!("{}", pprust::item_to_string(&item));
 
             Annotatable::Item(item)
         }

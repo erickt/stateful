@@ -19,11 +19,11 @@ impl<'a> Builder<'a> {
     }
 
     fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
-        match *terminator {
-            Terminator::Goto { target } => {
+        match terminator.kind {
+            TerminatorKind::Goto { target } => {
                 self.goto(target)
             }
-            Terminator::If { ref cond, targets: (then_block, else_block) } => {
+            TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
                 let then_block = self.ast_builder.block()
                     .with_stmts(self.goto(then_block))
                     .build();
@@ -39,7 +39,7 @@ impl<'a> Builder<'a> {
                         .build_else(else_block),
                 ]
             }
-            Terminator::Match { ref discr, ref targets } => {
+            TerminatorKind::Match { ref discr, ref targets } => {
                 let arms = targets.iter()
                     .map(|target| {
                         let block = self.ast_builder.block()
@@ -59,7 +59,7 @@ impl<'a> Builder<'a> {
                         .build()
                 ]
             }
-            Terminator::Yield { ref expr, target } => {
+            TerminatorKind::Yield { ref expr, target } => {
                 let next_state = self.state_expr(target);
 
                 vec![
@@ -70,7 +70,7 @@ impl<'a> Builder<'a> {
                             .build()
                 ]
             }
-            Terminator::Return => {
+            TerminatorKind::Return => {
                 let next_state = self.state_expr(END_BLOCK);
 
                 vec![

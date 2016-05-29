@@ -33,10 +33,10 @@ impl<'a> Builder<'a> {
                 this.expr(extent, target.block, &arm.body)
             });
 
-            self.terminate(arm_block, Terminator::Goto { target: join_block });
+            self.terminate(arm_block, TerminatorKind::Goto { target: join_block });
         }
 
-        self.terminate(block, Terminator::Match {
+        self.terminate(block, TerminatorKind::Match {
             discr: discriminant.clone(),
             targets: targets,
         });

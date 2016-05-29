@@ -37,11 +37,13 @@ impl CFG {
         });
     }
 
-    pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
+    pub fn terminate(&mut self, block: BasicBlock, kind: TerminatorKind) {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
         let block_data = self.block_data_mut(block);
-        block_data.terminator = Some(terminator);
+        block_data.terminator = Some(Terminator {
+            kind: kind,
+        });
     }
 
     pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {

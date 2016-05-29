@@ -164,7 +164,13 @@ impl BasicBlockData {
     }
 }
 
-pub enum Terminator {
+#[derive(Debug)]
+pub struct Terminator {
+    pub kind: TerminatorKind,
+}
+
+#[derive(Debug)]
+pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
         target: BasicBlock
@@ -196,32 +202,33 @@ pub enum Terminator {
 
 impl Terminator {
     pub fn successors(&self) -> Vec<BasicBlock> {
-        match *self {
-            Terminator::Goto { target } => vec![target],
-            Terminator::Yield { target, .. } => vec![target],
-            Terminator::Match { ref targets, .. } => {
+        match self.kind {
+            TerminatorKind::Goto { target } => vec![target],
+            TerminatorKind::Yield { target, .. } => vec![target],
+            TerminatorKind::Match { ref targets, .. } => {
                 targets.iter().map(|arm| arm.block).collect()
             }
-            Terminator::If { targets: (then, else_), .. } => vec![then, else_],
-            Terminator::Return => vec![],
+            TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
+            TerminatorKind::Return => vec![],
         }
     }
 
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
-        match *self {
-            Terminator::Goto { ref mut target } => vec![target],
-            Terminator::Yield { ref mut target, .. } => vec![target],
-            Terminator::Match { ref mut targets, .. } => {
+        match self.kind {
+            TerminatorKind::Goto { ref mut target } => vec![target],
+            TerminatorKind::Yield { ref mut target, .. } => vec![target],
+            TerminatorKind::Match { ref mut targets, .. } => {
                 targets.iter_mut().map(|arm| &mut arm.block).collect()
             }
-            Terminator::If { targets: (ref mut then, ref mut else_), .. } => {
+            TerminatorKind::If { targets: (ref mut then, ref mut else_), .. } => {
                 vec![then, else_]
             }
-            Terminator::Return => vec![],
+            TerminatorKind::Return => vec![],
         }
     }
 }
 
+#[derive(Debug)]
 pub struct Arm {
     pub pats: Vec<P<ast::Pat>>,
     pub guard: Option<P<ast::Expr>>,

@@ -68,8 +68,8 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     builder.pop_scope(extent, block);
 
-    builder.terminate(block, Terminator::Goto { target: END_BLOCK });
-    builder.terminate(END_BLOCK, Terminator::Return);
+    builder.terminate(block, TerminatorKind::Goto { target: END_BLOCK });
+    builder.terminate(END_BLOCK, TerminatorKind::Return);
 
     Ok(Mar {
         ident: item.ident,

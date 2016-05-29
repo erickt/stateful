@@ -8,9 +8,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use std::collections::BTreeSet;
 use mar::repr::*;
+use std::collections::BTreeSet;
 use super::pass::MarPass;
+use syntax::ast;
 
 pub struct RemoveDeadBlocks;
 

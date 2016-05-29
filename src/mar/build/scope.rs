@@ -75,7 +75,7 @@ impl<'a> Builder<'a> {
         // At this point, we can't tell that variables are not being accessed. So we'll create a
         // new block to make sure variables are properly not referenced.
         let end_scope_block = self.start_new_block(Some("EndScope"));
-        self.terminate(block, Terminator::Goto { target: end_scope_block });
+        self.terminate(block, TerminatorKind::Goto { target: end_scope_block });
         end_scope_block
     }
 
@@ -161,7 +161,7 @@ impl<'a> Builder<'a> {
             }
         }
 
-        self.terminate(block, Terminator::Goto { target: target });
+        self.terminate(block, TerminatorKind::Goto { target: target });
     }
 
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
@@ -178,8 +178,8 @@ impl<'a> Builder<'a> {
         None
     }
 
-    pub fn terminate(&mut self, block: BasicBlock, terminator: Terminator) {
-        self.cfg.terminate(block, terminator)
+    pub fn terminate(&mut self, block: BasicBlock, kind: TerminatorKind) {
+        self.cfg.terminate(block, kind)
     }
 
     /// This function constructs a vector of all of the variables in scope, and returns if the

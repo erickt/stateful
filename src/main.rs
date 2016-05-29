@@ -7,15 +7,11 @@
 #[generator]
 fn gen<'a, T>(items: &'a [T]) -> &'a T {
     let mut iter = items.iter();
-    loop {
-        match iter.next() {
-            Some(item) => {
-                yield_!(item);
-            }
-            None => {
-                break;
-            }
-        };
+    match iter.next() {
+        Some(item) => {
+            yield_!(item);
+        }
+        None => { }
     };
 }
 

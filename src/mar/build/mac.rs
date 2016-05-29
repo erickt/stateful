@@ -25,7 +25,7 @@ impl<'a> Builder<'a> {
 
         let next_block = self.start_new_block(Some("AfterYield"));
 
-        self.terminate(block, Terminator::Yield {
+        self.terminate(block, TerminatorKind::Yield {
             expr: expr.clone(),
             target: next_block,
         });

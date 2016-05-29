@@ -23,7 +23,12 @@ impl<'a> Builder<'a> {
                 stmt: &ast::Stmt) -> BasicBlock {
         match stmt.node {
             StmtKind::Expr(ref expr, _) | StmtKind::Semi(ref expr, _) => {
-                self.expr(extent, block, expr)
+                // Ignore empty statements.
+                if expr_is_empty(expr) {
+                    block
+                } else {
+                    self.expr(extent, block, expr)
+                }
             }
             StmtKind::Decl(ref decl, _) => {
                 match decl.node {
@@ -101,5 +106,32 @@ impl<'a> Builder<'a> {
                      stmt: ast::Stmt) -> BasicBlock {
         self.cfg.push(block, Statement::Expr(stmt));
         block
+    }
+}
+
+fn stmt_is_empty(stmt: &ast::Stmt) -> bool {
+    match stmt.node {
+        ast::StmtKind::Expr(ref e, _) | ast::StmtKind::Semi(ref e, _) => expr_is_empty(e),
+        _ => false
+    }
+}
+
+fn expr_is_empty(expr: &ast::Expr) -> bool {
+    match expr.node {
+        ast::ExprKind::Block(ref block) => {
+            for stmt in block.stmts.iter() {
+                if !stmt_is_empty(stmt) {
+                    return false;
+                }
+            }
+
+            match block.expr {
+                Some(ref e) => expr_is_empty(e),
+                None => true,
+            }
+        }
+        _ => {
+            false
+        }
     }
 }
