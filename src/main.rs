@@ -6,12 +6,8 @@
 
 #[generator]
 fn gen<'a, T>(items: &'a [T]) -> &'a T {
-    let mut iter = items.iter();
-    match iter.next() {
-        Some(item) => {
-            yield_!(item);
-        }
-        None => { }
+    for item in items.iter() {
+        yield_!(item);
     };
 }
 
