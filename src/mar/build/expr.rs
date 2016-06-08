@@ -70,7 +70,7 @@ impl<'a> Builder<'a> {
                 self.expr_loop(extent, block, Some(cond_expr), body, label)
             }
             ExprKind::ForLoop(ref pat, ref expr, ref loop_block, label) => {
-                // Desugar a for loop into
+                // Desugar a for loop into:
                 //
                 // {
                 //     let mut iter = ::std::iter::IntoIterator::into_iter($expr);
@@ -83,7 +83,7 @@ impl<'a> Builder<'a> {
                 // }
                 let builder = AstBuilder::new();
 
-                // `::std::iter::IntoIterator::into_iter($expr)`
+                // ::std::iter::IntoIterator::into_iter($expr)
                 let into_iter = builder.expr().call()
                     .path()
                         .global()
@@ -92,7 +92,7 @@ impl<'a> Builder<'a> {
                     .with_arg(expr.clone())
                     .build();
 
-                // `iter.next()`
+                // iter.next()
                 let iter_next = builder.expr().method_call("next")
                     .id("__stateful_iter")
                     .build();
@@ -121,13 +121,13 @@ impl<'a> Builder<'a> {
                 //     Some($pat) => $block,
                 //     None => break,
                 // }
-                let match_block = builder.expr()
+                let match_expr = builder.expr()
                     .match_().build(iter_next)
                     .with_arm(some_arm)
                     .with_arm(none_arm)
                     .build();
 
-                // `loop { $match_block };`
+                // `loop { $match_expr; };`
                 let mut loop_builder = builder.expr().loop_();
 
                 if let Some(label) = label {
@@ -135,7 +135,7 @@ impl<'a> Builder<'a> {
                 }
 
                 let loop_ = loop_builder.block()
-                    .stmt().build_expr(match_block)
+                    .stmt().build_expr(match_expr)
                     .build();
 
                 // `let mut iter = $into_iter;`
@@ -153,6 +153,82 @@ impl<'a> Builder<'a> {
                     .build();
 
                 self.expr(extent, block, &expr)
+            }
+            ExprKind::IfLet(ref pat, ref expr, ref then_block, ref else_block) => {
+                // Desugar an if-let:
+                //
+                // match $expr {
+                //     $pat => $then_block,
+                //     _ => $else_block,
+                // }
+                let builder = AstBuilder::new();
+
+                // $then_pat => $then_block
+                let then_arm = builder.arm()
+                    .with_pat(pat.clone())
+                    .body().build_block(then_block.clone());
+
+                // _ => $else_block
+                let else_arm = match *else_block {
+                    Some(ref else_block) => builder.arm().pat().wild().body().build(else_block.clone()),
+                    None => builder.arm().pat().wild().body().unit(),
+                };
+
+                // match $iter_next() {
+                //     $pat => $then_block,
+                //     _ => #else_block,
+                // }
+                let expr = builder.expr()
+                    .match_().build(expr.clone())
+                    .with_arm(then_arm)
+                    .with_arm(else_arm)
+                    .build();
+
+                self.expr(extent, block, &expr)
+            }
+            ExprKind::WhileLet(ref pat, ref expr, ref then_block, label) => {
+                // Desugar an while-let:
+                //
+                // 'label: loop {
+                //     match $expr {
+                //         $pat => $body_block,
+                //         _ => break,
+                //     }
+                // }
+                let builder = AstBuilder::new();
+
+                // $pat => $then_block
+                let then_arm = builder.arm()
+                    .with_pat(pat.clone())
+                    .body().build_block(then_block.clone());
+
+                // _ => break
+                let else_arm = builder.arm()
+                    .pat().wild()
+                    .body().break_();
+
+                // match $expr {
+                //     $then_arm,
+                //     $else_arm,
+                // }
+                let match_expr = builder.expr()
+                    .match_().build(expr.clone())
+                    .with_arm(then_arm)
+                    .with_arm(else_arm)
+                    .build();
+
+                // `'$label: loop { $match_expr; };`
+                let mut loop_builder = builder.expr().loop_();
+
+                if let Some(label) = label {
+                    loop_builder = loop_builder.label(label.node);
+                }
+
+                let loop_expr = loop_builder.block()
+                    .stmt().build_expr(match_expr)
+                    .build();
+
+                self.expr(extent, block, &loop_expr)
             }
             _ => {
                 self.cx.span_bug(expr.span,
