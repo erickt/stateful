@@ -32,7 +32,7 @@ pub struct Scope {
 #[derive(Clone)]
 pub struct LoopScope {
     pub extent: CodeExtent,
-    pub label: Option<ast::Ident>,
+    pub label: Option<ast::SpannedIdent>,
     pub continue_block: BasicBlock,
     pub break_block: BasicBlock,
 }
@@ -42,7 +42,7 @@ impl<'a> Builder<'a> {
     /// should branch to. See module comment for more details.
     pub fn in_loop_scope<F>(&mut self,
                             extent: CodeExtent,
-                            label: Option<ast::Ident>,
+                            label: Option<ast::SpannedIdent>,
                             loop_block: BasicBlock,
                             break_block: BasicBlock,
                             f: F) -> BasicBlock
@@ -125,7 +125,7 @@ impl<'a> Builder<'a> {
                                     .rev()
                                     .filter(|loop_scope| {
                                         match loop_scope.label {
-                                            Some(l) => l == label,
+                                            Some(l) => l.node == label,
                                             None => false,
                                         }
                                     })

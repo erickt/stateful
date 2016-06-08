@@ -64,7 +64,6 @@ impl SimplifyCfg {
                     None => continue
                 };
                 changed |= *target != new_target;
-                println!("changed!: {:?}", changed);
                 *target = new_target;
             }
             mar.basic_block_data_mut(bb).terminator = Some(terminator);

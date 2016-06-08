@@ -80,7 +80,7 @@ impl<'a> Builder<'a> {
                  block: BasicBlock,
                  condition: Option<&P<ast::Expr>>,
                  body: &P<ast::Block>,
-                 label: Option<ast::Ident>) -> BasicBlock {
+                 label: Option<ast::SpannedIdent>) -> BasicBlock {
         // [block] --> [loop_block] ~~> [loop_block_end] -1-> [exit_block]
         //                  ^                  |
         //                  |                  0

@@ -11,7 +11,6 @@
 use mar::repr::*;
 use std::collections::BTreeSet;
 use super::pass::MarPass;
-use syntax::ast;
 
 pub struct RemoveDeadBlocks;
 
