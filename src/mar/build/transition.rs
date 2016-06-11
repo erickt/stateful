@@ -4,7 +4,7 @@ use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::ptr::P;
 use syntax::visit;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn contains_transition<E: ContainsTransition>(&self, expr: E) -> bool {
         expr.contains_transition(self.is_inside_loop())
     }

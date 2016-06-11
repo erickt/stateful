@@ -9,8 +9,8 @@ pub struct CFG {
     var_decls: Vec<VarDeclData>,
 }
 
-pub struct Builder<'a> {
-    cx: &'a ExtCtxt<'a>,
+pub struct Builder<'a, 'b: 'a> {
+    cx: &'a ExtCtxt<'b>,
     cfg: CFG,
     scopes: Vec<scope::Scope>,
     loop_scopes: Vec<scope::LoopScope>,
@@ -116,7 +116,7 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
     items.pop().unwrap()
 }
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn start_new_block(&mut self, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
         self.cfg.start_new_block(name, decls)

@@ -125,8 +125,8 @@ fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
     items.pop().unwrap()
 }
 
-pub struct Builder<'a> {
-    cx: &'a ExtCtxt<'a>,
+pub struct Builder<'a, 'b: 'a> {
+    cx: &'a ExtCtxt<'b>,
     ast_builder: AstBuilder,
     mar: &'a Mar,
 }

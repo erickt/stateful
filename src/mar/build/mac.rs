@@ -10,7 +10,7 @@ use syntax::parse::parser::Parser;
 use syntax::parse::token::Token;
 use syntax::ptr::P;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn mac(&mut self, block: BasicBlock, mac: &P<ast::Mac>) -> Option<BasicBlock> {
         if transition::is_yield_path(&mac.node.path) {
             Some(self.mac_yield(block, mac))

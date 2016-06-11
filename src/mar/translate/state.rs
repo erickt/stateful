@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use syntax::ast::{self, Mutability};
 use syntax::ptr::P;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn state_id(&self, block: BasicBlock) -> ast::Ident {
         match self.mar.basic_block_data(block).name {
             Some(name) => {

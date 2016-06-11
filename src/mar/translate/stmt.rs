@@ -2,7 +2,7 @@ use mar::repr::*;
 use mar::translate::Builder;
 use syntax::ast;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],

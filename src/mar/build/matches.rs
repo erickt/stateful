@@ -4,7 +4,7 @@ use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn match_expr(&mut self,
                       extent: CodeExtent,
                       span: Span,

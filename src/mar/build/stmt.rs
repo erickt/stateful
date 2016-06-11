@@ -5,7 +5,7 @@ use syntax::ast::{self, DeclKind, StmtKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmts(&mut self,
                  extent: CodeExtent,
                  mut block: BasicBlock,

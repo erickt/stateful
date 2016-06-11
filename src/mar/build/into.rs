@@ -11,7 +11,7 @@ pub trait EvalInto {
                  block: BasicBlock) -> BasicBlock;
 }
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn into<E>(&mut self,
                    extent: CodeExtent,
                    block: BasicBlock,

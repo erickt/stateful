@@ -14,11 +14,12 @@ tracks where a `break` and `continue` should go to.
 */
 
 use aster::AstBuilder;
-use mar::build::Builder;
+use mar::build::{Builder, CFG};
 use mar::repr::*;
 use std::ascii::AsciiExt;
 use std::collections::HashSet;
 use syntax::ast::{self, PatKind};
+use syntax::ext::base::ExtCtxt;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::visit;
@@ -37,7 +38,7 @@ pub struct LoopScope {
     pub break_block: BasicBlock,
 }
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Start a loop scope, which tracks where `continue` and `break`
     /// should branch to. See module comment for more details.
     pub fn in_loop_scope<F>(&mut self,
@@ -230,12 +231,12 @@ impl<'a> Builder<'a> {
                          &format!("extent {:?} not in scope to drop {:?}", extent, decl));
     }
 
-    pub fn add_decls_from_pats<'b, I>(&mut self,
+    pub fn add_decls_from_pats<'c, I>(&mut self,
                                       span: Span,
                                       extent: CodeExtent,
                                       block: BasicBlock,
                                       pats: I)
-        where I: Iterator<Item=&'b P<ast::Pat>>,
+        where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
             let decls = self.add_decls_from_pat(span, extent, pat);
@@ -258,11 +259,12 @@ impl<'a> Builder<'a> {
 
     pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<(VarDecl, ast::Ident)> {
         struct Visitor<'a, 'b: 'a> {
-            builder: &'a mut Builder<'b>,
+            cx: &'a ExtCtxt<'b>,
+            cfg: &'a mut CFG,
             var_decls: Vec<(VarDecl, ast::Ident)>,
         }
 
-        impl<'a, 'b, 'c> visit::Visitor<'a> for Visitor<'b, 'c> {
+        impl<'a, 'b: 'a, 'v> visit::Visitor<'v> for Visitor<'a, 'b> {
             fn visit_pat(&mut self, pat: &ast::Pat) {
                 match pat.node {
                     PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
@@ -271,13 +273,12 @@ impl<'a> Builder<'a> {
                         let first_char = id_str.chars().next().unwrap();
 
                         if first_char == first_char.to_ascii_lowercase() {
-                            let decl = self.builder.cfg.push_decl(mutability, id.node);
+                            let decl = self.cfg.push_decl(mutability, id.node);
                             self.var_decls.push((decl, id.node));
                         }
                     }
                     PatKind::Ident(..) => {
-                        self.builder.cx.span_bug(pat.span,
-                                                 &format!("Canot handle pat {:?}", pat))
+                        self.cx.span_bug(pat.span, &format!("Canot handle pat {:?}", pat))
                     }
                     _ => { }
                 }
@@ -289,7 +290,8 @@ impl<'a> Builder<'a> {
         }
 
         let mut visitor = Visitor {
-            builder: self,
+            cx: self.cx,
+            cfg: &mut self.cfg,
             var_decls: Vec::new(),
         };
 

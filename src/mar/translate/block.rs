@@ -2,7 +2,7 @@ use mar::repr::*;
 use mar::translate::Builder;
 use syntax::ast;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
         let block_data = self.mar.basic_block_data(block);
 

@@ -6,7 +6,7 @@ use syntax::ast::{self, ExprKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr(&mut self,
                 extent: CodeExtent,
                 block: BasicBlock,

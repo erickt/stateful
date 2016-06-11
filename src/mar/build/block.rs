@@ -2,7 +2,7 @@ use mar::build::Builder;
 use mar::repr::*;
 use syntax::ast;
 
-impl<'a> Builder<'a> {
+impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn ast_block(&mut self,
                      extent: CodeExtent,
                      mut block: BasicBlock,
