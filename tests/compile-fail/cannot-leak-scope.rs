@@ -19,7 +19,7 @@ fn yield_() -> usize {
 
         let w = d(z);
     };
-    e(w); //~ ERROR error: unresolved name `w`. Did you mean `x`
+    e(w); //~ ERROR unresolved name `w`. Did you mean `x`
 }
 
 fn main() {
