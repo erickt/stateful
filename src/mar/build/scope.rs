@@ -264,7 +264,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             var_decls: Vec<(VarDecl, ast::Ident)>,
         }
 
-        impl<'a, 'b: 'a, 'v> visit::Visitor<'v> for Visitor<'a, 'b> {
+        impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
             fn visit_pat(&mut self, pat: &ast::Pat) {
                 match pat.node {
                     PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {

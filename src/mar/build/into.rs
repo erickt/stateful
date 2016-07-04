@@ -1,7 +1,6 @@
 use mar::build::Builder;
 use mar::repr::*;
-use syntax::ast::{self, StmtKind};
-use syntax::codemap::respan;
+use syntax::ast::{self, Stmt, StmtKind};
 use syntax::ptr::P;
 
 pub trait EvalInto {
@@ -55,7 +54,13 @@ impl EvalInto for P<ast::Expr> {
                  builder: &mut Builder,
                  extent: CodeExtent,
                  block: BasicBlock) -> BasicBlock {
-        let stmt = respan(self.span, StmtKind::Semi(self, ast::DUMMY_NODE_ID));
+        let span = self.span.clone();
+
+        let stmt = Stmt {
+            id: ast::DUMMY_NODE_ID,
+            node: StmtKind::Semi(self),
+            span: span,
+        };
         builder.into(extent, block, stmt)
     }
 }

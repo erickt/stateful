@@ -11,5 +11,5 @@ plugin = true
 unstable = ["compiletest_rs"]
 
 [dependencies]
-aster = "^0.18.0"
+aster = "^0.20.0"
 compiletest_rs = { version = "^0.2.0", optional = true }

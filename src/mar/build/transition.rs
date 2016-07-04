@@ -67,10 +67,10 @@ impl ContainsTransitionVisitor {
     }
 }
 
-impl<'a> visit::Visitor<'a> for ContainsTransitionVisitor {
+impl visit::Visitor for ContainsTransitionVisitor {
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
         match stmt.node {
-            StmtKind::Mac(ref mac, _, _) if is_yield_path(&mac.node.path) => {
+            StmtKind::Mac(ref mac) if is_yield_path(&(*mac).0.node.path) => {
                 self.contains_transition = true;
             }
             _ => {
@@ -87,7 +87,7 @@ impl<'a> visit::Visitor<'a> for ContainsTransitionVisitor {
             ExprKind::Break(_) if self.inside_loop => {
                 self.contains_transition = true;
             }
-            ExprKind::Again(_) if self.inside_loop => {
+            ExprKind::Continue(_) if self.inside_loop => {
                 self.contains_transition = true;
             }
             ExprKind::Mac(ref mac) if is_transition_path(&mac.node.path) => {

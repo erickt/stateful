@@ -21,7 +21,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Block(ref ast_block) => {
                 self.into(extent, block, ast_block)
             }
-            ExprKind::Again(label) => {
+            ExprKind::Continue(label) => {
                 self.break_or_continue(expr.span,
                                        label.map(|label| label.node),
                                        block,

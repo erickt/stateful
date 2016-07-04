@@ -2,6 +2,7 @@
 
 extern crate aster;
 extern crate rustc_plugin;
+extern crate rustc_errors as errors;
 
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;

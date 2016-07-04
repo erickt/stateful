@@ -1,7 +1,7 @@
 use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
-use syntax::ast::{self, DeclKind, StmtKind};
+use syntax::ast::{self, StmtKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
@@ -22,7 +22,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block: BasicBlock,
                 stmt: &ast::Stmt) -> BasicBlock {
         match stmt.node {
-            StmtKind::Expr(ref expr, _) | StmtKind::Semi(ref expr, _) => {
+            StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
                 // Ignore empty statements.
                 if expr_is_empty(expr) {
                     block
@@ -30,18 +30,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     self.expr(extent, block, expr)
                 }
             }
-            StmtKind::Decl(ref decl, _) => {
-                match decl.node {
-                    DeclKind::Local(ref local) => {
-                        self.local(extent, block, stmt.span, local)
-                        
-                    }
-                    DeclKind::Item(..) => {
-                        self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
-                    }
-                }
+            StmtKind::Local(ref local) => {
+                self.local(extent, block, stmt.span, local)
+                
             }
-            StmtKind::Mac(ref mac, _, _) => {
+            StmtKind::Item(..) => {
+                self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
+            }
+            StmtKind::Mac(ref mac) => {
+                let (ref mac, _, _) = **mac;
                 match self.mac(block, mac) {
                     Some(block) => block,
                     None => self.into(extent, block, stmt.clone()),
@@ -111,7 +108,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
 fn stmt_is_empty(stmt: &ast::Stmt) -> bool {
     match stmt.node {
-        ast::StmtKind::Expr(ref e, _) | ast::StmtKind::Semi(ref e, _) => expr_is_empty(e),
+        ast::StmtKind::Expr(ref e) | ast::StmtKind::Semi(ref e) => expr_is_empty(e),
         _ => false
     }
 }
@@ -125,10 +122,7 @@ fn expr_is_empty(expr: &ast::Expr) -> bool {
                 }
             }
 
-            match block.expr {
-                Some(ref e) => expr_is_empty(e),
-                None => true,
-            }
+            true
         }
         _ => {
             false
