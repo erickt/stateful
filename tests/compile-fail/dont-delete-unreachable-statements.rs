@@ -11,7 +11,7 @@ fn gen<'a, T>(items: &'a [T]) -> &'a T {
             }
             None => {
                 break;
-                let x = y; //~ ERROR error: unresolved name `y`
+                let x = y; //~ ERROR unresolved name `y`
             }
         };
     };
