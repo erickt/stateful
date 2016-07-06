@@ -61,7 +61,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let init = if block == block2 {
             local.init.clone()
         } else {
-            Some(match self.cfg.basic_blocks[block2.index() as usize - 1].statements[0] {
+            let init_stmt = self.cfg.basic_blocks[block2.index() as usize - 1].statements.pop().unwrap();
+            let res = match init_stmt {
                 Statement::Expr(ref stmt) => {
                     match stmt.node {
                         ast::StmtKind::Semi(ref expr) | ast::StmtKind::Expr(ref expr) => expr,
@@ -69,7 +70,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 },
                 _ => unreachable!(),
-            }.clone())
+            };
+
+            Some(res.clone())
         };
 
         let block = block2;
