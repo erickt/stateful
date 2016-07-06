@@ -69,8 +69,10 @@ impl ContainsTransitionVisitor {
 
 impl visit::Visitor for ContainsTransitionVisitor {
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
+        println!("statement: {:?}", stmt);
         match stmt.node {
             StmtKind::Mac(ref mac) if is_yield_path(&(*mac).0.node.path) => {
+                println!("macro statement: {:?}", stmt);
                 self.contains_transition = true;
             }
             _ => {
@@ -97,6 +99,9 @@ impl visit::Visitor for ContainsTransitionVisitor {
                 self.contains_transition = true;
             }
             _ => {
+                // println!("expr: {:?}", expr);
+                println!("exprkind of `{:?}`: {:?}", expr, expr.node);
+
                 visit::walk_expr(self, expr)
             }
         }

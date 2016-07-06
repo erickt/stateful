@@ -11,6 +11,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                  mut block: BasicBlock,
                  stmts: &[ast::Stmt]) -> BasicBlock {
         for stmt in stmts {
+            // Why don't you terminate each block here?
             block = self.stmt(extent, block, stmt);
         }
 
@@ -25,12 +26,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
                 // Ignore empty statements.
                 if expr_is_empty(expr) {
+                    // println!("empty expr: {:#?}", expr);
                     block
                 } else {
                     self.expr(extent, block, expr)
                 }
             }
             StmtKind::Local(ref local) => {
+                // println!("local: {:#?}", local);
                 self.local(extent, block, stmt.span, local)
                 
             }
@@ -38,6 +41,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
             }
             StmtKind::Mac(ref mac) => {
+                println!("macro: {:#?}", stmt);
                 let (ref mac, _, _) = **mac;
                 match self.mac(block, mac) {
                     Some(block) => block,
@@ -56,23 +60,65 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_bug(span, &format!("Local variables need initializers at the moment"));
         }
 
+        // println!("self 1: {:#?}", self.cfg);
+        let block2 = self.expr(extent, block, &local.init.clone().unwrap());
+        for (idx, bb) in self.cfg.basic_blocks.iter().enumerate() {
+            println!("idx: {}, stmts: {:?}", idx, bb.statements);
+        }
+        // println!("self 2: {:#?}", self.cfg);
+        println!("blocks: b1: {:?}, b2: {:?}", block, block2);
+
+        let init = if block == block2 {
+            local.init.clone()
+        } else {
+            Some(match self.cfg.basic_blocks[block2.index() as usize - 1].statements[0] {
+                Statement::Expr(ref stmt) => {
+                    match stmt.node {
+                        ast::StmtKind::Semi(ref expr) | ast::StmtKind::Expr(ref expr) => expr,
+                        _ => unreachable!(),
+                    }
+                },
+                _ => unreachable!(),
+            }.clone())
+        };
+
+
+        let block = block2;
+
+        // println!("init: {:?}", init);
+        // println!("pat: {:?}", local.pat.clone());
+
+        let mut i = 0u32;
         for (decl, _) in self.get_decls_from_pat(&local.pat) {
             let lvalue = self.cfg.var_decl_data(decl).ident;
+            // println!("self 3 - {}: {:#?}", i, self.cfg);
+            
             let alias = self.find_decl(lvalue).map(|alias| {
-                self.alias(block, span, alias)
+                // println!("self 4 - {}: {:#?}", i, self.cfg);
+                let v = self.alias(block, span, alias);
+                // println!("self 5 - {}: {:#?}", i, self.cfg);
+                v
             });
 
             self.schedule_drop(span, extent, decl, alias);
+            // println!("self 6 - {}: {:#?}", i, self.cfg);
+
+            i += 1;
         }
+
+        // println!("self 7: {:#?}", self.cfg);
 
         self.cfg.push(block, Statement::Let {
             span: span,
             pat: local.pat.clone(),
             ty: local.ty.clone(),
-            init: local.init.clone(),
+            // init: local.init.clone(),
+            init: init,
         });
+        // println!("self 8: {:#?}", self.cfg);
 
         block
+        // block2
     }
 
     fn alias(&mut self,

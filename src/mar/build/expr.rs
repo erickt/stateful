@@ -12,11 +12,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block: BasicBlock,
                 expr: &P<ast::Expr>) -> BasicBlock {
 
+        // println!("exprkind of `{:?}`: {:?}", expr, expr.node);
         // There's no reason for us to transform expressions if they don't contain any transitions.
         if !self.contains_transition(expr) {
             return self.into(extent, block, expr.clone());
         }
 
+        println!("expr `{:?}` contains a transition", expr);
+        
         match expr.node {
             ExprKind::Block(ref ast_block) => {
                 self.into(extent, block, ast_block)

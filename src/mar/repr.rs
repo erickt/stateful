@@ -6,6 +6,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 
 /// Lowered representation of a single function.
+#[derive(Debug)]
 pub struct Mar {
     pub span: Span,
 
@@ -123,7 +124,7 @@ impl fmt::Debug for BasicBlock {
 
 ///////////////////////////////////////////////////////////////////////////
 // BasicBlock and Terminator
-
+#[derive(Debug)]
 pub struct BasicBlockData {
     pub name: Option<&'static str>,
     pub decls: Vec<(VarDecl, ast::Ident)>,
@@ -238,6 +239,7 @@ pub struct Arm {
 ///////////////////////////////////////////////////////////////////////////
 // Statements
 
+#[derive(Debug)]
 pub enum Statement {
     Expr(ast::Stmt),
     Let {
@@ -286,6 +288,7 @@ impl fmt::Debug for CodeExtent {
     }
 }
 
+#[derive(Debug)]
 pub enum CodeExtentData {
     Misc(ast::NodeId),
 
