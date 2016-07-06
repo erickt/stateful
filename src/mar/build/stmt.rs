@@ -56,8 +56,30 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_bug(span, &format!("Local variables need initializers at the moment"));
         }
 
+        let block2 = self.expr(extent, block, &local.init.clone().unwrap());
+
+        let init = if block == block2 {
+            local.init.clone()
+        } else {
+            let init_stmt = self.cfg.basic_blocks[block2.index() as usize - 1].statements.pop().unwrap();
+            let res = match init_stmt {
+                Statement::Expr(ref stmt) => {
+                    match stmt.node {
+                        ast::StmtKind::Semi(ref expr) | ast::StmtKind::Expr(ref expr) => expr,
+                        _ => unreachable!(),
+                    }
+                },
+                _ => unreachable!(),
+            };
+
+            Some(res.clone())
+        };
+
+        let block = block2;
+
         for (decl, _) in self.get_decls_from_pat(&local.pat) {
             let lvalue = self.cfg.var_decl_data(decl).ident;
+            
             let alias = self.find_decl(lvalue).map(|alias| {
                 self.alias(block, span, alias)
             });
@@ -69,7 +91,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             span: span,
             pat: local.pat.clone(),
             ty: local.ty.clone(),
-            init: local.init.clone(),
+            // init: local.init.clone(),
+            init: init,
         });
 
         block

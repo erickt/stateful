@@ -4,6 +4,7 @@ use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
 
+#[derive(Debug)]
 pub struct CFG {
     basic_blocks: Vec<BasicBlockData>,
     var_decls: Vec<VarDeclData>,
@@ -17,6 +18,7 @@ pub struct Builder<'a, 'b: 'a> {
     extents: Vec<CodeExtentData>,
 }
 
+#[derive(Debug)]
 pub struct Error;
 
 ///////////////////////////////////////////////////////////////////////////
