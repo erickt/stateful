@@ -1,5 +1,5 @@
 use mar::repr::*;
-use syntax::ast::{self, ItemKind, StmtKind};
+use syntax::ast::{self, ItemKind};
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
@@ -29,16 +29,6 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     let (fn_decl, unsafety, constness, abi, generics, ast_block) = match item.node {
         ItemKind::Fn(ref fn_decl, unsafety, constness, abi, ref generics, ref block) => {
-            // for stmt in &block.stmts {
-            //     match stmt.node {
-            //         StmtKind::Local(..) => {println!("stmt:: {:?}, kind: Local", stmt)}
-            //         StmtKind::Item(..) => {println!("stmt:: {:?}, kind: Item", stmt)}
-            //         StmtKind::Expr(..) => {println!("stmt:: {:?}, kind: Expr", stmt)}
-            //         StmtKind::Semi(..) => {println!("stmt:: {:?}, kind: Semi", stmt)}
-            //         StmtKind::Mac(..) => {println!("stmt:: {:?}, kind: Mac", stmt)}
-                    
-            //     }
-            // }
             (fn_decl, unsafety, constness, abi, generics, block)
         }
         _ => {
@@ -83,7 +73,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     builder.terminate(block, TerminatorKind::Goto { target: END_BLOCK });
     builder.terminate(END_BLOCK, TerminatorKind::Return);
 
-    let res = Mar {
+    Ok(Mar {
         ident: item.ident,
         span: item.span,
         fn_decl: fn_decl.clone(),
@@ -95,21 +85,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         basic_blocks: builder.cfg.basic_blocks,
         var_decls: builder.cfg.var_decls,
         extents: builder.extents,
-    };
-    for block in &res.basic_blocks {
-        for stmt in &block.statements {
-            match stmt {
-                &Statement::Let{init: Some(ref expr), ..} => {
-                    // println!("exprkind: {:#?}, epr: {:#?}", expr.node, expr);
-                },
-                _ => {}
-            }
-
-        }
-    }
-
-    println!("{:#?}", res);
-    Ok(res)
+    })
 }
 
 fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
@@ -138,7 +114,6 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
 
     let mut assigner = Assigner { next_node_id: 1 };
     let mut items = fold::Folder::fold_item(&mut assigner, item);
-    // println!("{:#?}\n", items.get(0));
     assert_eq!(items.len(), 1);
     items.pop().unwrap()
 }

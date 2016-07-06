@@ -184,7 +184,6 @@ impl<'a> CFGBuilder<'a> {
     }
 
     fn stmt_semi(&mut self, pred: NodeIndex, expr: &P<ast::Expr>) -> NodeIndex {
-        println!("gen expr: {:?}", expr);
         match expr.node {
             ast::Expr_::ExprRet(Some(ref expr)) => {
                 self.yield_(pred, expr, Vec::new())

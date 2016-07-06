@@ -124,6 +124,7 @@ impl fmt::Debug for BasicBlock {
 
 ///////////////////////////////////////////////////////////////////////////
 // BasicBlock and Terminator
+
 #[derive(Debug)]
 pub struct BasicBlockData {
     pub name: Option<&'static str>,

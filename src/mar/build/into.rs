@@ -15,9 +15,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                    extent: CodeExtent,
                    block: BasicBlock,
                    expr: E) -> BasicBlock
-        where E: EvalInto + ::std::fmt::Debug
+        where E: EvalInto
     {
-        // println!("into() called in {:#?}", expr);
         expr.eval_into(self, extent, block)
     }
 }
