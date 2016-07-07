@@ -32,7 +32,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             StmtKind::Local(ref local) => {
                 self.local(extent, block, stmt.span, local)
-                
             }
             StmtKind::Item(..) => {
                 self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
@@ -58,28 +57,45 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let block2 = self.expr(extent, block, &local.init.clone().unwrap());
 
-        let init = if block == block2 {
-            local.init.clone()
+        let init_stmt = if block == block2 {
+            self.cfg.basic_blocks[block.index()].statements.pop().unwrap()
         } else {
-            let init_stmt = self.cfg.basic_blocks[block2.index() as usize - 1].statements.pop().unwrap();
-            let res = match init_stmt {
-                Statement::Expr(ref stmt) => {
-                    match stmt.node {
-                        ast::StmtKind::Semi(ref expr) | ast::StmtKind::Expr(ref expr) => expr,
-                        _ => unreachable!(),
-                    }
-                },
-                _ => unreachable!(),
-            };
+            let block_index = block2.index() as usize - 1;
+            {
+                let decls = self.cfg.basic_blocks[block_index].decls().to_owned();
 
-            Some(res.clone())
+                let let_block = &mut self.cfg.basic_blocks[block2.index()];
+                let_block.decls.extend(decls);
+            }
+            let init_index = self.cfg.basic_blocks[block_index].statements.iter().enumerate()
+                .filter(|&(_, block_statement)| {
+                    match block_statement {
+                        &Statement::Expr(..) => true,
+                        _ => false,
+                    }
+                })
+                .map(|(idx, _)| idx).next().unwrap();
+
+            self.cfg.basic_blocks[block_index].statements.remove(init_index)
         };
+
+        let init_stmt = Some(match init_stmt {
+            Statement::Expr(ref stmt) => {
+                match stmt.node {
+                    ast::StmtKind::Semi(ref expr) | ast::StmtKind::Expr(ref expr) => expr,
+                    _ => unreachable!(),
+                }
+            }
+            _ => {
+                panic!("something unexpected");
+            }
+        }.clone());
 
         let block = block2;
 
         for (decl, _) in self.get_decls_from_pat(&local.pat) {
             let lvalue = self.cfg.var_decl_data(decl).ident;
-            
+
             let alias = self.find_decl(lvalue).map(|alias| {
                 self.alias(block, span, alias)
             });
@@ -92,7 +108,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             pat: local.pat.clone(),
             ty: local.ty.clone(),
             // init: local.init.clone(),
-            init: init,
+            init: init_stmt,
         });
 
         block
