@@ -65,7 +65,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let decls = self.cfg.basic_blocks[block_index].decls().to_owned();
 
                 let let_block = &mut self.cfg.basic_blocks[block2.index()];
-                let_block.decls.extend(decls);
+                for (decl, ident) in decls {
+                    if !let_block.decls.iter().any(|&(_, x)| x.name == ident.name) {
+                        let_block.decls.push((decl, ident));
+                    }
+                }
             }
             let init_index = self.cfg.basic_blocks[block_index].statements.iter().enumerate()
                 .filter(|&(_, block_statement)| {
