@@ -106,11 +106,7 @@ impl visit::Visitor for ContainsTransitionVisitor {
 }
 
 pub fn is_transition_path(path: &ast::Path) -> bool {
-    if is_yield_path(path) {
-        true
-    } else {
-        false
-    }
+    is_yield_path(path)
 }
 
 pub fn is_yield_path(path: &ast::Path) -> bool {
