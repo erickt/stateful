@@ -11,10 +11,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 extent: CodeExtent,
                 block: BasicBlock,
                 expr: &P<ast::Expr>) -> BasicBlock {
+        let expr = self.expand_moved(expr);
 
         // There's no reason for us to transform expressions if they don't contain any transitions.
-        if !self.contains_transition(expr) {
-            return self.into(extent, block, expr.clone());
+        if !self.contains_transition(&expr) {
+            return self.into(extent, block, expr);
         }
 
         match expr.node {

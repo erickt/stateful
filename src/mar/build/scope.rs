@@ -28,6 +28,7 @@ use syntax::visit;
 pub struct Scope {
     extent: CodeExtent,
     drops: Vec<(Span, VarDecl, Option<Alias>)>,
+    moved_decls: HashSet<VarDecl>,
 }
 
 #[derive(Clone)]
@@ -88,6 +89,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes.push(Scope {
             extent: extent,
             drops: vec![],
+            moved_decls: HashSet::new(),
         });
     }
 
@@ -95,6 +97,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// drops onto the end of `block` that are needed.  This must
     /// match 1-to-1 with `push_scope`.
     pub fn pop_scope(&mut self, extent: CodeExtent, block: BasicBlock) {
+        debug!("pop_scope");
+
         let scope = self.scopes.pop().unwrap();
 
         assert_eq!(scope.extent, extent);
@@ -189,28 +193,37 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut decls = vec![];
         let mut visited_decls = HashSet::new();
 
+        debug!("find_live_decls: scopes: {:?}", self.scopes);
+
         // We build up the list of declarations by walking up the scopes, and walking through each
         // scope backwards. If this is the first time we've seen a variable with this name, we just
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
+            debug!("find_live_decls: scope: {:?}", scope.moved_decls);
+
             for &(_, decl, _) in scope.drops.iter().rev() {
-                let ident = self.cfg.var_decl_data(decl).ident;
-
-                if visited_decls.insert(ident) {
-                    // We haven't seen this decl before, so keep it's name.
-                    decls.push((decl, ident));
+                if scope.moved_decls.contains(&decl) {
+                    debug!("find_live_decls: decl moved {:?}", decl);
                 } else {
-                    // Otherwise, we need to rename it.
-                    let shadowed_ident = AstBuilder::new().id(
-                        format!("{}_shadowed_{}", ident, decl.index()));
+                    let ident = self.cfg.var_decl_data(decl).ident;
 
-                    decls.push((decl, shadowed_ident));
+                    if visited_decls.insert(ident) {
+                        // We haven't seen this decl before, so keep it's name.
+                        decls.push((decl, ident));
+                    } else {
+                        // Otherwise, we need to rename it.
+                        let shadowed_ident = AstBuilder::new().id(
+                            format!("{}_shadowed_{}", ident, decl.index()));
+
+                        decls.push((decl, shadowed_ident));
+                    }
                 }
             }
         }
 
         decls.reverse();
+        debug!("find_live_decls: live decls: {:?}", decls);
         decls
     }
 
@@ -229,6 +242,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
         self.cx.span_bug(span,
                          &format!("extent {:?} not in scope to drop {:?}", extent, decl));
+    }
+
+    pub fn schedule_move(&mut self, decl: VarDecl) {
+        for scope in self.scopes.iter_mut().rev() {
+            scope.moved_decls.insert(decl);
+        }
     }
 
     pub fn add_decls_from_pats<'c, I>(&mut self,

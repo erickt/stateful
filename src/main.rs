@@ -5,14 +5,14 @@
 #![allow(non_shorthand_field_patterns)]
 
 #[generator]
-fn gen<'a, T>(items: &'a [T]) -> &'a T {
-    for item in items.iter() {
-        yield_!(item);
-    };
+fn gen<T: 'static>(items: Vec<T>) -> T {
+    for item in moved!(items).into_iter() {
+        yield_!(moved!(item));
+    }
 }
 
 fn main() {
-    let items = &[1, 2, 3];
+    let items = vec![1, 2, 3];
     for value in gen(items) {
         println!("{}", value);
     }

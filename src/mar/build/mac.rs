@@ -23,6 +23,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let (expr, idents) = parse_mac_yield(self.cx, mac);
         assert!(idents.is_empty());
 
+        let expr = self.expand_moved(&expr);
+
         let next_block = self.start_new_block(Some("AfterYield"));
 
         self.terminate(block, TerminatorKind::Yield {

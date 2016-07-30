@@ -156,6 +156,7 @@ mod expr;
 mod into;
 mod mac;
 mod matches;
+mod moved;
 mod scope;
 mod stmt;
 mod transition;
