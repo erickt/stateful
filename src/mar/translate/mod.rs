@@ -6,7 +6,7 @@ use syntax::fold;
 use syntax::ptr::P;
 
 pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
-    let ast_builder = AstBuilder::new();
+    let ast_builder = AstBuilder::new().span(mar.span);
 
     let item_builder = ast_builder.item().fn_(mar.ident)
         .with_args(mar.fn_decl.inputs.iter().cloned());
@@ -14,25 +14,25 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let generics = &mar.generics;
 
     let item_builder = match mar.fn_decl.output {
-        FunctionRetTy::None(_) => item_builder.no_return(),
-        FunctionRetTy::Default(_) => {
-            let iter_ty = ast_builder.ty().object_sum()
+        FunctionRetTy::None(span) => item_builder.span(span).no_return(),
+        FunctionRetTy::Default(span) => {
+            let iter_ty = ast_builder.span(span).ty().object_sum()
                 .iterator().unit()
                 .with_generics(generics.clone())
                 .build();
 
-            let ty = ast_builder.ty().box_()
+            let ty = ast_builder.span(span).ty().box_()
                 .build(iter_ty);
 
             item_builder.build_return(ty)
         }
         FunctionRetTy::Ty(ref ty) => {
-            let iter_ty = ast_builder.ty().object_sum()
+            let iter_ty = ast_builder.span(ty.span).ty().object_sum()
                 .iterator().build(ty.clone())
                 .with_generics(generics.clone())
                 .build();
 
-            let ty = ast_builder.ty().box_()
+            let ty = ast_builder.span(ty.span).ty().box_()
                 .build(iter_ty);
 
             item_builder.build_return(ty)
@@ -48,7 +48,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         mar: mar,
     };
 
-    let start_state_expr = builder.state_expr(START_BLOCK);
+    let start_state_expr = builder.state_expr(mar.span, START_BLOCK);
     let (state_enum, state_default, state_arms) =
         builder.state_enum_default_and_arms();
 

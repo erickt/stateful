@@ -4,6 +4,7 @@ use syntax::ast;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
+        println!("stmt: {} => {:?}", self.cx.codemap().span_to_string(stmt.span()), stmt);
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
             Statement::Let { span, ref pat, ref ty, ref init } => {

@@ -1,5 +1,6 @@
 use mar::repr::*;
 use syntax::ast::{self, ItemKind};
+use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
@@ -50,8 +51,8 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     let extent = builder.start_new_extent();
 
-    assert_eq!(builder.start_new_block(Some("Start")), START_BLOCK);
-    assert_eq!(builder.start_new_block(Some("End")), END_BLOCK);
+    assert_eq!(builder.start_new_block(item.span, Some("Start")), START_BLOCK);
+    assert_eq!(builder.start_new_block(item.span, Some("End")), END_BLOCK);
 
     let mut block = START_BLOCK;
 
@@ -59,7 +60,6 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     // Register the arguments as declarations.
     builder.add_decls_from_pats(
-        item.span,
         extent,
         block,
         fn_decl.inputs.iter().map(|arg| &arg.pat));
@@ -70,8 +70,8 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     builder.pop_scope(extent, block);
 
-    builder.terminate(block, TerminatorKind::Goto { target: END_BLOCK });
-    builder.terminate(END_BLOCK, TerminatorKind::Return);
+    builder.terminate(item.span, block, TerminatorKind::Goto { target: END_BLOCK });
+    builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
     // The drops seem redundant, we are always moving values.
     for bb in builder.cfg.basic_blocks.iter_mut() {
@@ -129,9 +129,9 @@ fn assign_node_ids(item: P<ast::Item>) -> P<ast::Item> {
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn start_new_block(&mut self, name: Option<&'static str>) -> BasicBlock {
+    pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
-        self.cfg.start_new_block(name, decls)
+        self.cfg.start_new_block(span, name, decls)
     }
 
     pub fn start_new_extent(&mut self) -> CodeExtent {

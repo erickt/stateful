@@ -7,7 +7,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      extent: CodeExtent,
                      block: BasicBlock,
                      ast_block: &ast::Block) -> BasicBlock {
-        self.in_scope(extent, block, |this| {
+        self.in_scope(extent, ast_block.span, block, |this| {
             // FIXME: handle trailing exprs
             this.stmts(extent, block, &ast_block.stmts[..])
         })

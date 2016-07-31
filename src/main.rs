@@ -5,15 +5,12 @@
 #![allow(non_shorthand_field_patterns)]
 
 #[generator]
-fn gen<T: 'static>(items: Vec<T>) -> T {
-    for item in moved!(items).into_iter() {
-        yield_!(moved!(item));
-    }
+fn gen(item: String) -> String {
+    yield_!(moved!(item));
 }
 
 fn main() {
-    let items = vec![1, 2, 3];
-    for value in gen(items) {
+    for value in gen(String::from("wee")) {
         println!("{}", value);
     }
 }

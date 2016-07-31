@@ -124,7 +124,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
              decl: VarDecl) -> Alias {
         let lvalue = self.cfg.var_decl_data(decl).ident;
 
-        let ast_builder = AstBuilder::new();
+        let ast_builder = AstBuilder::new().span(span);
         let alias = ast_builder.id(format!("{}_shadowed_{}", lvalue, decl.index()));
 
         self.cfg.push(block, Statement::Let {
