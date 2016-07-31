@@ -2,6 +2,7 @@ use mar::repr::*;
 use mar::translate::Builder;
 use std::collections::HashSet;
 use syntax::ast::{self, Mutability};
+use syntax::codemap::Span;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -18,29 +19,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn state_path(&self, block: BasicBlock) -> ast::Path {
         self.ast_builder.path()
+            .span(self.mar.span)
             .id("State")
             .id(self.state_id(block))
             .build()
+
     }
 
     fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(VarDecl, ast::Ident)> {
         self.mar.basic_block_data(block).decls().to_vec()
     }
 
-    pub fn state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
+    pub fn state_expr(&self, span: Span, block: BasicBlock) -> P<ast::Expr> {
+        let ast_builder = self.ast_builder.span(span);
+
         let state_path = self.state_path(block);
         let incoming_decls = self.get_incoming_decls(block);
 
         if incoming_decls.is_empty() {
-            self.ast_builder.expr().path()
+            ast_builder.expr().path()
                 .build(state_path)
         } else {
             let id_exprs = incoming_decls.iter()
                 .map(|&(_, ident)| {
-                    (ident, self.ast_builder.expr().id(ident))
+                    (ident, ast_builder.expr().span(self.mar.span).id(ident))
                 });
 
-            self.ast_builder.expr().struct_path(state_path)
+            ast_builder.expr().struct_path(state_path)
                 .with_id_exprs(id_exprs)
                 .build()
         }
@@ -92,14 +97,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .build()
             .build();
 
-        let end_expr = self.ast_builder.block()
-            .expr().build(self.state_expr(END_BLOCK));
+        let end_block = self.ast_builder.block()
+            .expr().span(self.mar.span).build(self.state_expr(self.mar.span, END_BLOCK));
 
         let state_default = quote_item!(self.cx,
             impl $generics Default for $state_path {
-                fn default() -> Self {
-                    $end_expr
-                }
+                fn default() -> Self $end_block
             }
         ).expect("state default item");
 
@@ -134,11 +137,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn state_arm(&self, block: BasicBlock) -> ast::Arm {
-        let body = self.ast_builder.block()
+        let span = self.block_span(block);
+        let ast_builder = self.ast_builder.span(span);
+
+        let body = ast_builder.block()
             .with_stmts(self.block(block))
             .build();
 
-        self.ast_builder.arm()
+        ast_builder.arm()
             .with_pat(self.state_pat(block))
             .body().build_block(body)
     }

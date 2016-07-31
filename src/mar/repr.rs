@@ -127,6 +127,7 @@ impl fmt::Debug for BasicBlock {
 
 #[derive(Debug)]
 pub struct BasicBlockData {
+    pub span: Span,
     pub name: Option<&'static str>,
     pub decls: Vec<(VarDecl, ast::Ident)>,
     pub statements: Vec<Statement>,
@@ -134,10 +135,12 @@ pub struct BasicBlockData {
 }
 
 impl BasicBlockData {
-    pub fn new(name: Option<&'static str>,
+    pub fn new(span: Span,
+               name: Option<&'static str>,
                decls: Vec<(VarDecl, ast::Ident)>,
                terminator: Option<Terminator>) -> Self {
         BasicBlockData {
+            span: span,
             name: name,
             decls: decls,
             statements: vec![],
@@ -168,6 +171,7 @@ impl BasicBlockData {
 
 #[derive(Debug)]
 pub struct Terminator {
+    pub span: Span,
     pub kind: TerminatorKind,
 }
 
@@ -254,6 +258,16 @@ pub enum Statement {
         lvalue: ast::Ident,
         alias: Option<Alias>,
     },
+}
+
+impl Statement {
+    pub fn span(&self) -> Span {
+        match *self {
+            Statement::Expr(ref stmt) => stmt.span,
+            Statement::Let { span, .. } => span,
+            Statement::Drop { span, .. } => span,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

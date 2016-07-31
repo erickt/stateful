@@ -66,6 +66,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// to build its contents, popping the scope afterwards.
     pub fn in_scope<F>(&mut self,
                        extent: CodeExtent,
+                       span: Span,
                        mut block: BasicBlock,
                        f: F) -> BasicBlock
         where F: FnOnce(&mut Builder) -> BasicBlock
@@ -76,8 +77,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // At this point, we can't tell that variables are not being accessed. So we'll create a
         // new block to make sure variables are properly not referenced.
-        let end_scope_block = self.start_new_block(Some("EndScope"));
-        self.terminate(block, TerminatorKind::Goto { target: end_scope_block });
+        let end_scope_block = self.start_new_block(span, Some("EndScope"));
+        self.terminate(span, block, TerminatorKind::Goto { target: end_scope_block });
         end_scope_block
     }
 
@@ -166,7 +167,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.terminate(block, TerminatorKind::Goto { target: target });
+        self.terminate(span, block, TerminatorKind::Goto { target: target });
     }
 
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
@@ -183,8 +184,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         None
     }
 
-    pub fn terminate(&mut self, block: BasicBlock, kind: TerminatorKind) {
-        self.cfg.terminate(block, kind)
+    pub fn terminate(&mut self,
+                     span: Span,
+                     block: BasicBlock,
+                     kind: TerminatorKind) {
+        self.cfg.terminate(span, block, kind)
     }
 
     /// This function constructs a vector of all of the variables in scope, and returns if the
@@ -251,14 +255,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn add_decls_from_pats<'c, I>(&mut self,
-                                      span: Span,
                                       extent: CodeExtent,
                                       block: BasicBlock,
                                       pats: I)
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
-            let decls = self.add_decls_from_pat(span, extent, pat);
+            let decls = self.add_decls_from_pat(pat.span, extent, pat);
             self.cfg.block_data_mut(block).decls.extend(decls);
         }
     }

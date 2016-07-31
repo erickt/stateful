@@ -39,15 +39,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             ExprKind::Ret(None) => {
                 self.exit_scope(expr.span, extent, block, END_BLOCK);
-                self.start_new_block(Some("AfterReturn"))
+                self.start_new_block(expr.span, Some("AfterReturn"))
             }
             ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {
                 // FIXME: This does not handle the `cond_expr` containing a transition yet.
 
-                let mut then_block = self.start_new_block(Some("Then"));
-                let mut else_block = self.start_new_block(Some("Else"));
+                let mut then_block = self.start_new_block(expr.span, Some("Then"));
+                let mut else_block = self.start_new_block(expr.span, Some("Else"));
 
-                self.terminate(block, TerminatorKind::If {
+                self.terminate(expr.span, block, TerminatorKind::If {
                     cond: cond_expr.clone(),
                     targets: (then_block, else_block),
                 });
@@ -55,14 +55,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 then_block = self.into(extent, then_block, then_expr);
                 else_block = self.into(extent, else_block, else_expr);
 
-                let join_block = self.start_new_block(Some("IfJoin"));
-                self.terminate(then_block, TerminatorKind::Goto { target: join_block });
-                self.terminate(else_block, TerminatorKind::Goto { target: join_block });
+                let join_block = self.start_new_block(expr.span, Some("IfJoin"));
+
+                self.terminate(
+                    then_expr.span,
+                    then_block,
+                    TerminatorKind::Goto { target: join_block });
+
+                self.terminate(
+                    match *else_expr {
+                        Some(ref expr) => expr.span,
+                        None => expr.span,
+                    },
+                    else_block,
+                    TerminatorKind::Goto { target: join_block });
 
                 join_block
             }
             ExprKind::Match(ref discriminant, ref arms) => {
                 self.match_expr(extent, expr.span, block, discriminant.clone(), &arms)
+
             }
             ExprKind::Loop(ref body, label) => {
                 self.expr_loop(extent, block, None, body, label)
@@ -82,7 +94,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 //         }
                 //     }
                 // }
-                let builder = AstBuilder::new();
+                let builder = AstBuilder::new().span(expr.span);
 
                 // ::std::iter::IntoIterator::into_iter($expr)
                 let into_iter = builder.expr().call()
@@ -162,7 +174,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 //     $pat => $then_block,
                 //     _ => $else_block,
                 // }
-                let builder = AstBuilder::new();
+                let builder = AstBuilder::new().span(expr.span);
 
                 // $then_pat => $then_block
                 let then_arm = builder.arm()
@@ -196,7 +208,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 //         _ => break,
                 //     }
                 // }
-                let builder = AstBuilder::new();
+                let builder = AstBuilder::new().span(expr.span);
 
                 // $pat => $then_block
                 let then_arm = builder.arm()
@@ -258,11 +270,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         //                         |                          |
         //                         +--------------------------+
 
-        let loop_block = self.start_new_block(Some("Loop"));
-        let exit_block = self.start_new_block(Some("LoopExit"));
+        let loop_block = self.start_new_block(body.span, Some("Loop"));
+        let exit_block = self.start_new_block(body.span, Some("LoopExit"));
 
         // start the loop
-        self.terminate(block, TerminatorKind::Goto { target: loop_block });
+        self.terminate(
+            body.span,
+            block,
+            TerminatorKind::Goto { target: loop_block });
 
         self.in_loop_scope(extent, label, loop_block, exit_block, |this| {
             // conduct the test, if necessary
@@ -270,19 +285,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             if let Some(cond_expr) = condition {
                 // FIXME: This does not yet handle the expr having a transition.
 
-                body_block = this.start_new_block(Some("LoopBody"));
+                body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
 
-                this.terminate(loop_block, TerminatorKind::If {
-                    cond: cond_expr.clone(),
-                    targets: (body_block, exit_block),
-                });
+                this.terminate(
+                    cond_expr.span,
+                    loop_block,
+                    TerminatorKind::If {
+                        cond: cond_expr.clone(),
+                        targets: (body_block, exit_block),
+                    });
             } else {
                 body_block = loop_block;
             }
 
             // execute the body, branching back to the test
             let body_block_end = this.into(extent, body_block, body);
-            this.terminate(body_block_end, TerminatorKind::Goto { target: loop_block });
+            this.terminate(
+                body.span,
+                body_block_end,
+                TerminatorKind::Goto { target: loop_block });
 
             // final point is exit_block
             exit_block
@@ -304,6 +325,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Even though we've exited `block`, there could be code following the break/continue. To
         // keep rust happy, we'll create a new block that has an edge to `block`, even though
         // control will never actually flow into this block.
-        self.start_new_block(Some("AfterBreakOrContinue"))
+        self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
 }

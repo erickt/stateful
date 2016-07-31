@@ -51,8 +51,9 @@ impl<'a, 'b> ExpandMac<'a, 'b> {
         let ident = panictry!(parser.parse_ident());
         self.moved_idents.push(ident);
 
-        let expr = AstBuilder::new().expr().id(ident);
-        debug!("moving {:#?}", expr);
+        let expr = AstBuilder::new().expr()
+            .span(mac.span)
+            .id(ident);
 
         expr
     }

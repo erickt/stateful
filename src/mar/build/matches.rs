@@ -17,26 +17,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 Arm {
                     pats: arm.pats.clone(),
                     guard: arm.guard.clone(),
-                    block: self.start_new_block(Some("Arm")),
+                    block: self.start_new_block(span, Some("Arm")),
                 }
             })
             .collect::<Vec<_>>();
 
-        let join_block = self.start_new_block(Some("MatchJoin"));
+        let join_block = self.start_new_block(span, Some("MatchJoin"));
 
         for (arm, target) in arms.iter().zip(targets.iter()) {
-            let arm_block = self.in_scope(extent, block, |this| {
-                this.add_decls_from_pats(span,
-                                         extent,
+            let arm_block = self.in_scope(extent, span, block, |this| {
+                this.add_decls_from_pats(extent,
                                          target.block,
                                          arm.pats.iter());
                 this.expr(extent, target.block, &arm.body)
             });
 
-            self.terminate(arm_block, TerminatorKind::Goto { target: join_block });
+            self.terminate(span, arm_block, TerminatorKind::Goto { target: join_block });
         }
 
-        self.terminate(block, TerminatorKind::Match {
+        self.terminate(span, block, TerminatorKind::Match {
             discr: discriminant.clone(),
             targets: targets,
         });

@@ -13,10 +13,11 @@ impl CFG {
     }
 
     pub fn start_new_block(&mut self,
+                           span: Span,
                            name: Option<&'static str>,
                            decls: Vec<(VarDecl, ast::Ident)>) -> BasicBlock {
         let node_index = self.basic_blocks.len();
-        self.basic_blocks.push(BasicBlockData::new(name, decls, None));
+        self.basic_blocks.push(BasicBlockData::new(span, name, decls, None));
         BasicBlock::new(node_index)
     }
 
@@ -37,11 +38,16 @@ impl CFG {
         });
     }
 
-    pub fn terminate(&mut self, block: BasicBlock, kind: TerminatorKind) {
+    pub fn terminate(&mut self,
+                     span: Span,
+                     block: BasicBlock,
+                     kind: TerminatorKind) {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
+
         let block_data = self.block_data_mut(block);
         block_data.terminator = Some(Terminator {
+            span: span,
             kind: kind,
         });
     }
