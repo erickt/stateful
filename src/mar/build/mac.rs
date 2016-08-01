@@ -1,5 +1,4 @@
-use mar::build::Builder;
-use mar::build::transition;
+use mar::build::{Builder, transition};
 use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
@@ -12,10 +11,17 @@ use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn mac(&mut self, block: BasicBlock, mac: &ast::Mac) -> Option<BasicBlock> {
-        if transition::is_yield_path(&mac.node.path) {
-            Some(self.mac_yield(block, mac))
-        } else {
-            None
+        match self.state_machine_kind {
+            StateMachineKind::Generator => {
+                if transition::is_yield_path(&mac.node.path) {
+                    Some(self.mac_yield(block, mac))
+                } else {
+                    None
+                }
+            }
+            StateMachineKind::Async => {
+                self.cx.span_fatal(mac.span, "async functions cannot yield")
+            }
         }
     }
 

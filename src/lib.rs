@@ -20,24 +20,27 @@ use syntax::ext::base::{
 use syntax::print::pprust;
 pub use mar::transform::pass::MarPass;
 
-fn expand_generator(cx: &mut ExtCtxt,
-                    _sp: Span,
-                    meta_item: &ast::MetaItem,
-                    annotatable: Annotatable) -> Annotatable {
+fn expand_state_machine(cx: &mut ExtCtxt,
+                        _sp: Span,
+                        meta_item: &ast::MetaItem,
+                        annotatable: Annotatable,
+                        name: &str,
+                        state_machine_kind: mar::repr::StateMachineKind) -> Annotatable {
     let item = match annotatable {
         Annotatable::Item(item) => item,
         _ => {
             cx.span_err(
                 meta_item.span,
-                "`state_machine` may only be applied to functions");
+                &format!("`{}` may only be applied to functions", name));
 
             return annotatable;
         }
     };
 
-    let mut mar = match mar::build::construct(cx, item.clone()) {
+    let mut mar = match mar::build::construct(cx, item.clone(), state_machine_kind) {
         Ok(mar) => mar,
         Err(mar::build::Error) => {
+            // We had an error, so just return the input item for a lack of a better option.
             return Annotatable::Item(item);
         }
     };
@@ -55,7 +58,6 @@ fn expand_generator(cx: &mut ExtCtxt,
     match mar::translate::translate(cx, &mar) {
         Some(item) => {
             debug!("{}", pprust::item_to_string(&item));
-
             Annotatable::Item(item)
         }
         None => {
@@ -65,6 +67,32 @@ fn expand_generator(cx: &mut ExtCtxt,
     }
 }
 
+fn expand_generator(cx: &mut ExtCtxt,
+                    span: Span,
+                    meta_item: &ast::MetaItem,
+                    annotatable: Annotatable) -> Annotatable {
+    expand_state_machine(
+        cx,
+        span,
+        meta_item,
+        annotatable,
+        "generator",
+        mar::repr::StateMachineKind::Generator)
+}
+
+fn expand_async(cx: &mut ExtCtxt,
+                span: Span,
+                meta_item: &ast::MetaItem,
+                annotatable: Annotatable) -> Annotatable {
+    expand_state_machine(
+        cx,
+        span,
+        meta_item,
+        annotatable,
+        "async",
+        mar::repr::StateMachineKind::Async)
+}
+
 #[plugin_registrar]
 #[doc(hidden)]
 pub fn plugin_registrar(registry: &mut rustc_plugin::Registry) {
@@ -72,4 +100,7 @@ pub fn plugin_registrar(registry: &mut rustc_plugin::Registry) {
 
     registry.register_syntax_extension(builder.name("generator"),
                                        MultiModifier(Box::new(expand_generator)));
+
+    registry.register_syntax_extension(builder.name("async"),
+                                       MultiModifier(Box::new(expand_async)));
 }

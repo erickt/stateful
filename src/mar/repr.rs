@@ -5,13 +5,19 @@ use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
+#[derive(Debug)]
+pub enum StateMachineKind {
+    Generator,
+    Async,
+}
+
 /// Lowered representation of a single function.
 #[derive(Debug)]
 pub struct Mar {
+    pub state_machine_kind: StateMachineKind,
+
     pub span: Span,
-
     pub ident: ast::Ident,
-
     pub fn_decl: P<ast::FnDecl>,
     pub unsafety: ast::Unsafety,
     pub constness: ast::Constness,
