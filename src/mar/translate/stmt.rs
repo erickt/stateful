@@ -29,20 +29,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build()
                 ];
 
-                match *alias {
-                    Some(ref alias) => {
-                        let (mode, ident) = {
-                            let decl = self.mar.var_decl_data(alias.decl);
-                            let mode = ast::BindingMode::ByValue(decl.mutability);
-                            (mode, decl.ident)
-                        };
+                if let Some(ref alias) = *alias {
+                    let (mode, ident) = {
+                        let decl = self.mar.var_decl_data(alias.decl);
+                        let mode = ast::BindingMode::ByValue(decl.mutability);
+                        (mode, decl.ident)
+                    };
 
-                        stmts.push(self.ast_builder.span(span).stmt()
-                            .let_().build_id(mode, ident, None)
-                            .expr().id(alias.lvalue)
-                        );
-                    }
-                    None => { }
+                    stmts.push(self.ast_builder.span(span).stmt()
+                        .let_().build_id(mode, ident, None)
+                        .expr().id(alias.lvalue)
+                    );
                 }
 
                 stmts

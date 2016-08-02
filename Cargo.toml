@@ -8,8 +8,11 @@ name = "stateful"
 plugin = true
 
 [features]
-unstable = ["compiletest_rs"]
+default = ["unstable"]
+unstable = []
+unstable-testing = ["clippy", "compiletest_rs"]
 
 [dependencies]
 aster = "^0.22.1"
+clippy = { version = "0.0.80", optional = true }
 compiletest_rs = { version = "^0.2.0", optional = true }

@@ -72,6 +72,12 @@ impl SimplifyCfg {
     }
 }
 
+impl Default for SimplifyCfg {
+    fn default() -> Self {
+        SimplifyCfg::new()
+    }
+}
+
 impl MarPass for SimplifyCfg {
     fn run_pass(&mut self, mar: &mut Mar) {
         let mut changed = true;

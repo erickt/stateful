@@ -1,4 +1,5 @@
-#![feature(plugin_registrar, rustc_private, quote)]
+#![cfg_attr(feature = "unstable", feature(plugin, plugin_registrar, rustc_private, quote))]
+#![cfg_attr(feature = "clippy", plugin(clippy))]
 
 extern crate aster;
 extern crate rustc_plugin;
@@ -41,11 +42,8 @@ fn expand_generator(cx: &mut ExtCtxt,
         }
     };
 
-    match mar::translate::translate(cx, &mar) {
-        Some(item) => {
-            debug!("{}", pprust::item_to_string(&item));
-        }
-        None => {}
+    if let Some(item) = mar::translate::translate(cx, &mar) {
+        debug!("{}", pprust::item_to_string(&item));
     }
 
     let mut pass_manager = mar::transform::pass_manager::PassManager::new();

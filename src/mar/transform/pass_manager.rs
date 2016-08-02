@@ -17,8 +17,14 @@ impl PassManager {
     }
 
     pub fn run(&mut self, mar: &mut Mar) {
-        for pass in self.passes.iter_mut() {
+        for pass in &mut self.passes {
             pass.run_pass(mar);
         }
+    }
+}
+
+impl Default for PassManager {
+    fn default() -> Self {
+        PassManager::new()
     }
 }

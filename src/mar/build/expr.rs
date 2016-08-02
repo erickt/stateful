@@ -73,7 +73,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 join_block
             }
             ExprKind::Match(ref discriminant, ref arms) => {
-                self.match_expr(extent, expr.span, block, discriminant.clone(), &arms)
+                self.match_expr(extent, expr.span, block, discriminant.clone(), arms)
 
             }
             ExprKind::Loop(ref body, label) => {

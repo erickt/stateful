@@ -30,7 +30,7 @@ impl MarPass for RemoveDeadBlocks {
         let mut worklist = Vec::with_capacity(4);
         worklist.push(START_BLOCK);
         while let Some(bb) = worklist.pop() {
-            for succ in mar.basic_block_data(bb).terminator().successors().iter() {
+            for succ in &mar.basic_block_data(bb).terminator().successors() {
                 if seen.insert(succ.index()) {
                     worklist.push(*succ);
                 }
@@ -45,6 +45,12 @@ impl MarPass for RemoveDeadBlocks {
         }
 
         retain_basic_blocks(mar, &seen);
+    }
+}
+
+impl Default for RemoveDeadBlocks {
+    fn default() -> Self {
+        RemoveDeadBlocks::new()
     }
 }
 

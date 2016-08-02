@@ -33,9 +33,9 @@ impl<'a> EvalInto for &'a P<ast::Block> {
 impl EvalInto for ast::Stmt {
     fn eval_into(self,
                  builder: &mut Builder,
-                 extent: CodeExtent,
+                 _extent: CodeExtent,
                  block: BasicBlock) -> BasicBlock {
-        builder.into_stmt(extent, block, self);
+        builder.cfg.push(block, Statement::Expr(self));
         block
     }
 }
@@ -54,7 +54,7 @@ impl EvalInto for P<ast::Expr> {
                  builder: &mut Builder,
                  extent: CodeExtent,
                  block: BasicBlock) -> BasicBlock {
-        let span = self.span.clone();
+        let span = self.span;
 
         let stmt = Stmt {
             id: ast::DUMMY_NODE_ID,

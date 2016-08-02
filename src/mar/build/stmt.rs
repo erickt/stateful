@@ -52,7 +52,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
              span: Span,
              local: &P<ast::Local>) -> BasicBlock {
         if local.init.is_none() {
-            self.cx.span_bug(span, &format!("Local variables need initializers at the moment"));
+            self.cx.span_bug(span, "Local variables need initializers at the moment");
         }
 
         let block2 = self.expr(extent, block, &local.init.clone().unwrap());
@@ -73,8 +73,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             let init_index = self.cfg.basic_blocks[block_index].statements.iter().enumerate()
                 .filter(|&(_, block_statement)| {
-                    match block_statement {
-                        &Statement::Expr(..) => true,
+                    match *block_statement {
+                        Statement::Expr(..) => true,
                         _ => false,
                     }
                 })
@@ -139,14 +139,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             decl: decl,
         }
     }
-
-    pub fn into_stmt(&mut self,
-                     _extent: CodeExtent,
-                     block: BasicBlock,
-                     stmt: ast::Stmt) -> BasicBlock {
-        self.cfg.push(block, Statement::Expr(stmt));
-        block
-    }
 }
 
 fn stmt_is_empty(stmt: &ast::Stmt) -> bool {
@@ -159,7 +151,7 @@ fn stmt_is_empty(stmt: &ast::Stmt) -> bool {
 fn expr_is_empty(expr: &ast::Expr) -> bool {
     match expr.node {
         ast::ExprKind::Block(ref block) => {
-            for stmt in block.stmts.iter() {
+            for stmt in &block.stmts {
                 if !stmt_is_empty(stmt) {
                     return false;
                 }

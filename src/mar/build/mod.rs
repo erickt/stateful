@@ -74,10 +74,10 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
     // The drops seem redundant, we are always moving values.
-    for bb in builder.cfg.basic_blocks.iter_mut() {
+    for bb in &mut builder.cfg.basic_blocks {
         bb.statements.retain(|stmt| {
-            match stmt {
-                &Statement::Drop{..} => false,
+            match *stmt {
+                Statement::Drop { .. } => false,
                 _ => true
             }
         });

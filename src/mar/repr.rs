@@ -34,7 +34,7 @@ pub struct Mar {
 impl Mar {
     pub fn all_basic_blocks(&self) -> Vec<BasicBlock> {
         (0..self.basic_blocks.len())
-            .map(|i| BasicBlock::new(i))
+            .map(BasicBlock::new)
             .collect()
     }
 
@@ -264,8 +264,7 @@ impl Statement {
     pub fn span(&self) -> Span {
         match *self {
             Statement::Expr(ref stmt) => stmt.span,
-            Statement::Let { span, .. } => span,
-            Statement::Drop { span, .. } => span,
+            Statement::Let { span, .. } | Statement::Drop { span, .. } => span,
         }
     }
 }
@@ -320,14 +319,14 @@ pub enum CodeExtentData {
 /// For example, given `{ let (a, b) = EXPR_1; let c = EXPR_2; ... }`:
 ///
 /// * the subscope with `first_statement_index == 0` is scope of both
-///   `a` and `b`; it does not include EXPR_1, but does include
+///   `a` and `b`; it does not include `EXPR_1`, but does include
 ///   everything after that first `let`. (If you want a scope that
-///   includes EXPR_1 as well, then do not use `CodeExtentData::Remainder`,
+///   includes `EXPR_1` as well, then do not use `CodeExtentData::Remainder`,
 ///   but instead another `CodeExtent` that encompasses the whole block,
 ///   e.g. `CodeExtentData::Misc`.
 ///
 /// * the subscope with `first_statement_index == 1` is scope of `c`,
-///   and thus does not include EXPR_2, but covers the `...`.
+///   and thus does not include `EXPR_2`, but covers the `...`.
 #[derive(Clone, PartialEq, PartialOrd, Eq, Ord, Hash, Debug, Copy)]
 pub struct BlockRemainder {
     pub block: ast::NodeId,

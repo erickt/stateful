@@ -51,11 +51,9 @@ impl<'a, 'b> ExpandMac<'a, 'b> {
         let ident = panictry!(parser.parse_ident());
         self.moved_idents.push(ident);
 
-        let expr = AstBuilder::new().expr()
+        AstBuilder::new().expr()
             .span(mac.span)
-            .id(ident);
-
-        expr
+            .id(ident)
     }
 }
 
@@ -63,7 +61,7 @@ impl<'a, 'b> Folder for ExpandMac<'a, 'b> {
     fn fold_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
         match expr.node {
             ast::ExprKind::Mac(ref mac) if is_moved_path(&mac.node.path) => {
-                return self.parse_mac_moved(&mac);
+                return self.parse_mac_moved(mac);
             }
             _ => {}
         }

@@ -63,7 +63,7 @@ fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> (P<ast::Expr>, Vec<ast::Iden
                                                            |p| p.parse_ident()));
 
             if idents.is_empty() {
-                cx.span_fatal(sp, &format!("unexpected end of macro"));
+                cx.span_fatal(sp, "unexpected end of macro");
             }
 
             idents

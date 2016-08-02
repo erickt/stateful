@@ -272,7 +272,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                               pat: &P<ast::Pat>) -> Vec<(VarDecl, ast::Ident)> {
         let decls = self.get_decls_from_pat(pat);
 
-        for &(decl, _) in decls.iter() {
+        for &(decl, _) in &decls {
             self.schedule_drop(span, extent, decl, None);
         }
 

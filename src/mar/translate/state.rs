@@ -159,7 +159,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             let mut struct_pat_builder = self.ast_builder.pat().struct_()
                 .build(state_path);
 
-            for &(decl, ident) in incoming_decls.iter() {
+            for &(decl, ident) in &incoming_decls {
                 let decl_data = self.mar.var_decl_data(decl);
 
                 struct_pat_builder = match decl_data.mutability {
