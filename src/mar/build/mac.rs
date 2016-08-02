@@ -3,8 +3,6 @@ use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
-use syntax::parse::common::SeqSep;
-use syntax::parse::lexer::{Reader, TokenAndSpan};
 use syntax::parse::parser::Parser;
 use syntax::parse::token::Token;
 use syntax::ptr::P;
@@ -20,15 +18,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
             StateMachineKind::Async => {
-                self.cx.span_fatal(mac.span, "async functions cannot yield")
+                /*
+                if transition::is_await_path(&mac.node.path) {
+                    Some(self.mac_await(block, mac))
+                } else
+                */
+                if transition::is_suspend_path(&mac.node.path) {
+                    Some(self.mac_suspend(block, mac))
+                } else {
+                    None
+                }
             }
         }
     }
 
     fn mac_yield(&mut self, block: BasicBlock, mac: &ast::Mac) -> BasicBlock {
-        let (expr, idents) = parse_mac_yield(self.cx, mac);
-        assert!(idents.is_empty());
-
+        let expr = parse_mac_yield(self.cx, mac);
         let expr = self.expand_moved(&expr);
 
         let next_block = self.start_new_block(mac.span, Some("AfterYield"));
@@ -40,45 +45,73 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         next_block
     }
+
+    /*
+    fn mac_await(&mut self, block: BasicBlock, mac: &ast::Mac) -> BasicBlock {
+        let expr = parse_mac_await(self.cx, mac);
+        let expr = self.expand_moved(&expr);
+
+        let next_block = self.start_new_block(mac.span, Some("AfterAwait"));
+
+        self.terminate(mac.span, block, TerminatorKind::Resume {
+            expr: expr,
+            target: next_block,
+        });
+
+        next_block
+    }
+    */
+
+    fn mac_suspend(&mut self, block: BasicBlock, mac: &ast::Mac) -> BasicBlock {
+        parse_mac_suspend(self.cx, mac);
+
+        let next_block = self.start_new_block(mac.span, Some("AfterSuspend"));
+
+        self.terminate(mac.span, block, TerminatorKind::Suspend {
+            target: next_block,
+        });
+
+        next_block
+    }
 }
 
-fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> (P<ast::Expr>, Vec<ast::Ident>) {
-    let mut rdr = new_tt_reader(&cx.parse_sess().span_diagnostic,
-                                None,
-                                None,
-                                mac.node.tts.clone());
+fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
 
     let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
-
     let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
 
-    for _ in 0..parser.tokens_consumed {
-        let _ = rdr.next_token();
-    }
+    expr
+}
 
-    let TokenAndSpan { tok, sp } = rdr.peek();
+/*
+fn parse_mac_await(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
 
-    let idents = match tok {
-        Token::Eof => Vec::new(),
-        Token::Semi => {
-            parser.bump();
+    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
 
-            let seq_sep = SeqSep::trailing_allowed(Token::Comma);
-            let idents = panictry!(parser.parse_seq_to_end(&Token::Eof,
-                                                           seq_sep,
-                                                           |p| p.parse_ident()));
+    expr
+}
+*/
 
-            if idents.is_empty() {
-                cx.span_fatal(sp, "unexpected end of macro");
-            }
+fn parse_mac_suspend(cx: &ExtCtxt, mac: &ast::Mac) {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
 
-            idents
-        }
-        _ => {
-            let token_str = parser.this_token_to_string();
-            cx.span_fatal(sp, &format!("expected ident, found `{}`", token_str));
-        }
-    };
-
-    (expr, idents)
+    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    panictry!(parser.expect(&Token::Eof))
 }

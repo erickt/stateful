@@ -5,6 +5,7 @@ use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
 use syntax::fold::{self, Folder};
 use syntax::parse::parser::Parser;
+use syntax::parse::token::Token;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -49,6 +50,8 @@ impl<'a, 'b> ExpandMac<'a, 'b> {
             Box::new(rdr));
 
         let ident = panictry!(parser.parse_ident());
+        panictry!(parser.expect(&Token::Eof));
+
         self.moved_idents.push(ident);
 
         AstBuilder::new().expr()
@@ -76,9 +79,9 @@ impl<'a, 'b> Folder for ExpandMac<'a, 'b> {
 
 fn is_moved_path(path: &ast::Path) -> bool {
     let builder = AstBuilder::new();
-    let yield_ = builder.path()
+    let moved = builder.path()
         .id("moved")
         .build();
 
-    !path.global && path.segments == yield_.segments
+    !path.global && path.segments == moved.segments
 }

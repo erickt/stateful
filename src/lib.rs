@@ -45,9 +45,11 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
+    /*
     if let Some(item) = mar::translate::translate(cx, &mar) {
         debug!("{}", pprust::item_to_string(&item));
     }
+    */
 
     let mut pass_manager = mar::transform::pass_manager::PassManager::new();
     pass_manager.add_pass(Box::new(mar::transform::remove_dead_blocks::RemoveDeadBlocks::new()));

@@ -77,6 +77,7 @@ pub fn construct(cx: &ExtCtxt,
     builder.terminate(item.span, block, TerminatorKind::Goto { target: END_BLOCK });
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
+    /*
     // The drops seem redundant, we are always moving values.
     for bb in &mut builder.cfg.basic_blocks {
         bb.statements.retain(|stmt| {
@@ -86,6 +87,7 @@ pub fn construct(cx: &ExtCtxt,
             }
         });
     }
+    */
 
     Ok(Mar {
         state_machine_kind: builder.state_machine_kind,

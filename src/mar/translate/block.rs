@@ -101,6 +101,44 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(tuple)
                 ]
             }
+            TerminatorKind::Suspend { target } => {
+                let path = ast_builder.path()
+                    .global().ids(&["Poll", "NotReady"]).build();
+
+                let suspend_expr = ast_builder.expr().build_path(path);
+                let next_state = self.state_expr(terminator.span, target);
+
+                let tuple = ast_builder.expr().tuple()
+                    .expr().build(suspend_expr)
+                    .expr().build(next_state)
+                    .build();
+
+                vec![
+                    ast_builder.stmt().semi()
+                        .return_expr()
+                        .build(tuple)
+                ]
+            }
+            /*
+            TerminatorKind::Resume { expr, target } => {
+                let path = ast_builder.path()
+                    .global().ids(&["Poll", "NotReady"]).build();
+
+                let suspend_expr = ast_builder.expr().build_path(path);
+                let next_state = self.state_expr(terminator.span, target);
+
+                let tuple = ast_builder.expr().tuple()
+                    .expr().build(suspend_expr)
+                    .expr().build(next_state)
+                    .build();
+
+                vec![
+                    ast_builder.stmt().semi()
+                        .return_expr()
+                        .build(tuple)
+                ]
+            }
+            */
         }
     }
 

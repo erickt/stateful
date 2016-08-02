@@ -11,35 +11,8 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let item_builder = ast_builder.item().fn_(mar.ident)
         .with_args(mar.fn_decl.inputs.iter().cloned());
 
-    let generics = &mar.generics;
-
-    let item_builder = match mar.fn_decl.output {
-        FunctionRetTy::None(span) => item_builder.span(span).no_return(),
-        FunctionRetTy::Default(span) => {
-            let iter_ty = ast_builder.span(span).ty().object_sum()
-                .iterator().unit()
-                .with_generics(generics.clone())
-                .build();
-
-            let ty = ast_builder.span(span).ty().box_()
-                .build(iter_ty);
-
-            item_builder.build_return(ty)
-        }
-        FunctionRetTy::Ty(ref ty) => {
-            let iter_ty = ast_builder.span(ty.span).ty().object_sum()
-                .iterator().build(ty.clone())
-                .with_generics(generics.clone())
-                .build();
-
-            let ty = ast_builder.span(ty.span).ty().box_()
-                .build(iter_ty);
-
-            item_builder.build_return(ty)
-        }
-    };
-
     let item_builder = item_builder
+        .build_return(return_type(mar))
         .generics().with(mar.generics.clone()).build();
 
     let builder = Builder {
@@ -52,6 +25,48 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let (state_enum, state_default, state_arms) =
         builder.state_enum_default_and_arms();
 
+    let closure_type;
+    let wrapper_impl;
+    
+    match mar.state_machine_kind {
+        StateMachineKind::Generator => {
+            closure_type = quote_ty!(cx, Option<T>);
+            wrapper_impl = quote_item!(cx,
+                impl<S, T, F> Iterator for Wrapper<S, F>
+                    where S: Default,
+                          F: Fn(S) -> (Option<T>, S)
+                {
+                    type Item = T;
+
+                    fn next(&mut self) -> Option<Self::Item> {
+                        let old_state = ::std::mem::replace(&mut self.state, S::default());
+                        let (value, next_state) = (self.next)(old_state);
+                        self.state = next_state;
+                        value
+                    }
+                }
+            ).unwrap();
+        }
+        StateMachineKind::Async => {
+            closure_type = quote_ty!(cx, Poll<T>);
+            wrapper_impl = quote_item!(cx,
+                impl<S, T, F> Future for Wrapper<S, F>
+                    where S: Default,
+                          F: Fn(S) -> (Poll<T>, S)
+                {
+                    type Item = T;
+
+                    fn poll(&mut self) -> Poll<Self::Item> {
+                        let old_state = ::std::mem::replace(&mut self.state, S::default());
+                        let (value, next_state) = (self.next)(old_state);
+                        self.state = next_state;
+                        value
+                    }
+                }
+            ).unwrap();
+        }
+    };
+
     let block = quote_block!(cx, {
         struct Wrapper<S, F> {
             state: S,
@@ -59,7 +74,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         }
 
         impl<S, T, F> Wrapper<S, F>
-            where F: Fn(S) -> (Option<T>, S),
+            where F: Fn(S) -> ($closure_type, S),
         {
             fn new(initial_state: S, next: F) -> Self {
                 Wrapper {
@@ -69,20 +84,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
             }
         }
 
-        impl<S, T, F> Iterator for Wrapper<S, F>
-            where S: Default,
-                  F: Fn(S) -> (Option<T>, S)
-        {
-            type Item = T;
-
-            fn next(&mut self) -> Option<Self::Item> {
-                let old_state = ::std::mem::replace(&mut self.state, S::default());
-                let (value, next_state) = (self.next)(old_state);
-                self.state = next_state;
-                value
-            }
-        }
-
+        $wrapper_impl
         $state_enum
         $state_default
 
@@ -105,6 +107,41 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let item = strip_node_ids(item);
 
     Some(item)
+}
+
+fn return_type(mar: &Mar) -> P<ast::Ty> {
+    let (builder, ty) = match mar.fn_decl.output {
+        FunctionRetTy::None(span) | FunctionRetTy::Default(span) => {
+            let builder = AstBuilder::new().span(span);
+            (builder, builder.ty().unit())
+        }
+        FunctionRetTy::Ty(ref ty) => {
+            (AstBuilder::new().span(ty.span), ty.clone())
+        }
+    };
+
+    let ty = match mar.state_machine_kind {
+        StateMachineKind::Generator => {
+            builder.ty().object_sum()
+                .iterator().build(ty)
+                .with_generics(mar.generics.clone())
+                .build()
+        }
+        StateMachineKind::Async => {
+            let path = builder.path()
+                .segment("Future")
+                    .binding("Item").build(ty)
+                    .build()
+                .build();
+
+            builder.ty().object_sum()
+                .build_path(path)
+                .with_generics(mar.generics.clone())
+                .build()
+        }
+    };
+
+    builder.ty().box_().build(ty)
 }
 
 fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {

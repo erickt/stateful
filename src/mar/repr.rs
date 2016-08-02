@@ -210,6 +210,17 @@ pub enum TerminatorKind {
     /// have been filled in by now. This should only occur in the
     /// `END_BLOCK`.
     Return,
+
+    Suspend {
+        target: BasicBlock,
+    },
+
+    /*
+    Resume {
+        expr: P<ast::Expr>,
+        target: BasicBlock,
+    },
+    */
 }
 
 impl Terminator {
@@ -222,6 +233,8 @@ impl Terminator {
             }
             TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
             TerminatorKind::Return => vec![],
+            TerminatorKind::Suspend { target } => vec![target],
+            //TerminatorKind::Resume { target, .. } => vec![target],
         }
     }
 
@@ -236,6 +249,8 @@ impl Terminator {
                 vec![then, else_]
             }
             TerminatorKind::Return => vec![],
+            TerminatorKind::Suspend { ref mut target } => vec![target],
+            //TerminatorKind::Resume { ref mut target, .. } => vec![target],
         }
     }
 }
