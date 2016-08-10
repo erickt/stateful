@@ -79,16 +79,6 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     builder.terminate(item.span, block, TerminatorKind::Goto { target: END_BLOCK });
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
-    // The drops seem redundant, we are always moving values.
-    for bb in &mut builder.cfg.basic_blocks {
-        bb.statements.retain(|stmt| {
-            match *stmt {
-                Statement::Drop { .. } => false,
-                _ => true
-            }
-        });
-    }
-
     Ok(Mar {
         ident: item.ident,
         span: item.span,
