@@ -136,11 +136,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
         for scope_decl in scope.drops.into_iter().rev() {
-            self.cfg.push_drop(
-                block,
-                scope_decl.span,
-                scope_decl.decl,
-                scope_decl.alias);
+            if scope.moved_decls.contains(&scope_decl.decl) {
+                debug!("pop_scope: decl moved {:?}", scope_decl.decl);
+            } else {
+                self.cfg.push_drop(
+                    block,
+                    scope_decl.span,
+                    scope_decl.decl,
+                    scope_decl.alias);
+            }
         }
     }
 
