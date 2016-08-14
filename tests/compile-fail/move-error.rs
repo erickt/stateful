@@ -1,4 +1,5 @@
 #![feature(plugin)]
+#![feature(conservative_impl_trait)]
 #![plugin(stateful)]
 
 fn do_move<T>(_item: T) {}

@@ -1,4 +1,5 @@
 #![feature(plugin)]
+#![cfg_attr(feature = "impl_trait", feature(conservative_impl_trait))]
 #![plugin(stateful)]
 #![allow(unused_variables)]
 #![allow(unused_mut)]
