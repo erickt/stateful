@@ -37,10 +37,11 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     }
 
     let item_builder = match mar.fn_decl.output {
-        FunctionRetTy::None(span) => item_builder.span(span).no_return(),
         FunctionRetTy::Default(span) =>
             item_builder.build_return(return_ty(&ast_builder, span, generics.clone(),
                                                 ast_builder.span(span).ty().unit())),
+        FunctionRetTy::Ty(ref ty) if ty.node == ast::TyKind::Never =>
+            item_builder.span(ty.span).no_return(),
         FunctionRetTy::Ty(ref ty) =>
             item_builder.build_return(return_ty(&ast_builder, ty.span, generics.clone(),
                                                 ty.clone()))
