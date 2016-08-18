@@ -2,6 +2,7 @@ use aster::AstBuilder;
 use mar::repr::*;
 use syntax::ast::{self, FunctionRetTy};
 use syntax::ext::base::ExtCtxt;
+use syntax::codemap::Span;
 use syntax::fold;
 use syntax::ptr::P;
 
@@ -13,30 +14,36 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
 
     let generics = &mar.generics;
 
+    #[cfg(not(feature = "impl_trait"))]
+    fn return_ty(builder: &AstBuilder, span: Span, generics: ast::Generics,
+                 ty: P<ast::Ty>) -> P<ast::Ty> {
+        let iter_ty = builder.span(span).ty().object_sum()
+            .iterator().build(ty)
+            .with_generics(generics.clone())
+            .build();
+        builder.span(span).ty().box_()
+            .build(iter_ty)
+    }
+
+    #[cfg(feature = "impl_trait")]
+    fn return_ty(builder: &AstBuilder, span: Span, _generics: ast::Generics,
+                 ty: P<ast::Ty>) -> P<ast::Ty> {
+        let trait_bound = builder.span(span).ty_param_bound()
+            .iterator(ty)
+            .build();
+        builder.span(span).ty().impl_trait()
+            .with_bound(trait_bound)
+            .build()
+    }
+
     let item_builder = match mar.fn_decl.output {
         FunctionRetTy::None(span) => item_builder.span(span).no_return(),
-        FunctionRetTy::Default(span) => {
-            let iter_ty = ast_builder.span(span).ty().object_sum()
-                .iterator().unit()
-                .with_generics(generics.clone())
-                .build();
-
-            let ty = ast_builder.span(span).ty().box_()
-                .build(iter_ty);
-
-            item_builder.build_return(ty)
-        }
-        FunctionRetTy::Ty(ref ty) => {
-            let iter_ty = ast_builder.span(ty.span).ty().object_sum()
-                .iterator().build(ty.clone())
-                .with_generics(generics.clone())
-                .build();
-
-            let ty = ast_builder.span(ty.span).ty().box_()
-                .build(iter_ty);
-
-            item_builder.build_return(ty)
-        }
+        FunctionRetTy::Default(span) =>
+            item_builder.build_return(return_ty(&ast_builder, span, generics.clone(),
+                                                ast_builder.span(span).ty().unit())),
+        FunctionRetTy::Ty(ref ty) =>
+            item_builder.build_return(return_ty(&ast_builder, ty.span, generics.clone(),
+                                                ty.clone()))
     };
 
     let item_builder = item_builder

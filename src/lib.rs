@@ -29,7 +29,7 @@ fn expand_generator(cx: &mut ExtCtxt,
         _ => {
             cx.span_err(
                 meta_item.span,
-                "`state_machine` may only be applied to functions");
+                "`generator` may only be applied to functions");
 
             return annotatable;
         }

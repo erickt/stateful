@@ -35,7 +35,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         }
 
         _ => {
-            cx.span_err(item.span, "`state_machine` may only be applied to functions");
+            cx.span_err(item.span, "`generator` may only be applied to functions");
             return Err(Error);
         }
     };

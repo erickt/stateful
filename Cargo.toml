@@ -10,6 +10,7 @@ plugin = true
 [features]
 default = ["unstable"]
 unstable = []
+impl_trait = []
 unstable-testing = ["clippy", "compiletest_rs"]
 
 [dependencies]
