@@ -57,3 +57,28 @@ fn test_moved() {
     assert_eq!(gen.next(), Some(3));
     assert_eq!(gen.next(), None);
 }
+
+#[test]
+fn test_partial_decl() {
+    #[generator]
+    fn gen() -> usize {
+        {
+            let c;
+            yield_!(1);
+            {
+                yield_!(2);
+                c = 4;
+                yield_!(3);
+            }
+            let b = c;
+            yield_!(b);
+        };
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), Some(2));
+    assert_eq!(gen.next(), Some(3));
+    assert_eq!(gen.next(), Some(4));
+    assert_eq!(gen.next(), None);
+}

@@ -4,6 +4,7 @@ use mar::repr::*;
 use syntax::ast::{self, ExprKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
+use aster::AstBuilder;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr(&mut self,
@@ -84,6 +85,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::IfLet(..)   |
             ExprKind::WhileLet(..) => {
                 panic!("{:?} Should never reach this point - `preapare` should have desugared this.", expr);
+            }
+            ExprKind::Assign(ref left, _) => {
+
+                if let Some(ident) = ident_from_assign_path(&left) {
+                    self.assign_decl(ident);
+                    let builder = AstBuilder::new();
+                    self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(
+                        builder.stmt().let_().id(ident).build()
+                    ));
+                }
+
+                // FIXME: Don't handle yield in assign yet... (Might solve in `simplify`)
+                self.into(extent, block, &expr)
             }
             _ => {
                 self.cx.span_bug(expr.span,
@@ -169,4 +183,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // control will never actually flow into this block.
         self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
+}
+
+fn ident_from_assign_path(e: &ast::Expr) -> Option<ast::Ident> {
+    let path = if let ExprKind::Path(_, ref path) = e.node {
+        path
+    } else {
+        return None;
+    };
+
+    if path.global {
+        return None;
+    }
+
+    if path.segments.len() != 1 {
+        return None;
+    }
+
+    Some(path.segments.first().unwrap().identifier)
 }
