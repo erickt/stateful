@@ -1,6 +1,6 @@
 language: rust
 rust:
-- nightly
+- nightly-2016-09-01
 addons:
   apt:
     packages:
