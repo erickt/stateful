@@ -82,3 +82,36 @@ fn test_partial_decl() {
     assert_eq!(gen.next(), Some(4));
     assert_eq!(gen.next(), None);
 }
+
+#[test]
+fn test_partial_decl_nested() {
+    #[generator]
+    fn gen() -> usize {
+        {
+            let c;
+            yield_!(1);
+            {
+                yield_!(2);
+                let d;
+                {
+                    yield_!(3);
+                    d = 6;
+                }
+                yield_!(4);
+                c = d;
+                yield_!(5);
+            }
+            let b = c;
+            yield_!(b);
+        };
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), Some(2));
+    assert_eq!(gen.next(), Some(3));
+    assert_eq!(gen.next(), Some(4));
+    assert_eq!(gen.next(), Some(5));
+    assert_eq!(gen.next(), Some(6));
+    assert_eq!(gen.next(), None);
+}
