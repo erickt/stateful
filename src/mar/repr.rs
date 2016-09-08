@@ -14,7 +14,6 @@ pub struct Mar {
 
     pub fn_decl: P<ast::FnDecl>,
     pub unsafety: ast::Unsafety,
-    pub constness: ast::Constness,
     pub abi: abi::Abi,
     pub generics: ast::Generics,
 

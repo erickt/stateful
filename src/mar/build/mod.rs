@@ -29,9 +29,9 @@ pub struct Error;
 pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     let item = simplify_item(item);
 
-    let (fn_decl, unsafety, constness, abi, generics, ast_block) = match item.node {
-        ItemKind::Fn(fn_decl, unsafety, constness, abi, generics, block) => {
-            (fn_decl, unsafety, constness, abi, generics, block)
+    let (fn_decl, unsafety, abi, generics, ast_block) = match item.node {
+        ItemKind::Fn(fn_decl, unsafety, _, abi, generics, block) => {
+            (fn_decl, unsafety, abi, generics, block)
         }
 
         _ => {
@@ -90,7 +90,6 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         span: item.span,
         fn_decl: fn_decl.clone(),
         unsafety: unsafety,
-        constness: constness,
         abi: abi,
         generics: generics.clone(),
         input_decls: live_decls,
