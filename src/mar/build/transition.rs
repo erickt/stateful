@@ -81,10 +81,7 @@ impl visit::Visitor for ContainsTransitionVisitor {
 
     fn visit_expr(&mut self, expr: &ast::Expr) {
         match expr.node {
-            ExprKind::Ret(Some(_)) => {
-                self.contains_transition = true;
-            }
-            ExprKind::Assign(..) => {
+            ExprKind::Ret(Some(_)) | ExprKind::Assign(..) => {
                 self.contains_transition = true;
             }
             ExprKind::Break(_) if self.inside_loop => {

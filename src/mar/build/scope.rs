@@ -131,13 +131,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     // otherwise, find the loop-scope with the correct id
                     self.loop_scopes.iter()
                                     .rev()
-                                    .filter(|loop_scope| {
+                                    .find(|loop_scope| {
                                         match loop_scope.label {
                                             Some(l) => l.node == label,
                                             None => false,
                                         }
                                     })
-                                    .next()
                 }
             };
 

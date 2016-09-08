@@ -15,5 +15,5 @@ unstable-testing = ["clippy", "compiletest_rs"]
 
 [dependencies]
 aster = "^0.26.0"
-clippy = { version = "0.0.83", optional = true }
+clippy = { version = "0.*", optional = true }
 compiletest_rs = { version = "^0.2.1", optional = true }

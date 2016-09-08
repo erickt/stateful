@@ -87,8 +87,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 panic!("{:?} Should never reach this point - `preapare` should have desugared this.", expr);
             }
             ExprKind::Assign(ref left, _) => {
-
-                if let Some(ident) = ident_from_assign_path(&left) {
+                if let Some(ident) = ident_from_assign_path(left) {
                     self.assign_decl(ident);
                     let builder = AstBuilder::new();
                     self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(
