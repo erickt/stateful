@@ -28,6 +28,7 @@ use syntax::visit;
 pub struct Scope {
     extent: CodeExtent,
     drops: Vec<(Span, VarDecl, Option<Alias>)>,
+    forward_decls: Vec<(Span, VarDecl, Option<Alias>)>,
     moved_decls: HashSet<VarDecl>,
 }
 
@@ -90,6 +91,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes.push(Scope {
             extent: extent,
             drops: vec![],
+            forward_decls: vec![],
             moved_decls: HashSet::new(),
         });
     }
@@ -168,6 +170,36 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         self.terminate(span, block, TerminatorKind::Goto { target: target });
+    }
+
+    pub fn push_forward_decl(&mut self, span: Span, decl: VarDecl, alias: Option<Alias>) {
+        if let Some(s) = self.scopes.last_mut() {
+            s.forward_decls.push((span, decl, alias));
+        }
+    }
+
+    pub fn assign_decl(&mut self, lvalue: ast::Ident) {
+        for scope in self.scopes.iter_mut().rev() {
+            // Check if we are shadowing another variable.
+            for &(_, decl, _) in scope.drops.iter().rev() {
+                let decl_data = self.cfg.var_decl_data(decl);
+                if lvalue == decl_data.ident {
+                    return;
+                }
+            }
+
+            let assign_index = {
+                let self_cfg = &self.cfg;
+                scope.forward_decls.iter().rev().rposition(|&(_, decl, _)| {
+                    self_cfg.var_decl_data(decl).ident == lvalue
+                })
+            };
+
+            if let Some(idx) = assign_index{
+                let decl_data = scope.forward_decls.remove(idx);
+                scope.drops.push(decl_data);
+            }
+        }
     }
 
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {

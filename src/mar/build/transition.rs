@@ -84,6 +84,9 @@ impl visit::Visitor for ContainsTransitionVisitor {
             ExprKind::Ret(Some(_)) => {
                 self.contains_transition = true;
             }
+            ExprKind::Assign(..) => {
+                self.contains_transition = true;
+            }
             ExprKind::Break(_) if self.inside_loop => {
                 self.contains_transition = true;
             }

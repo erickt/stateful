@@ -51,8 +51,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
              block: BasicBlock,
              span: Span,
              local: &P<ast::Local>) -> BasicBlock {
+
         if local.init.is_none() {
-            self.cx.span_bug(span, "Local variables need initializers at the moment");
+            for (decl, _) in self.get_decls_from_pat(&local.pat) {
+                let lvalue = self.cfg.var_decl_data(decl).ident;
+
+                let alias = self.find_decl(lvalue).map(|alias| {
+                    self.alias(block, span, alias)
+                });
+                self.push_forward_decl(span, decl, alias);
+            }
+            return block;
         }
 
         let block2 = self.expr(extent, block, &local.init.clone().unwrap());
