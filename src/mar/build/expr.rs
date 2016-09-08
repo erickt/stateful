@@ -89,10 +89,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Assign(ref left, _) => {
                 if let Some(ident) = ident_from_assign_path(left) {
                     self.assign_decl(ident);
-                    let builder = AstBuilder::new();
-                    self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(
-                        builder.stmt().let_().id(ident).build()
-                    ));
+                    let stmt = AstBuilder::new().span(expr.span).stmt()
+                        .let_().id(ident).build();
+
+                    self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(stmt));
                 }
 
                 // FIXME: Don't handle yield in assign yet... (Might solve in `simplify`)
