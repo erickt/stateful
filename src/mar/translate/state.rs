@@ -99,7 +99,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .build();
 
         let state_default = quote_item!(self.cx,
-            impl $generics Default for $state_path {
+            impl $generics ::std::default::Default for $state_path {
                 fn default() -> Self {
                     State::Illegal
                 }

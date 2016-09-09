@@ -67,8 +67,8 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         }
 
         impl<S, F, Item> StateMachine<S, F>
-            where S: Default,
-                  F: Fn(S) -> (Option<Item>, S),
+            where S: ::std::default::Default,
+                  F: Fn(S) -> (::std::option::Option<Item>, S),
         {
             fn new(initial_state: S, next: F) -> Self {
                 StateMachine {
@@ -78,13 +78,13 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
             }
         }
 
-        impl<S, F, Item> Iterator for StateMachine<S, F>
-            where S: Default,
-                  F: Fn(S) -> (Option<Item>, S)
+        impl<S, F, Item> ::std::iter::Iterator for StateMachine<S, F>
+            where S: ::std::default::Default,
+                  F: Fn(S) -> (::std::option::Option<Item>, S)
         {
             type Item = Item;
 
-            fn next(&mut self) -> Option<Self::Item> {
+            fn next(&mut self) -> ::std::option::Option<Self::Item> {
                 let old_state = ::std::mem::replace(&mut self.state, S::default());
                 let (value, next_state) = (self.next)(old_state);
                 self.state = next_state;
