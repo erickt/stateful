@@ -194,7 +194,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 })
             };
 
-            if let Some(idx) = assign_index{
+            if let Some(idx) = assign_index {
                 let decl_data = scope.forward_decls.remove(idx);
                 scope.drops.push(decl_data);
             }
