@@ -113,8 +113,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .build(next_state);
 
         vec![
-            ast_builder.stmt().expr().build(next_expr),
-            ast_builder.stmt().expr().continue_(),
+            ast_builder.stmt().semi().build(next_expr),
+            ast_builder.stmt().semi().continue_(),
         ]
     }
 
