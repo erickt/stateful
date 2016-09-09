@@ -11,12 +11,24 @@ use syntax::parse::token::Token;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn mac(&mut self, block: BasicBlock, mac: &ast::Mac) -> Option<BasicBlock> {
+    pub fn stmt_mac(&mut self, block: BasicBlock, mac: &ast::Mac) -> Option<BasicBlock> {
         if transition::is_yield_path(&mac.node.path) {
             Some(self.mac_yield(block, mac))
         } else {
             None
         }
+    }
+
+    pub fn expr_mac(&mut self,
+                    destination: Lvalue,
+                    mut block: BasicBlock,
+                    mac: &ast::Mac) -> BasicBlock {
+        if transition::is_yield_path(&mac.node.path) {
+            block = self.mac_yield(block, mac);
+        }
+
+        self.assign_lvalue_unit(mac.span, block, destination);
+        block
     }
 
     fn mac_yield(&mut self, block: BasicBlock, mac: &ast::Mac) -> BasicBlock {

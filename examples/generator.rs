@@ -6,14 +6,12 @@
 #![allow(non_shorthand_field_patterns)]
 
 #[generator]
-fn gen<T: 'static>(items: Vec<T>) -> T {
-    for item in moved!(items) {
-        yield_!(moved!(item));
-    }
+fn gen() -> usize {
+    let _x: () = yield_!(1);
 }
 
 fn main() {
-    for value in gen(vec![1, 2, 3]) {
+    for value in gen() {
         println!("{}", value);
     }
 }

@@ -44,7 +44,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             StmtKind::Mac(ref mac) => {
                 let (ref mac, _, _) = **mac;
-                match self.mac(block, mac) {
+                match self.stmt_mac(block, mac) {
                     Some(block) => block,
                     None => {
                         self.cfg.push(block, Statement::Expr(stmt.clone()));

@@ -100,6 +100,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 self.expr(lvalue, extent, block, rvalue)
             }
+            ExprKind::Mac(ref mac) => {
+                self.expr_mac(destination, block, mac)
+            }
             _ => {
                 self.cx.span_bug(expr.span,
                                  &format!("don't know how to handle {:#?} yet", expr))

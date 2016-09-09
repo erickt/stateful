@@ -115,3 +115,31 @@ fn test_partial_decl_nested() {
     assert_eq!(gen.next(), Some(6));
     assert_eq!(gen.next(), None);
 }
+
+#[test]
+fn test_yield_expr() {
+    #[generator]
+    fn gen() -> usize {
+        yield_!(1);
+        yield_!(2);
+        yield_!(3)
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), Some(2));
+    assert_eq!(gen.next(), Some(3));
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_yield_in_assign() {
+    #[generator]
+    fn gen() -> usize {
+        let _x: () = yield_!(1);
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), None);
+}
