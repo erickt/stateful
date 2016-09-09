@@ -129,6 +129,5 @@ mod mac;
 mod matches;
 mod moved;
 mod scope;
-mod stmt;
 mod transition;
 mod simplify;
