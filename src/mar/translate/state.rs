@@ -85,6 +85,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let state_enum = self.ast_builder.item().enum_("State")
             .generics().with(generics.clone()).build()
+            .id("Illegal")
             .with_variants(state_variants)
             .build();
 
@@ -97,12 +98,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .build()
             .build();
 
-        let end_block = self.ast_builder.block()
-            .expr().span(self.mar.span).build(self.state_expr(self.mar.span, END_BLOCK));
-
         let state_default = quote_item!(self.cx,
             impl $generics Default for $state_path {
-                fn default() -> Self $end_block
+                fn default() -> Self {
+                    State::Illegal
+                }
             }
         ).expect("state default item");
 

@@ -61,27 +61,28 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         builder.state_enum_default_and_arms();
 
     let block = quote_block!(cx, {
-        struct Wrapper<S, F> {
+        struct StateMachine<S, F> {
             state: S,
             next: F,
         }
 
-        impl<S, T, F> Wrapper<S, F>
-            where F: Fn(S) -> (Option<T>, S),
+        impl<S, F, Item> StateMachine<S, F>
+            where S: Default,
+                  F: Fn(S) -> (Option<Item>, S),
         {
             fn new(initial_state: S, next: F) -> Self {
-                Wrapper {
+                StateMachine {
                     state: initial_state,
                     next: next,
                 }
             }
         }
 
-        impl<S, T, F> Iterator for Wrapper<S, F>
+        impl<S, F, Item> Iterator for StateMachine<S, F>
             where S: Default,
-                  F: Fn(S) -> (Option<T>, S)
+                  F: Fn(S) -> (Option<Item>, S)
         {
-            type Item = T;
+            type Item = Item;
 
             fn next(&mut self) -> Option<Self::Item> {
                 let old_state = ::std::mem::replace(&mut self.state, S::default());
@@ -94,12 +95,15 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         $state_enum
         $state_default
 
-        Box::new(Wrapper::new(
+        Box::new(StateMachine::new(
             $start_state_expr,
             |mut state| {
                 loop {
                     match state {
                         $state_arms
+                        State::Illegal => {
+                            unreachable!("illegal state")
+                        }
                     }
                 }
             }
