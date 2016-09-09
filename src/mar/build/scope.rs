@@ -27,9 +27,35 @@ use syntax::visit;
 #[derive(Debug)]
 pub struct Scope {
     extent: CodeExtent,
-    drops: Vec<(Span, VarDecl, Option<Alias>)>,
-    forward_decls: Vec<(Span, VarDecl, Option<Alias>)>,
+    forward_decls: Vec<ForwardDecl>,
+    drops: Vec<DropDecl>,
     moved_decls: HashSet<VarDecl>,
+}
+
+
+#[derive(Debug)]
+struct ForwardDecl {
+    span: Span,
+    decl: VarDecl,
+    ty: Option<P<ast::Ty>>,
+    alias: Option<Alias>,
+}
+
+#[derive(Debug)]
+struct DropDecl {
+    span: Span,
+    decl: VarDecl,
+    alias: Option<Alias>,
+}
+
+impl From<ForwardDecl> for DropDecl {
+    fn from(forward_decl: ForwardDecl) -> Self {
+        DropDecl {
+            span: forward_decl.span,
+            decl: forward_decl.decl,
+            alias: forward_decl.alias,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -109,8 +135,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // add in any drops needed on the fallthrough path (any other
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
-        for (span, decl, alias) in scope.drops.into_iter().rev() {
-            self.cfg.push_drop(block, span, decl, alias);
+        for scope_decl in scope.drops.into_iter().rev() {
+            self.cfg.push_drop(
+                block,
+                scope_decl.span,
+                scope_decl.decl,
+                scope_decl.alias);
         }
     }
 
@@ -163,40 +193,71 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             };
 
         for scope in self.scopes.iter_mut().rev().take(popped_scopes) {
-            for &(drop_span, lvalue, alias) in &scope.drops {
-                self.cfg.push_drop(block, drop_span, lvalue, alias);
+            for scope_decl in &scope.drops {
+                self.cfg.push_drop(
+                    block,
+                    scope_decl.span,
+                    scope_decl.decl,
+                    scope_decl.alias);
             }
         }
 
         self.terminate(span, block, TerminatorKind::Goto { target: target });
     }
 
-    pub fn push_forward_decl(&mut self, span: Span, decl: VarDecl, alias: Option<Alias>) {
+    pub fn push_forward_decl(&mut self,
+                             span: Span,
+                             decl: VarDecl,
+                             ty: Option<P<ast::Ty>>,
+                             alias: Option<Alias>) {
         if let Some(s) = self.scopes.last_mut() {
-            s.forward_decls.push((span, decl, alias));
+            s.forward_decls.push(ForwardDecl {
+                span: span,
+                decl: decl,
+                ty: ty,
+                alias: alias,
+            });
         }
     }
 
-    pub fn assign_decl(&mut self, lvalue: ast::Ident) {
+    pub fn assign_decl(&mut self,
+                       span: Span,
+                       block: BasicBlock,
+                       lvalue: ast::Ident) {
         for scope in self.scopes.iter_mut().rev() {
             // Check if we are shadowing another variable.
-            for &(_, decl, _) in scope.drops.iter().rev() {
-                let decl_data = self.cfg.var_decl_data(decl);
+            for dropped_decl in scope.drops.iter().rev() {
+                let decl_data = self.cfg.var_decl_data(dropped_decl.decl);
                 if lvalue == decl_data.ident {
                     return;
                 }
             }
 
             let assign_index = {
-                let self_cfg = &self.cfg;
-                scope.forward_decls.iter().rev().rposition(|&(_, decl, _)| {
-                    self_cfg.var_decl_data(decl).ident == lvalue
+                let cfg = &self.cfg;
+                scope.forward_decls.iter().rev().rposition(|forward_decl| {
+                    cfg.var_decl_data(forward_decl.decl).ident == lvalue
                 })
             };
 
+            // Declare the lvalue now that we're assigning to it.
             if let Some(idx) = assign_index {
-                let decl_data = scope.forward_decls.remove(idx);
-                scope.drops.push(decl_data);
+                let forward_decl = scope.forward_decls.remove(idx);
+
+                let assign_builder = AstBuilder::new().span(span).stmt().let_()
+                    .id(lvalue);
+
+                let stmt = if let Some(ref ty) = forward_decl.ty {
+                    assign_builder.ty()
+                        .build(ty.clone())
+                        .build()
+                } else {
+                    assign_builder.build()
+                };
+
+                self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(stmt));
+
+                scope.drops.push(DropDecl::from(forward_decl));
             }
         }
     }
@@ -204,10 +265,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
-            for &(_, decl, _) in scope.drops.iter().rev() {
-                let decl_data = self.cfg.var_decl_data(decl);
+            for dropped_decl in scope.drops.iter().rev() {
+                let decl_data = self.cfg.var_decl_data(dropped_decl.decl);
                 if lvalue == decl_data.ident {
-                    return Some(decl);
+                    return Some(dropped_decl.decl);
                 }
             }
         }
@@ -237,7 +298,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for scope in self.scopes.iter().rev() {
             debug!("find_live_decls: scope: {:?}", scope.moved_decls);
 
-            for &(_, decl, _) in scope.drops.iter().rev() {
+            for dropped_decl in scope.drops.iter().rev() {
+                let decl = dropped_decl.decl;
+
                 if scope.moved_decls.contains(&decl) {
                     debug!("find_live_decls: decl moved {:?}", decl);
                 } else {
@@ -271,7 +334,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          alias: Option<Alias>) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
-                scope.drops.push((span, decl, alias));
+                scope.drops.push(DropDecl {
+                    span: span,
+                    decl: decl,
+                    alias: alias,
+                });
                 return;
             }
         }

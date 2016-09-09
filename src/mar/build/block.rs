@@ -69,7 +69,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let alias = self.find_decl(lvalue).map(|alias| {
                     self.alias(block, span, alias)
                 });
-                self.push_forward_decl(span, decl, alias);
+                self.push_forward_decl(span, decl, local.ty.clone(), alias);
             }
             return block;
         }

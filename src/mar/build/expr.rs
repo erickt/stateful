@@ -4,7 +4,6 @@ use mar::repr::*;
 use syntax::ast::{self, ExprKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
-use aster::AstBuilder;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr(&mut self,
@@ -88,11 +87,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             ExprKind::Assign(ref left, _) => {
                 if let Some(ident) = ident_from_assign_path(left) {
-                    self.assign_decl(ident);
-                    let stmt = AstBuilder::new().span(expr.span).stmt()
-                        .let_().id(ident).build();
-
-                    self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(stmt));
+                    self.assign_decl(expr.span, block, ident);
                 }
 
                 // FIXME: Don't handle yield in assign yet... (Might solve in `simplify`)
