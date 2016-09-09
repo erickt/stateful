@@ -22,7 +22,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             } else {
                 self.cx.span_bug(
                     expr.span,
-                    &format!("ident {:?} not in scope", moved_ident));
+                    &format!("ident `{}` not in scope?", moved_ident));
             }
         }
 

@@ -17,7 +17,7 @@ use aster::AstBuilder;
 use mar::build::{Builder, CFG};
 use mar::repr::*;
 use std::ascii::AsciiExt;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use syntax::ast::{self, PatKind};
 use syntax::ext::base::ExtCtxt;
 use syntax::codemap::Span;
@@ -27,7 +27,7 @@ use syntax::visit;
 #[derive(Debug)]
 pub struct Scope {
     extent: CodeExtent,
-    forward_decls: Vec<ForwardDecl>,
+    forward_decls: HashMap<ast::Ident, ForwardDecl>,
     drops: Vec<DropDecl>,
     moved_decls: HashSet<VarDecl>,
 }
@@ -117,7 +117,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes.push(Scope {
             extent: extent,
             drops: vec![],
-            forward_decls: vec![],
+            forward_decls: HashMap::new(),
             moved_decls: HashSet::new(),
         });
     }
@@ -205,23 +205,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.terminate(span, block, TerminatorKind::Goto { target: target });
     }
 
-    pub fn push_forward_decl(&mut self,
-                             span: Span,
-                             decl: VarDecl,
-                             ty: Option<P<ast::Ty>>,
-                             alias: Option<Alias>) {
-        if let Some(s) = self.scopes.last_mut() {
-            s.forward_decls.push(ForwardDecl {
+    pub fn schedule_forward_decl(&mut self,
+                                 span: Span,
+                                 decl: VarDecl,
+                                 ty: Option<P<ast::Ty>>,
+                                 alias: Option<Alias>) {
+        if let Some(scope) = self.scopes.last_mut() {
+            let ident = self.cfg.var_decl_data(decl).ident;
+
+            scope.forward_decls.insert(ident, ForwardDecl {
                 span: span,
                 decl: decl,
                 ty: ty,
                 alias: alias,
             });
+        } else {
+            self.cx.span_bug(span, "no scopes?");
         }
     }
 
     pub fn assign_decl(&mut self,
-                       span: Span,
                        block: BasicBlock,
                        lvalue: ast::Ident) {
         for scope in self.scopes.iter_mut().rev() {
@@ -233,33 +236,53 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
 
-            let assign_index = {
-                let cfg = &self.cfg;
-                scope.forward_decls.iter().rev().rposition(|forward_decl| {
-                    cfg.var_decl_data(forward_decl.decl).ident == lvalue
-                })
-            };
-
             // Declare the lvalue now that we're assigning to it.
-            if let Some(idx) = assign_index {
-                let forward_decl = scope.forward_decls.remove(idx);
-
-                let assign_builder = AstBuilder::new().span(span).stmt().let_()
-                    .id(lvalue);
-
-                let stmt = if let Some(ref ty) = forward_decl.ty {
-                    assign_builder.ty()
-                        .build(ty.clone())
-                        .build()
-                } else {
-                    assign_builder.build()
-                };
-
-                self.cfg.block_data_mut(block).statements.insert(0, Statement::Expr(stmt));
+            if let Some(forward_decl) = scope.forward_decls.remove(&lvalue) {
+                self.cfg.push_declare_decl(
+                    block,
+                    forward_decl.span,
+                    forward_decl.decl,
+                    forward_decl.ty.clone(),
+                );
 
                 scope.drops.push(DropDecl::from(forward_decl));
+                break;
             }
         }
+    }
+
+    pub fn assign_lvalue(&mut self,
+                         block: BasicBlock,
+                         lvalue: Lvalue,
+                         rvalue: P<ast::Expr>) {
+        if let Some(lvalue_decl) = lvalue.decl() {
+            let lvalue_ident = self.cfg.var_decl_data(lvalue_decl).ident;
+
+            for scope in self.scopes.iter_mut().rev() {
+                // Declare the lvalue now that we're assigning to it.
+                if let Some(forward_decl) = scope.forward_decls.remove(&lvalue_ident) {
+                    self.cfg.push_declare_decl(
+                        block,
+                        forward_decl.span,
+                        forward_decl.decl,
+                        forward_decl.ty.clone(),
+                    );
+
+                    scope.drops.push(DropDecl::from(forward_decl));
+                    break;
+                }
+            }
+        }
+
+        self.cfg.push_assign(block, lvalue, rvalue);
+    }
+
+    pub fn assign_lvalue_unit(&mut self,
+                              span: Span,
+                              block: BasicBlock,
+                              lvalue: Lvalue) {
+        let rvalue = AstBuilder::new().span(span).expr().unit();
+        self.assign_lvalue(block, lvalue, rvalue)
     }
 
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
@@ -270,6 +293,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 if lvalue == decl_data.ident {
                     return Some(dropped_decl.decl);
                 }
+            }
+
+            if let Some(forward_decl) = scope.forward_decls.get(&lvalue) {
+                return Some(forward_decl.decl);
+            }
+        }
+
+        None
+    }
+
+    pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
+        for scope in self.scopes.iter().rev() {
+            // Check if we are shadowing another variable.
+            if let Some(forward_decl) = scope.forward_decls.get(&lvalue) {
+                return Some(forward_decl.decl);
             }
         }
 
@@ -393,7 +431,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let first_char = id_str.chars().next().unwrap();
 
                         if first_char == first_char.to_ascii_lowercase() {
-                            let decl = self.cfg.push_decl(mutability, id.node);
+                            let decl = self.cfg.push_decl(mutability, id.node, None);
                             self.var_decls.push((decl, id.node));
                         }
                     }
@@ -420,4 +458,49 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         visitor.var_decls
     }
 
+    pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<VarDecl> {
+        struct Visitor<'a, 'b: 'a> {
+            builder: &'a Builder<'a, 'b>,
+            var_decls: Vec<VarDecl>,
+        }
+
+        impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
+            fn visit_expr(&mut self, expr: &ast::Expr) {
+                debug!("get_decls_from_expr: {:?}", expr.node);
+
+                if let ast::ExprKind::Path(None, ref path) = expr.node {
+                    if let Some(decl) = self.builder.get_decl_from_path(path) {
+                        debug!("get_decls_from_expr: decl `{:?}", decl);
+                        self.var_decls.push(decl);
+                    }
+                }
+
+                visit::walk_expr(self, expr);
+            }
+
+            fn visit_mac(&mut self, _mac: &ast::Mac) { }
+        }
+
+        let mut visitor = Visitor {
+            builder: self,
+            var_decls: Vec::new(),
+        };
+
+        visit::Visitor::visit_expr(&mut visitor, expr);
+
+        visitor.var_decls
+    }
+
+    pub fn get_decl_from_path(&self, path: &ast::Path) -> Option<VarDecl> {
+        if !path.global && path.segments.len() == 1 {
+            let segment = &path.segments[0];
+
+            if segment.parameters.is_empty() {
+                debug!("get_decls_from_path: {:?}", segment.identifier);
+                return self.find_decl(segment.identifier);
+            }
+        }
+
+        None
+    }
 }

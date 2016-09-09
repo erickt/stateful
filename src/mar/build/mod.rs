@@ -66,7 +66,11 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         block,
         fn_decl.inputs.iter().map(|arg| &arg.pat));
 
-    block = builder.ast_block(extent, block, &ast_block);
+    let destination = Lvalue::ReturnPointer {
+        span: ast_block.span,
+    };
+
+    block = builder.ast_block(destination, extent, block, &ast_block);
 
     let live_decls = builder.find_live_decls();
 

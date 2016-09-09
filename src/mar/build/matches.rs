@@ -6,6 +6,7 @@ use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn match_expr(&mut self,
+                      destination: Lvalue,
                       extent: CodeExtent,
                       span: Span,
                       block: BasicBlock,
@@ -29,7 +30,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.add_decls_from_pats(extent,
                                          target.block,
                                          arm.pats.iter());
-                this.expr(extent, target.block, &arm.body)
+                this.expr(destination.clone(), extent, target.block, &arm.body)
             });
 
             self.terminate(span, arm_block, TerminatorKind::Goto { target: join_block });

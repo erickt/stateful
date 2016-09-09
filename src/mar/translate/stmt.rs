@@ -13,6 +13,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
 
             }
+            Statement::Assign { ref lvalue, ref rvalue } => {
+                match *lvalue {
+                    Lvalue::Var { span, decl, .. } => {
+                        let id = self.mar.var_decl_data(decl).ident;
+
+                        vec![
+                            self.ast_builder.span(span).stmt().semi()
+                                .assign().id(id)
+                                .build(rvalue.clone())
+                        ]
+                    }
+                    Lvalue::Temp { span } => {
+                        vec![
+                            self.ast_builder.span(span).stmt().semi()
+                                .build(rvalue.clone())
+                        ]
+                    }
+                    Lvalue::ReturnPointer { span } => {
+                        vec![
+                            self.ast_builder.span(span).stmt().expr()
+                                .build(rvalue.clone())
+                        ]
+                    }
+                }
+            }
             Statement::Drop { span, ref lvalue, ref alias } => {
                 // We need an explicit drop here to make sure we drop variables as they go out of
                 // a block scope. Otherwise, they won't be dropped until the next yield point,

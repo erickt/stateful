@@ -82,13 +82,17 @@ impl VarDecl {
 pub struct VarDeclData {
     pub mutability: ast::Mutability,
     pub ident: ast::Ident,
+    pub ty: Option<P<ast::Ty>>,
 }
 
 impl VarDeclData {
-    pub fn new(mutability: ast::Mutability, ident: ast::Ident) -> Self {
+    pub fn new(mutability: ast::Mutability,
+               ident: ast::Ident,
+               ty: Option<P<ast::Ty>>) -> Self {
         VarDeclData {
             mutability: mutability,
             ident: ident,
+            ty: ty,
         }
     }
 }
@@ -125,9 +129,17 @@ impl fmt::Debug for BasicBlock {
 // BasicBlock and Terminator
 
 #[derive(Debug)]
+pub struct DeclaredDecl {
+    pub span: Span,
+    pub decl: VarDecl,
+    pub ty: Option<P<ast::Ty>>,
+}
+
+#[derive(Debug)]
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
+    pub declared_decls: Vec<DeclaredDecl>,
     pub decls: Vec<(VarDecl, ast::Ident)>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
@@ -141,6 +153,7 @@ impl BasicBlockData {
         BasicBlockData {
             span: span,
             name: name,
+            declared_decls: vec![],
             decls: decls,
             statements: vec![],
             terminator: terminator,
@@ -149,6 +162,10 @@ impl BasicBlockData {
 
     pub fn name(&self) -> Option<&'static str> {
         self.name
+    }
+
+    pub fn declared_decls(&self) -> &[DeclaredDecl] {
+        &self.declared_decls
     }
 
     pub fn decls(&self) -> &[(VarDecl, ast::Ident)] {
@@ -241,6 +258,39 @@ pub struct Arm {
 }
 
 ///////////////////////////////////////////////////////////////////////////
+
+#[derive(Clone, Debug)]
+pub enum Lvalue {
+    Var {
+        span: Span,
+        decl: VarDecl,
+    },
+    Temp {
+        span: Span,
+    },
+    ReturnPointer {
+        span: Span,
+    },
+}
+
+impl Lvalue {
+    pub fn decl(&self) -> Option<VarDecl> {
+        match *self {
+            Lvalue::Var { decl, .. } => Some(decl),
+            Lvalue::Temp { .. } | Lvalue::ReturnPointer { .. } => None,
+        }
+    }
+
+    pub fn span(&self) -> Span {
+        match *self {
+            Lvalue::Var { span, .. }
+            | Lvalue::Temp { span, .. }
+            | Lvalue::ReturnPointer { span, .. } => span,
+        }
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
 // Statements
 
 #[derive(Debug)]
@@ -251,6 +301,10 @@ pub enum Statement {
         pat: P<ast::Pat>,
         ty: Option<P<ast::Ty>>,
         init: Option<P<ast::Expr>>,
+    },
+    Assign {
+        lvalue: Lvalue,
+        rvalue: P<ast::Expr>,
     },
     Drop {
         span: Span,
@@ -264,6 +318,7 @@ impl Statement {
         match *self {
             Statement::Expr(ref stmt) => stmt.span,
             Statement::Let { span, .. } | Statement::Drop { span, .. } => span,
+            Statement::Assign { ref lvalue, .. } => lvalue.span(),
         }
     }
 }

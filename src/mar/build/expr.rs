@@ -7,6 +7,7 @@ use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr(&mut self,
+                destination: Lvalue,
                 extent: CodeExtent,
                 block: BasicBlock,
                 expr: &P<ast::Expr>) -> BasicBlock {
@@ -14,12 +15,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // There's no reason for us to transform expressions if they don't contain any transitions.
         if !self.contains_transition(&expr) {
-            return self.into(extent, block, expr);
+            return self.into(destination, extent, block, expr);
         }
 
         match expr.node {
             ExprKind::Block(ref ast_block) => {
-                self.into(extent, block, ast_block)
+                self.into(destination, extent, block, ast_block)
             }
             ExprKind::Continue(label) => {
                 self.break_or_continue(expr.span,
@@ -51,8 +52,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     targets: (then_block, else_block),
                 });
 
-                then_block = self.into(extent, then_block, then_expr);
-                else_block = self.into(extent, else_block, else_expr);
+                then_block = self.into(destination.clone(), extent, then_block, then_expr);
+                else_block = self.into(destination, extent, else_block, else_expr);
 
                 let join_block = self.start_new_block(expr.span, Some("IfJoin"));
 
@@ -72,26 +73,32 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 join_block
             }
             ExprKind::Match(ref discriminant, ref arms) => {
-                self.match_expr(extent, expr.span, block, discriminant.clone(), arms)
+                self.match_expr(
+                    destination,
+                    extent,
+                    expr.span,
+                    block,
+                    discriminant.clone(),
+                    arms)
             }
             ExprKind::Loop(ref body, label) => {
-                self.expr_loop(extent, block, None, body, label)
+                self.expr_loop(destination, extent, block, None, body, label)
             }
             ExprKind::While(ref cond_expr, ref body, label) => {
-                self.expr_loop(extent, block, Some(cond_expr), body, label)
+                self.expr_loop(destination, extent, block, Some(cond_expr), body, label)
             }
             ExprKind::ForLoop(..) |
             ExprKind::IfLet(..)   |
             ExprKind::WhileLet(..) => {
                 panic!("{:?} Should never reach this point - `preapare` should have desugared this.", expr);
             }
-            ExprKind::Assign(ref left, _) => {
-                if let Some(ident) = ident_from_assign_path(left) {
-                    self.assign_decl(expr.span, block, ident);
-                }
+            ExprKind::Assign(ref lvalue, ref rvalue) => {
+                let lvalue = Lvalue::Var {
+                    span: lvalue.span,
+                    decl: self.find_lvalue(lvalue),
+                };
 
-                // FIXME: Don't handle yield in assign yet... (Might solve in `simplify`)
-                self.into(extent, block, &expr)
+                self.expr(lvalue, extent, block, rvalue)
             }
             _ => {
                 self.cx.span_bug(expr.span,
@@ -101,6 +108,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn expr_loop(&mut self,
+                 destination: Lvalue,
                  extent: CodeExtent,
                  block: BasicBlock,
                  condition: Option<&P<ast::Expr>>,
@@ -149,7 +157,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             // execute the body, branching back to the test
-            let body_block_end = this.into(extent, body_block, body);
+            let body_block_end = this.into(destination, extent, body_block, body);
+
             this.terminate(
                 body.span,
                 body_block_end,
@@ -177,22 +186,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // control will never actually flow into this block.
         self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
-}
 
-fn ident_from_assign_path(e: &ast::Expr) -> Option<ast::Ident> {
-    let path = if let ExprKind::Path(_, ref path) = e.node {
-        path
-    } else {
-        return None;
-    };
-
-    if path.global {
-        return None;
+    fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> VarDecl {
+        match expr.node {
+            ExprKind::Path(None, ref path) => {
+                match self.get_decl_from_path(path) {
+                    Some(decl) => decl,
+                    None => {
+                        self.cx.span_bug(
+                            expr.span,
+                            &format!("Path is not a decl: {:?}", path))
+                    }
+                }
+            }
+            _ => {
+                self.cx.span_bug(
+                    expr.span,
+                    &format!("Cannot handle `{:?}` as an lvalue yet", expr))
+            }
+        }
     }
-
-    if path.segments.len() != 1 {
-        return None;
-    }
-
-    Some(path.segments.first().unwrap().identifier)
 }

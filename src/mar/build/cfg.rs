@@ -2,6 +2,7 @@ use mar::build::CFG;
 use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
+use syntax::ptr::P;
 
 impl CFG {
     pub fn block_data(&self, block: BasicBlock) -> &BasicBlockData {
@@ -38,6 +39,28 @@ impl CFG {
         });
     }
 
+    pub fn push_declare_decl(&mut self,
+                             block: BasicBlock,
+                             span: Span,
+                             decl: VarDecl,
+                             ty: Option<P<ast::Ty>>) {
+        self.block_data_mut(block).declared_decls.push(DeclaredDecl {
+            span: span,
+            decl: decl,
+            ty: ty,
+        });
+    }
+
+    pub fn push_assign(&mut self,
+                       block: BasicBlock,
+                       lvalue: Lvalue,
+                       rvalue: P<ast::Expr>) {
+        self.push(block, Statement::Assign {
+            lvalue: lvalue,
+            rvalue: rvalue,
+        });
+    }
+
     pub fn terminate(&mut self,
                      span: Span,
                      block: BasicBlock,
@@ -62,10 +85,17 @@ impl CFG {
 
     pub fn push_decl(&mut self,
                      mutability: ast::Mutability,
-                     ident: ast::Ident) -> VarDecl {
+                     ident: ast::Ident,
+                     ty: Option<P<ast::Ty>>) -> VarDecl {
         let decl = VarDecl::new(self.var_decls.len());
-        let decl_data = VarDeclData::new(mutability, ident);
+        let decl_data = VarDeclData::new(mutability, ident, ty);
         self.var_decls.push(decl_data);
         decl
+    }
+
+    pub fn temp_lvalue(&mut self, span: Span) -> Lvalue {
+        Lvalue::Temp {
+            span: span,
+        }
     }
 }
