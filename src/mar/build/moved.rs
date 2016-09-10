@@ -5,6 +5,7 @@ use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
 use syntax::fold::{self, Folder};
 use syntax::parse::parser::Parser;
+use syntax::parse::token::Token;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -49,6 +50,8 @@ impl<'a, 'b> ExpandMac<'a, 'b> {
             Box::new(rdr));
 
         let ident = panictry!(parser.parse_ident());
+        panictry!(parser.expect(&Token::Eof));
+
         self.moved_idents.push(ident);
 
         AstBuilder::new().expr()
