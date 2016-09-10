@@ -8,7 +8,7 @@
 #[test]
 fn test_ints() {
     #[generator]
-    fn gen_ints() -> usize {
+    fn gen_ints() -> Box<Iterator<Item=usize>> {
         let x = {
             yield_!(1);
             let y = 3;
@@ -28,7 +28,7 @@ fn test_ints() {
 #[test]
 fn test_item_slice() {
     #[generator]
-    fn gen_item_slice<'a, T>(items: &'a [T]) -> &'a T {
+    fn gen_item_slice<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
         for item in items.iter() {
             yield_!(item);
         }
@@ -45,7 +45,7 @@ fn test_item_slice() {
 #[test]
 fn test_moved() {
     #[generator]
-    fn gen<T: 'static>(items: Vec<T>) -> T {
+    fn gen<T: 'static>(items: Vec<T>) -> Box<Iterator<Item=T>> {
         for item in moved!(items) {
             yield_!(moved!(item));
         }
@@ -61,7 +61,7 @@ fn test_moved() {
 #[test]
 fn test_partial_decl() {
     #[generator]
-    fn gen() -> usize {
+    fn gen() -> Box<Iterator<Item=usize>> {
         {
             let c;
             yield_!(1);
@@ -86,7 +86,7 @@ fn test_partial_decl() {
 #[test]
 fn test_partial_decl_nested() {
     #[generator]
-    fn gen() -> usize {
+    fn gen() -> Box<Iterator<Item=usize>> {
         {
             let c;
             yield_!(1);
@@ -119,7 +119,7 @@ fn test_partial_decl_nested() {
 #[test]
 fn test_yield_expr() {
     #[generator]
-    fn gen() -> usize {
+    fn gen() -> Box<Iterator<Item=usize>> {
         yield_!(1);
         yield_!(2);
         yield_!(3)
@@ -135,7 +135,7 @@ fn test_yield_expr() {
 #[test]
 fn test_yield_in_assign() {
     #[generator]
-    fn gen() -> usize {
+    fn gen() -> Box<Iterator<Item=usize>> {
         let _x: () = yield_!(1);
     }
 
@@ -147,7 +147,7 @@ fn test_yield_in_assign() {
 #[test]
 fn test_shadowing() {
     #[generator]
-    fn gen() -> String {
+    fn gen() -> Box<Iterator<Item=String>> {
         let x = format!("a");
         {
             yield_!(x.clone());
@@ -168,5 +168,33 @@ fn test_shadowing() {
     assert_eq!(gen.next(), Some(format!("c")));
     assert_eq!(gen.next(), Some(format!("b")));
     assert_eq!(gen.next(), Some(format!("a")));
+    assert_eq!(gen.next(), None);
+}
+
+#[cfg(feature = "impl_trait")]
+#[test]
+fn test_impl_trait() {
+    #[generator]
+    fn gen() -> impl Iterator<Item=usize> {
+        let x = 1;
+        {
+            yield_!(x);
+            let x = 2;
+            {
+                yield_!(x);
+                let x = 3;
+                yield_!(x);
+            }
+            yield_!(x);
+        }
+        yield_!(x);
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), Some(2));
+    assert_eq!(gen.next(), Some(3));
+    assert_eq!(gen.next(), Some(2));
+    assert_eq!(gen.next(), Some(1));
     assert_eq!(gen.next(), None);
 }

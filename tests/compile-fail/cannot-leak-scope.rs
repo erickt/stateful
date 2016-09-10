@@ -1,5 +1,4 @@
 #![feature(plugin)]
-#![feature(conservative_impl_trait)]
 #![plugin(stateful)]
 
 fn a() -> usize { 0 }
@@ -9,7 +8,7 @@ fn d(_: usize) -> usize { 3 }
 fn e(_: usize) -> usize { 4 }
 
 #[generator]
-fn yield_() -> usize {
+fn yield_() -> Box<Iterator<Item=usize>> {
     let x = a();
     {
         let y = b(x);

@@ -1,9 +1,8 @@
 #![feature(plugin)]
-#![feature(conservative_impl_trait)]
 #![plugin(stateful)]
 
 #[generator]
-fn yield_() -> usize {
+fn yield_() -> Box<Iterator<Item=usize>> {
     let _x: usize;
     {
         yield_!(1);

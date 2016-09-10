@@ -9,9 +9,9 @@ plugin = true
 
 [features]
 default = ["unstable"]
-unstable = []
 impl_trait = []
-unstable-testing = ["clippy", "compiletest_rs"]
+unstable = []
+unstable-testing = ["clippy", "compiletest_rs", "impl_trait"]
 
 [dependencies]
 aster = "^0.26.0"

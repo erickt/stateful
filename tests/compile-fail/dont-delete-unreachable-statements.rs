@@ -1,9 +1,8 @@
 #![feature(plugin)]
-#![feature(conservative_impl_trait)]
 #![plugin(stateful)]
 
 #[generator]
-fn gen<'a, T>(items: &'a [T]) -> &'a T {
+fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
     let mut iter = items.iter();
     loop {
         match iter.next() {

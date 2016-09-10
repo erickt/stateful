@@ -1,11 +1,10 @@
 #![feature(plugin)]
-#![feature(conservative_impl_trait)]
 #![plugin(stateful)]
 
 fn do_move<T>(_item: T) {}
 
 #[generator]
-fn gen(item: String) -> String {
+fn gen(item: String) -> Box<Iterator<Item=String>> {
     yield_!(moved!(item));
     yield_!(moved!(item)); //~ ERROR capture of moved value: `item`
                            //~^ ERROR cannot move out of captured outer variable in an `Fn` closure

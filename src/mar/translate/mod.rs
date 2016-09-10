@@ -2,50 +2,20 @@ use aster::AstBuilder;
 use mar::repr::*;
 use syntax::ast::{self, FunctionRetTy};
 use syntax::ext::base::ExtCtxt;
-use syntax::codemap::Span;
 use syntax::fold;
 use syntax::ptr::P;
 
 pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let ast_builder = AstBuilder::new().span(mar.span);
 
-    let item_builder = ast_builder.item().fn_(mar.ident)
-        .with_args(mar.fn_decl.inputs.iter().cloned());
-
-    let generics = &mar.generics;
-
-    #[cfg(not(feature = "impl_trait"))]
-    fn return_ty(builder: &AstBuilder, span: Span, generics: ast::Generics,
-                 ty: P<ast::Ty>) -> P<ast::Ty> {
-        let iter_ty = builder.span(span).ty().object_sum()
-            .iterator().build(ty)
-            .with_generics(generics.clone())
-            .build();
-        builder.span(span).ty().box_()
-            .build(iter_ty)
-    }
-
-    #[cfg(feature = "impl_trait")]
-    fn return_ty(builder: &AstBuilder, span: Span, _generics: ast::Generics,
-                 ty: P<ast::Ty>) -> P<ast::Ty> {
-        let trait_bound = builder.span(span).ty_param_bound()
-            .iterator(ty)
-            .build();
-        builder.span(span).ty().impl_trait()
-            .with_bound(trait_bound)
-            .build()
-    }
-
-    let item_builder = match mar.fn_decl.output {
-        FunctionRetTy::Default(span) =>
-            item_builder.build_return(return_ty(&ast_builder, span, generics.clone(),
-                                                ast_builder.span(span).ty().unit())),
-        FunctionRetTy::Ty(ref ty) if ty.node == ast::TyKind::Never =>
-            item_builder.span(ty.span).no_return(),
-        FunctionRetTy::Ty(ref ty) =>
-            item_builder.build_return(return_ty(&ast_builder, ty.span, generics.clone(),
-                                                ty.clone()))
+    let return_ty = match mar.fn_decl.output {
+        FunctionRetTy::Default(span) => ast_builder.span(span).ty().unit(),
+        FunctionRetTy::Ty(ref ty) => ty.clone(),
     };
+
+    let item_builder = ast_builder.item().fn_(mar.ident)
+        .with_args(mar.fn_decl.inputs.iter().cloned())
+        .build_return(return_ty.clone());
 
     let item_builder = item_builder
         .generics().with(mar.generics.clone()).build();
@@ -60,12 +30,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let (state_enum, state_default, state_arms) =
         builder.state_enum_default_and_arms();
 
-    let block = quote_block!(cx, {
-        struct StateMachine<S, F> {
-            state: S,
-            next: F,
-        }
-
+    let state_machine_impl = quote_item!(cx,
         impl<S, F, Item> StateMachine<S, F>
             where S: ::std::default::Default,
                   F: Fn(S) -> (::std::option::Option<Item>, S),
@@ -77,25 +42,26 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
                 }
             }
         }
+    ).unwrap();
 
+    let state_machine_impl_future = quote_item!(cx,
         impl<S, F, Item> ::std::iter::Iterator for StateMachine<S, F>
             where S: ::std::default::Default,
                   F: Fn(S) -> (::std::option::Option<Item>, S)
         {
             type Item = Item;
 
-            fn next(&mut self) -> ::std::option::Option<Self::Item> {
-                let old_state = ::std::mem::replace(&mut self.state, S::default());
-                let (value, next_state) = (self.next)(old_state);
-                self.state = next_state;
+            fn next(&mut self) -> ::std::option::Option<Item> {
+                let state = ::std::mem::replace(&mut self.state, S::default());
+                let (value, state) = (self.next)(state);
+                self.state = state;
                 value
             }
         }
+    ).unwrap();
 
-        $state_enum
-        $state_default
-
-        Box::new(StateMachine::new(
+    let mut state_machine_closure = quote_expr!(cx,
+        StateMachine::new(
             $start_state_expr,
             |mut state| {
                 loop {
@@ -107,7 +73,30 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
                     }
                 }
             }
-        ))
+        )
+    );
+
+    // If we're not using impl trait, we need to wrap the closure in a box.
+    match return_ty.node {
+        ast::TyKind::ImplTrait(_) => { }
+        _ => {
+            state_machine_closure = ast_builder.expr()
+                .box_()
+                .build(state_machine_closure);
+        }
+    }
+
+    let block = quote_block!(cx, {
+        struct StateMachine<S, F> {
+            state: S,
+            next: F,
+        }
+
+        $state_machine_impl
+        $state_machine_impl_future
+        $state_enum
+        $state_default
+        $state_machine_closure
     });
 
     let item = item_builder.build(block);
@@ -137,11 +126,15 @@ fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
     items.pop().unwrap()
 }
 
+///////////////////////////////////////////////////////////////////////////
+
 pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     ast_builder: AstBuilder,
     mar: &'a Mar,
 }
+
+///////////////////////////////////////////////////////////////////////////
 
 mod block;
 mod state;
