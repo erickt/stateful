@@ -38,6 +38,7 @@ fn expand_generator(cx: &mut ExtCtxt,
     let mut mar = match mar::build::construct(cx, item.clone()) {
         Ok(mar) => mar,
         Err(mar::build::Error) => {
+            // We had an error, so just return the input item for a lack of a better option.
             return Annotatable::Item(item);
         }
     };
