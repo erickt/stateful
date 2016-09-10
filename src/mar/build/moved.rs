@@ -79,9 +79,9 @@ impl<'a, 'b> Folder for ExpandMac<'a, 'b> {
 
 fn is_moved_path(path: &ast::Path) -> bool {
     let builder = AstBuilder::new();
-    let yield_ = builder.path()
+    let moved = builder.path()
         .id("moved")
         .build();
 
-    !path.global && path.segments == yield_.segments
+    !path.global && path.segments == moved.segments
 }
