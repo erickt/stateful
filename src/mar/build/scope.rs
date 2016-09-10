@@ -126,8 +126,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// drops onto the end of `block` that are needed.  This must
     /// match 1-to-1 with `push_scope`.
     pub fn pop_scope(&mut self, extent: CodeExtent, block: BasicBlock) {
-        debug!("pop_scope");
-
         let scope = self.scopes.pop().unwrap();
 
         assert_eq!(scope.extent, extent);
