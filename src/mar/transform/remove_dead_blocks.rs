@@ -29,18 +29,19 @@ impl MarPass for RemoveDeadBlocks {
 
         let mut worklist = Vec::with_capacity(4);
         worklist.push(START_BLOCK);
+
+        // We can't delete blocks that have statements since we haven't type checked them yet.
+        for bb in mar.all_basic_blocks() {
+            if !mar.basic_block_data(bb).statements.is_empty() && seen.insert(bb.index()) {
+                worklist.push(bb);
+            }
+        }
+
         while let Some(bb) = worklist.pop() {
             for succ in &mar.basic_block_data(bb).terminator().successors() {
                 if seen.insert(succ.index()) {
                     worklist.push(*succ);
                 }
-            }
-        }
-
-        // We can't delete blocks that have statements since we haven't type checked them yet.
-        for bb in mar.all_basic_blocks() {
-            if !mar.basic_block_data(bb).statements.is_empty() {
-                seen.insert(bb.index());
             }
         }
 
@@ -69,6 +70,7 @@ fn retain_basic_blocks(mar: &mut Mar, keep: &BTreeSet<usize>) {
         }
         used_blocks += 1;
     }
+
     mar.basic_blocks.truncate(used_blocks);
 
     // Fix up all of the interior edges.

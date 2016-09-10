@@ -1,5 +1,6 @@
 #![feature(plugin)]
 #![plugin(stateful)]
+#![allow(unused_mut)]
 
 #[generator]
 fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
