@@ -100,9 +100,10 @@ impl CFG {
         decl
     }
 
-    pub fn temp_lvalue(&mut self, span: Span) -> Lvalue {
+    pub fn temp_lvalue(&mut self, span: Span, name: Option<&'static str>) -> Lvalue {
         Lvalue::Temp {
             span: span,
+            name: name,
         }
     }
 }

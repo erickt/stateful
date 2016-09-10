@@ -261,6 +261,7 @@ pub enum Lvalue {
     },
     Temp {
         span: Span,
+        name: Option<&'static str>,
     },
     ReturnPointer {
         span: Span,

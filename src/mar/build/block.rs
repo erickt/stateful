@@ -33,7 +33,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             stmt: &ast::Stmt) -> BasicBlock {
         match stmt.node {
             StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
-                let destination = self.cfg.temp_lvalue(stmt.span);
+                let destination = self.cfg.temp_lvalue(stmt.span, Some("_stmt_result_temp"));
                 self.expr(destination, extent, block, expr)
             }
             StmtKind::Local(ref local) => {

@@ -34,11 +34,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 .build(rvalue.clone())
                         ]
                     }
-                    Lvalue::Temp { span } => {
-                        vec![
-                            self.ast_builder.span(span).stmt().semi()
-                                .build(rvalue.clone())
-                        ]
+                    Lvalue::Temp { span, name } => {
+                        if let Some(name) = name {
+                            vec![
+                                self.ast_builder.span(span).stmt().let_id(name)
+                                    .build(rvalue.clone())
+                            ]
+                        } else {
+                            vec![
+                                self.ast_builder.span(span).stmt().semi()
+                                    .build(rvalue.clone())
+                            ]
+                        }
                     }
                     Lvalue::ReturnPointer { span } => {
                         vec![
