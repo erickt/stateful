@@ -1,3 +1,4 @@
+use aster::AstBuilder;
 use mar::repr::*;
 use syntax::ast::{self, ItemKind};
 use syntax::codemap::Span;
@@ -13,6 +14,7 @@ pub struct CFG {
 
 pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
+    state_machine_kind: StateMachineKind,
     cfg: CFG,
     scopes: Vec<scope::Scope>,
     loop_scopes: Vec<scope::LoopScope>,
@@ -26,7 +28,9 @@ pub struct Error;
 ///////////////////////////////////////////////////////////////////////////
 // construct() -- the main entry point for building SMIR for a function
 
-pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
+pub fn construct(cx: &ExtCtxt,
+                 item: P<ast::Item>,
+                 state_machine_kind: StateMachineKind) -> Result<Mar, Error> {
     let item = simplify_item(item);
 
     let (fn_decl, unsafety, abi, generics, ast_block) = match item.node {
@@ -42,6 +46,7 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
 
     let mut builder = Builder {
         cx: cx,
+        state_machine_kind: state_machine_kind,
         cfg: CFG {
             basic_blocks: vec![],
             var_decls: vec![],
@@ -66,9 +71,21 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
         block,
         fn_decl.inputs.iter().map(|arg| &arg.pat));
 
-    let destination = Lvalue::ReturnPointer {
+    // Register return pointer.
+    let return_ident = AstBuilder::new().id("return_");
+    let return_decl = builder.cfg.push_decl(
+        ast::Mutability::Immutable,
+        return_ident,
+        None,
+    );
+
+    builder.schedule_forward_decl(item.span, return_decl, None, None);
+
+    let destination = Lvalue::Var {
         span: ast_block.span,
+        decl: return_decl,
     };
+    builder.cfg.block_data_mut(END_BLOCK).decls.push((return_decl, return_ident));
 
     block = builder.ast_block(destination, extent, block, &ast_block);
 
@@ -80,8 +97,9 @@ pub fn construct(cx: &ExtCtxt, item: P<ast::Item>) -> Result<Mar, Error> {
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
     Ok(Mar {
-        ident: item.ident,
+        state_machine_kind: builder.state_machine_kind,
         span: item.span,
+        ident: item.ident,
         fn_decl: fn_decl.clone(),
         unsafety: unsafety,
         abi: abi,

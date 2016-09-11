@@ -5,13 +5,19 @@ use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
+#[derive(Debug)]
+pub enum StateMachineKind {
+    Generator,
+    Async,
+}
+
 /// Lowered representation of a single function.
 #[derive(Debug)]
 pub struct Mar {
+    pub state_machine_kind: StateMachineKind,
+
     pub span: Span,
-
     pub ident: ast::Ident,
-
     pub fn_decl: P<ast::FnDecl>,
     pub unsafety: ast::Unsafety,
     pub abi: abi::Abi,
@@ -214,6 +220,10 @@ pub enum TerminatorKind {
     /// have been filled in by now. This should only occur in the
     /// `END_BLOCK`.
     Return,
+
+    Await {
+        target: BasicBlock,
+    },
 }
 
 impl Terminator {
@@ -226,6 +236,7 @@ impl Terminator {
             }
             TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
             TerminatorKind::Return => vec![],
+            TerminatorKind::Await { target } => vec![target],
         }
     }
 
@@ -240,6 +251,7 @@ impl Terminator {
                 vec![then, else_]
             }
             TerminatorKind::Return => vec![],
+            TerminatorKind::Await { ref mut target } => vec![target],
         }
     }
 }
@@ -269,6 +281,13 @@ pub enum Lvalue {
 }
 
 impl Lvalue {
+    pub fn is_temp(&self) -> bool {
+        match *self {
+            Lvalue::Temp { .. } => true,
+            _ => false,
+        }
+    }
+
     pub fn decl(&self) -> Option<VarDecl> {
         match *self {
             Lvalue::Var { decl, .. } => Some(decl),

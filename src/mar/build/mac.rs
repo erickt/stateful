@@ -1,90 +1,211 @@
-use mar::build::Builder;
-use mar::build::transition;
+use aster::AstBuilder;
+use mar::build::{Builder, transition};
 use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
-use syntax::parse::common::SeqSep;
-use syntax::parse::lexer::{Reader, TokenAndSpan};
 use syntax::parse::parser::Parser;
 use syntax::parse::token::Token;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn stmt_mac(&mut self, block: BasicBlock, mac: &ast::Mac) -> Option<BasicBlock> {
-        if transition::is_yield_path(&mac.node.path) {
-            Some(self.mac_yield(block, mac))
-        } else {
-            None
+    pub fn stmt_mac(&mut self,
+                    extent: CodeExtent,
+                    block: BasicBlock,
+                    mac: &ast::Mac) -> Option<BasicBlock> {
+        match self.state_machine_kind {
+            StateMachineKind::Generator => {
+                if transition::is_yield_path(&mac.node.path) {
+                    Some(self.mac_yield(block, mac))
+                } else {
+                    None
+                }
+            }
+            StateMachineKind::Async => {
+                if transition::is_await_path(&mac.node.path) {
+                    let destination = self.cfg.temp_lvalue(mac.span, Some("_async_result_temp"));
+
+                    Some(self.mac_await(destination, extent, block, mac))
+                } else {
+                    None
+                }
+            }
         }
     }
 
     pub fn expr_mac(&mut self,
                     destination: Lvalue,
+                    extent: CodeExtent,
                     mut block: BasicBlock,
                     mac: &ast::Mac) -> BasicBlock {
-        if transition::is_yield_path(&mac.node.path) {
-            block = self.mac_yield(block, mac);
+        match self.state_machine_kind {
+            StateMachineKind::Generator => {
+                if transition::is_yield_path(&mac.node.path) {
+                    block = self.mac_yield(block, mac);
+                    self.assign_lvalue_unit(mac.span, block, destination);
+                }
+            }
+            StateMachineKind::Async => {
+                if transition::is_await_path(&mac.node.path) {
+                    block = self.mac_await(destination, extent, block, mac);
+                }
+            }
         }
 
-        self.assign_lvalue_unit(mac.span, block, destination);
         block
     }
 
     fn mac_yield(&mut self, block: BasicBlock, mac: &ast::Mac) -> BasicBlock {
-        let (expr, idents) = parse_mac_yield(self.cx, mac);
-        assert!(idents.is_empty());
-
+        let expr = parse_mac_yield(self.cx, mac);
         let expr = self.expand_moved(&expr);
 
         let next_block = self.start_new_block(mac.span, Some("AfterYield"));
 
         self.terminate(mac.span, block, TerminatorKind::Yield {
-            expr: expr.clone(),
+            expr: expr,
             target: next_block,
         });
 
         next_block
     }
+
+    fn mac_await(&mut self,
+                 destination: Lvalue,
+                 extent: CodeExtent,
+                 mut block: BasicBlock,
+                 mac: &ast::Mac) -> BasicBlock {
+        let span = mac.span;
+        let builder = AstBuilder::new().span(span);
+
+        // First, parse and expand the macro.
+        let expr = parse_mac_await(self.cx, mac);
+        let expr = self.expand_moved(&expr);
+
+        // Next, declare a variable which will store the awaited future.
+        let future_ident = builder.id("future");
+
+        let future_stmt = builder.stmt()
+            .let_().mut_id(future_ident).build_expr(expr);
+
+        block = self.stmt(extent, block, &future_stmt);
+
+        // Next, construct a match that polls the future until it's ready:
+        //
+        // match try!(sleeper.poll()) {
+        //     Async::Ready(result) => {
+        //         goto $next_state with result
+        //     }
+        //     Async::NotReady => {
+        //         return Async::NotReady
+        //     }
+        // }
+
+        let loop_block = self.start_new_block(span, Some("AwaitLoop"));
+        let exit_block = self.start_new_block(span, Some("AwaitExit"));
+
+        self.terminate(span, block, TerminatorKind::Goto { target: loop_block });
+
+        // Handle the ready arm.
+        let ready_ident = builder.id("result");
+
+        let ready_path = builder.path()
+            .global()
+            .ids(&["futures", "Async", "Ready"])
+            .build();
+
+        let ready_pat = builder.pat().enum_()
+            .build(ready_path)
+            .id(ready_ident)
+            .build();
+
+        let ready_arm = Arm {
+            pats: vec![ready_pat],
+            guard: None,
+            block: self.start_new_block(span, Some("AwaitReady")),
+        };
+
+        let ready_arm_block = self.in_scope(extent, span, block, |this| {
+            this.add_decls_from_pats(extent, ready_arm.block, ready_arm.pats.iter());
+
+            // Don't try to store the result if we're just writing into a temporary.
+            if destination.is_temp() {
+                ready_arm.block
+            } else {
+                let ready_expr = builder.expr().id(ready_ident);
+                this.expr(destination, extent, ready_arm.block, &ready_expr)
+            }
+        });
+
+        self.terminate(span, ready_arm_block, TerminatorKind::Goto {
+            target: exit_block,
+        });
+
+        // Handle the not ready arm.
+        let not_ready_path = builder.path()
+            .global()
+            .ids(&["futures", "Async", "NotReady"])
+            .build();
+
+        let not_ready_pat = builder.pat().path()
+            .build(not_ready_path);
+
+        let not_ready_arm = Arm {
+            pats: vec![not_ready_pat],
+            guard: None,
+            block: self.start_new_block(span, Some("AwaitNotReady")),
+        };
+
+        self.terminate(span, not_ready_arm.block, TerminatorKind::Await {
+            target: loop_block,
+        });
+
+        // Finally, handle the match.
+        let poll_path = builder.path()
+            .global()
+            .ids(&["futures", "Future", "poll"])
+            .build();
+
+        let future_poll_expr = builder.expr()
+            .try()
+            .call()
+            .path().build(poll_path)
+            .arg()
+            .mut_ref().id(future_ident)
+            .build();
+
+        self.terminate(span, loop_block, TerminatorKind::Match {
+            discr: future_poll_expr,
+            targets: vec![ready_arm, not_ready_arm],
+        });
+
+        exit_block
+    }
 }
 
-fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> (P<ast::Expr>, Vec<ast::Ident>) {
-    let mut rdr = new_tt_reader(&cx.parse_sess().span_diagnostic,
-                                None,
-                                None,
-                                mac.node.tts.clone());
+fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
 
     let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
-
     let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
 
-    for _ in 0..parser.tokens_consumed {
-        let _ = rdr.next_token();
-    }
+    expr
+}
 
-    let TokenAndSpan { tok, sp } = rdr.peek();
+fn parse_mac_await(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
 
-    let idents = match tok {
-        Token::Eof => Vec::new(),
-        Token::Semi => {
-            parser.bump();
+    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
 
-            let seq_sep = SeqSep::trailing_allowed(Token::Comma);
-            let idents = panictry!(parser.parse_seq_to_end(&Token::Eof,
-                                                           seq_sep,
-                                                           |p| p.parse_ident()));
-
-            if idents.is_empty() {
-                cx.span_fatal(sp, "unexpected end of macro");
-            }
-
-            idents
-        }
-        _ => {
-            let token_str = parser.this_token_to_string();
-            cx.span_fatal(sp, &format!("expected ident, found `{}`", token_str));
-        }
-    };
-
-    (expr, idents)
+    expr
 }

@@ -70,7 +70,7 @@ impl ContainsTransitionVisitor {
 impl visit::Visitor for ContainsTransitionVisitor {
     fn visit_stmt(&mut self, stmt: &ast::Stmt) {
         match stmt.node {
-            StmtKind::Mac(ref mac) if is_yield_path(&(*mac).0.node.path) => {
+            StmtKind::Mac(ref mac) if is_transition_path(&(*mac).0.node.path) => {
                 self.contains_transition = true;
             }
             _ => {
@@ -106,7 +106,7 @@ impl visit::Visitor for ContainsTransitionVisitor {
 }
 
 pub fn is_transition_path(path: &ast::Path) -> bool {
-    is_yield_path(path)
+    is_yield_path(path) || is_await_path(path)
 }
 
 pub fn is_yield_path(path: &ast::Path) -> bool {
@@ -116,4 +116,13 @@ pub fn is_yield_path(path: &ast::Path) -> bool {
         .build();
 
     !path.global && path.segments == yield_.segments
+}
+
+pub fn is_await_path(path: &ast::Path) -> bool {
+    let builder = AstBuilder::new();
+    let await = builder.path()
+        .id("await")
+        .build();
+
+    !path.global && path.segments == await.segments
 }

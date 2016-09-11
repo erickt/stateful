@@ -27,10 +27,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         })
     }
 
-    fn stmt(&mut self,
-            extent: CodeExtent,
-            block: BasicBlock,
-            stmt: &ast::Stmt) -> BasicBlock {
+    pub fn stmt(&mut self,
+                extent: CodeExtent,
+                block: BasicBlock,
+                stmt: &ast::Stmt) -> BasicBlock {
         match stmt.node {
             StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
                 let destination = self.cfg.temp_lvalue(stmt.span, Some("_stmt_result_temp"));
@@ -44,7 +44,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             StmtKind::Mac(ref mac) => {
                 let (ref mac, _, _) = **mac;
-                match self.stmt_mac(block, mac) {
+                match self.stmt_mac(extent, block, mac) {
                     Some(block) => block,
                     None => {
                         self.cfg.push(block, Statement::Expr(stmt.clone()));
@@ -55,11 +55,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    fn local(&mut self,
-             extent: CodeExtent,
-             mut block: BasicBlock,
-             span: Span,
-             local: &P<ast::Local>) -> BasicBlock {
+    pub fn local(&mut self,
+                 extent: CodeExtent,
+                 mut block: BasicBlock,
+                 span: Span,
+                 local: &P<ast::Local>) -> BasicBlock {
         let mut decls = vec![];
 
         for (decl, _) in self.get_decls_from_pat(&local.pat) {

@@ -1,3 +1,4 @@
+use aster::AstBuilder;
 use mar::build::Builder;
 use mar::build::scope::LoopScope;
 use mar::repr::*;
@@ -34,8 +35,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                        block,
                                        |loop_scope| loop_scope.break_block)
             }
-            ExprKind::Ret(Some(_)) => {
-                self.cx.span_fatal(expr.span, "cannot return a value");
+            ExprKind::Ret(Some(ref returned_expr)) => {
+                let assign_expr = AstBuilder::new().span(expr.span).expr().assign()
+                    .id("return_")
+                    .build(returned_expr.clone());
+
+                let block = self.into(destination, extent, block, &assign_expr);
+
+                self.exit_scope(expr.span, extent, block, END_BLOCK);
+                self.start_new_block(expr.span, Some("AfterReturn"))
             }
             ExprKind::Ret(None) => {
                 self.exit_scope(expr.span, extent, block, END_BLOCK);
@@ -101,7 +109,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.expr(lvalue, extent, block, rvalue)
             }
             ExprKind::Mac(ref mac) => {
-                self.expr_mac(destination, block, mac)
+                self.expr_mac(destination, extent, block, mac)
             }
             _ => {
                 self.cx.span_bug(expr.span,
@@ -160,12 +168,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             // execute the body, branching back to the test
-            let body_block_end = this.into(destination, extent, body_block, body);
+            let lvalue = this.cfg.temp_lvalue(body.span, Some("_loop_result_temp"));
+            let body_block_end = this.into(lvalue, extent, body_block, body);
 
             this.terminate(
                 body.span,
                 body_block_end,
                 TerminatorKind::Goto { target: loop_block });
+
+            this.assign_lvalue_unit(body.span, exit_block, destination);
 
             // final point is exit_block
             exit_block

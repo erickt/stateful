@@ -88,10 +88,55 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             TerminatorKind::Return => {
-                let return_expr = ast_builder.expr().none();
-                let next_state = self.state_expr(terminator.span, END_BLOCK);
-                let tuple = ast_builder.expr().tuple()
-                    .expr().build(return_expr)
+                let next_state = ast_builder.expr().path()
+                    .span(self.mar.span)
+                    .ids(&["State", "Illegal"])
+                    .build();
+
+                match self.mar.state_machine_kind {
+                    StateMachineKind::Generator => {
+                        vec![
+                            ast_builder.stmt().semi().call()
+                                    .path()
+                                        .global()
+                                        .ids(&["std", "mem", "drop"])
+                                        .build()
+                                .arg().id("return_")
+                                .build(),
+                            ast_builder.stmt().semi().return_expr().tuple()
+                                .expr().none()
+                                .expr().build(next_state)
+                                .build()
+                        ]
+                    }
+                    StateMachineKind::Async => {
+                        let return_expr = ast_builder.expr().id("return_");
+                        let ready_expr = ast_builder.expr().call()
+                            .path()
+                                .global()
+                                .ids(&["futures", "Async", "Ready"])
+                                .build()
+                            .with_arg(return_expr)
+                            .build();
+
+                        vec![
+                            ast_builder.stmt().semi().return_expr().ok().tuple()
+                                .expr().build(ready_expr)
+                                .expr().build(next_state)
+                                .build()
+                        ]
+                    }
+                }
+            }
+            TerminatorKind::Await { target } => {
+                let awaited_expr = ast_builder.expr().path()
+                    .global()
+                    .ids(&["futures", "Async", "NotReady"])
+                    .build();
+                let next_state = self.state_expr(terminator.span, target);
+
+                let tuple = ast_builder.expr().ok().tuple()
+                    .expr().build(awaited_expr)
                     .expr().build(next_state)
                     .build();
 

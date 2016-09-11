@@ -15,10 +15,9 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
 
     let item_builder = ast_builder.item().fn_(mar.ident)
         .with_args(mar.fn_decl.inputs.iter().cloned())
-        .build_return(return_ty.clone());
-
-    let item_builder = item_builder
-        .generics().with(mar.generics.clone()).build();
+        .build_return(return_ty.clone())
+        .generics().with(mar.generics.clone())
+        .build();
 
     let builder = Builder {
         cx: cx,
@@ -30,35 +29,74 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let (state_enum, state_default, state_arms) =
         builder.state_enum_default_and_arms();
 
-    let state_machine_impl = quote_item!(cx,
-        impl<S, F, Item> StateMachine<S, F>
-            where S: ::std::default::Default,
-                  F: Fn(S) -> (::std::option::Option<Item>, S),
-        {
-            fn new(initial_state: S, next: F) -> Self {
-                StateMachine {
-                    state: initial_state,
-                    next: next,
+    let state_machine_impl;
+    let state_machine_impl_future;
+
+    match mar.state_machine_kind {
+        StateMachineKind::Generator => {
+            state_machine_impl = quote_item!(cx,
+                impl<S, F, Item> StateMachine<S, F>
+                    where S: ::std::default::Default,
+                          F: Fn(S) -> (::std::option::Option<Item>, S),
+                {
+                    fn new(initial_state: S, next: F) -> Self {
+                        StateMachine {
+                            state: initial_state,
+                            next: next,
+                        }
+                    }
                 }
-            }
-        }
-    ).unwrap();
+            ).unwrap();
 
-    let state_machine_impl_future = quote_item!(cx,
-        impl<S, F, Item> ::std::iter::Iterator for StateMachine<S, F>
-            where S: ::std::default::Default,
-                  F: Fn(S) -> (::std::option::Option<Item>, S)
-        {
-            type Item = Item;
+            state_machine_impl_future = quote_item!(cx,
+                impl<S, F, Item> ::std::iter::Iterator for StateMachine<S, F>
+                    where S: ::std::default::Default,
+                          F: Fn(S) -> (::std::option::Option<Item>, S)
+                {
+                    type Item = Item;
 
-            fn next(&mut self) -> ::std::option::Option<Item> {
-                let state = ::std::mem::replace(&mut self.state, S::default());
-                let (value, state) = (self.next)(state);
-                self.state = state;
-                value
-            }
+                    fn next(&mut self) -> ::std::option::Option<Item> {
+                        let state = ::std::mem::replace(&mut self.state, S::default());
+                        let (value, state) = (self.next)(state);
+                        self.state = state;
+                        value
+                    }
+                }
+            ).unwrap();
         }
-    ).unwrap();
+        StateMachineKind::Async => {
+            state_machine_impl = quote_item!(cx,
+                impl<S, F, Item, Error> StateMachine<S, F>
+                    where S: ::std::default::Default,
+                          F: Fn(S) -> ::std::result::Result<(::futures::Async<Item>, S), Error>,
+                {
+                    fn new(initial_state: S, next: F) -> Self {
+                        StateMachine {
+                            state: initial_state,
+                            next: next,
+                        }
+                    }
+                }
+            ).unwrap();
+
+            state_machine_impl_future = quote_item!(cx,
+                impl<S, F, Item, Error> ::futures::Future for StateMachine<S, F>
+                    where S: ::std::default::Default,
+                          F: Fn(S) -> ::std::result::Result<(::futures::Async<Item>, S), Error>,
+                {
+                    type Item = Item;
+                    type Error = Error;
+
+                    fn poll(&mut self) -> ::futures::Poll<Item, Error> {
+                        let state = ::std::mem::replace(&mut self.state, S::default());
+                        let (value, state) = try!((self.next)(state));
+                        self.state = state;
+                        Ok(value)
+                    }
+                }
+            ).unwrap();
+        }
+    }
 
     let mut state_machine_closure = quote_expr!(cx,
         StateMachine::new(
