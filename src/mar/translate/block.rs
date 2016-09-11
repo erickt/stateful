@@ -10,12 +10,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        block_data.declared_decls().iter()
-            .map(|declare_decl| self.declare_decl(declare_decl))
-            .chain(
-                block_data.statements().iter()
-                .flat_map(|statement| self.stmt(block, statement))
-            )
+        block_data.statements().iter()
+            .flat_map(|statement| self.stmt(block, statement))
             .chain(
                 block_data.terminator.iter()
                     .flat_map(|terminator| self.terminator(terminator))
@@ -124,22 +120,5 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn block_span(&self, block: BasicBlock) -> Span {
         self.mar.basic_block_data(block).span
-    }
-
-    fn declare_decl(&self, declared_decl: &DeclaredDecl) -> ast::Stmt {
-        let ast_builder = self.ast_builder.span(declared_decl.span);
-
-        let lvalue = self.mar.var_decl_data(declared_decl.decl);
-
-        let assign_builder = ast_builder.stmt().let_()
-            .id(lvalue.ident);
-
-        if let Some(ref ty) = declared_decl.ty {
-            assign_builder.ty()
-                .build(ty.clone())
-                .build()
-        } else {
-            assign_builder.build()
-        }
     }
 }

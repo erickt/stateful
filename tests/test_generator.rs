@@ -143,3 +143,30 @@ fn test_yield_in_assign() {
     assert_eq!(gen.next(), Some(1));
     assert_eq!(gen.next(), None);
 }
+
+#[test]
+fn test_shadowing() {
+    #[generator]
+    fn gen() -> String {
+        let x = format!("a");
+        {
+            yield_!(x.clone());
+            let x = format!("b");
+            {
+                yield_!(x.clone());
+                let x = format!("c");
+                yield_!(moved!(x));
+            }
+            yield_!(moved!(x));
+        }
+        yield_!(moved!(x));
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), Some(format!("a")));
+    assert_eq!(gen.next(), Some(format!("b")));
+    assert_eq!(gen.next(), Some(format!("c")));
+    assert_eq!(gen.next(), Some(format!("b")));
+    assert_eq!(gen.next(), Some(format!("a")));
+    assert_eq!(gen.next(), None);
+}

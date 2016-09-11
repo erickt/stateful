@@ -29,13 +29,20 @@ impl CFG {
     pub fn push_drop(&mut self,
                      block: BasicBlock,
                      span: Span,
-                     decl: VarDecl,
-                     alias: Option<Alias>) {
-        let lvalue = self.var_decl_data(decl).ident;
+                     decl: VarDecl) {
         self.block_data_mut(block).statements.push(Statement::Drop {
             span: span,
-            lvalue: lvalue,
-            alias: alias,
+            lvalue: decl,
+        });
+    }
+
+    pub fn push_unshadow(&mut self,
+                         block: BasicBlock,
+                         span: Span,
+                         shadow: ShadowedDecl) {
+        self.block_data_mut(block).statements.push(Statement::Unshadow {
+            span: span,
+            shadow: shadow,
         });
     }
 
@@ -44,7 +51,7 @@ impl CFG {
                              span: Span,
                              decl: VarDecl,
                              ty: Option<P<ast::Ty>>) {
-        self.block_data_mut(block).declared_decls.push(DeclaredDecl {
+        self.push(block, Statement::Declare {
             span: span,
             decl: decl,
             ty: ty,

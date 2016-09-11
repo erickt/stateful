@@ -38,14 +38,14 @@ struct ForwardDecl {
     span: Span,
     decl: VarDecl,
     ty: Option<P<ast::Ty>>,
-    alias: Option<Alias>,
+    shadow: Option<ShadowedDecl>,
 }
 
 #[derive(Debug)]
 struct DropDecl {
     span: Span,
     decl: VarDecl,
-    alias: Option<Alias>,
+    shadow: Option<ShadowedDecl>,
 }
 
 impl From<ForwardDecl> for DropDecl {
@@ -53,7 +53,7 @@ impl From<ForwardDecl> for DropDecl {
         DropDecl {
             span: forward_decl.span,
             decl: forward_decl.decl,
-            alias: forward_decl.alias,
+            shadow: forward_decl.shadow,
         }
     }
 }
@@ -133,16 +133,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // add in any drops needed on the fallthrough path (any other
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
-        for scope_decl in scope.drops.into_iter().rev() {
-            if scope.moved_decls.contains(&scope_decl.decl) {
-                debug!("pop_scope: decl moved {:?}", scope_decl.decl);
-            } else {
-                self.cfg.push_drop(
-                    block,
-                    scope_decl.span,
-                    scope_decl.decl,
-                    scope_decl.alias);
-            }
+        for dropped_decl in scope.drops.iter().rev() {
+            drop_decl(&mut self.cfg, block, &scope, dropped_decl);
         }
     }
 
@@ -195,12 +187,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             };
 
         for scope in self.scopes.iter_mut().rev().take(popped_scopes) {
-            for scope_decl in &scope.drops {
-                self.cfg.push_drop(
-                    block,
-                    scope_decl.span,
-                    scope_decl.decl,
-                    scope_decl.alias);
+            for dropped_decl in &scope.drops {
+                drop_decl(&mut self.cfg, block, scope, dropped_decl);
             }
         }
 
@@ -211,7 +199,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                  span: Span,
                                  decl: VarDecl,
                                  ty: Option<P<ast::Ty>>,
-                                 alias: Option<Alias>) {
+                                 shadow: Option<ShadowedDecl>) {
         if let Some(scope) = self.scopes.last_mut() {
             let ident = self.cfg.var_decl_data(decl).ident;
 
@@ -219,7 +207,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 span: span,
                 decl: decl,
                 ty: ty,
-                alias: alias,
+                shadow: shadow,
             });
         } else {
             self.cx.span_bug(span, "no scopes?");
@@ -340,22 +328,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             for dropped_decl in scope.drops.iter().rev() {
                 let decl = dropped_decl.decl;
+                let ident = self.cfg.var_decl_data(decl).ident;
 
                 if scope.moved_decls.contains(&decl) {
                     debug!("find_live_decls: decl moved {:?}", decl);
-                } else {
-                    let ident = self.cfg.var_decl_data(decl).ident;
 
-                    if visited_decls.insert(ident) {
+                    if let Some(shadow) = dropped_decl.shadow {
+                        if visited_decls.insert(ident) {
+                        } else {
+                            decls.push((shadow.decl, shadow.lvalue));
+                        }
+                    }
+                } else if visited_decls.insert(ident) {
                         // We haven't seen this decl before, so keep it's name.
                         decls.push((decl, ident));
-                    } else {
-                        // Otherwise, we need to rename it.
-                        let shadowed_ident = AstBuilder::new().id(
-                            format!("{}_shadowed_{}", ident, decl.index()));
+                } else {
+                    // Otherwise, we need to rename it.
+                    let shadowed_ident = AstBuilder::new().id(
+                        format!("{}_shadowed_{}", ident, decl.index()));
 
-                        decls.push((decl, shadowed_ident));
-                    }
+                    decls.push((decl, shadowed_ident));
                 }
             }
         }
@@ -371,13 +363,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          span: Span,
                          extent: CodeExtent,
                          decl: VarDecl,
-                         alias: Option<Alias>) {
+                         shadow: Option<ShadowedDecl>) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
                 scope.drops.push(DropDecl {
                     span: span,
                     decl: decl,
-                    alias: alias,
+                    shadow: shadow,
                 });
                 return;
             }
@@ -504,5 +496,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         None
+    }
+}
+
+fn drop_decl(cfg: &mut CFG,
+             block: BasicBlock,
+             scope: &Scope,
+             dropped_decl: &DropDecl) {
+    if !scope.moved_decls.contains(&dropped_decl.decl) {
+        debug!("pop_scope: decl moved {:?}", dropped_decl.decl);
+        cfg.push_drop(
+            block,
+            dropped_decl.span,
+            dropped_decl.decl);
+    }
+
+    if let Some(shadow) = dropped_decl.shadow {
+        cfg.push_unshadow(
+            block,
+            dropped_decl.span,
+            shadow);
     }
 }

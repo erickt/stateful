@@ -6,6 +6,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
+            Statement::Declare { span, decl, ref ty } => {
+                let id = self.mar.var_decl_data(decl).ident;
+
+                vec![
+                    self.ast_builder.span(span).stmt().build_let(
+                        self.ast_builder.pat().id(id),
+                        ty.clone(),
+                        None)
+                ]
+            }
             Statement::Let { span, ref pat, ref ty, ref init } => {
                 vec![
                     self.ast_builder.span(span).stmt()
@@ -38,11 +48,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            Statement::Drop { span, ref lvalue, ref alias } => {
+            Statement::Drop { span, lvalue } => {
+                let id = self.mar.var_decl_data(lvalue).ident;
+
                 // We need an explicit drop here to make sure we drop variables as they go out of
                 // a block scope. Otherwise, they won't be dropped until the next yield point,
                 // which wouldn't match the Rust semantics.
-                let mut stmts = vec![
+                vec![
                     self.ast_builder
                         .span(span)
                         .stmt().semi().call()
@@ -50,24 +62,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 .global()
                                 .ids(&["std", "mem", "drop"])
                                 .build()
-                        .arg().id(lvalue)
+                        .arg().id(id)
                         .build()
-                ];
+                ]
+            }
+            Statement::Unshadow { span, ref shadow } => {
+                let (mode, ident) = {
+                    let decl = self.mar.var_decl_data(shadow.decl);
+                    let mode = ast::BindingMode::ByValue(decl.mutability);
+                    (mode, decl.ident)
+                };
 
-                if let Some(ref alias) = *alias {
-                    let (mode, ident) = {
-                        let decl = self.mar.var_decl_data(alias.decl);
-                        let mode = ast::BindingMode::ByValue(decl.mutability);
-                        (mode, decl.ident)
-                    };
-
-                    stmts.push(self.ast_builder.span(span).stmt()
+                vec![
+                    self.ast_builder.span(span).stmt()
                         .let_().build_id(mode, ident, None)
-                        .expr().id(alias.lvalue)
-                    );
-                }
-
-                stmts
+                        .expr().id(shadow.lvalue)
+                ]
             }
         }
     }

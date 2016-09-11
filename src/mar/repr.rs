@@ -139,7 +139,6 @@ pub struct DeclaredDecl {
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub declared_decls: Vec<DeclaredDecl>,
     pub decls: Vec<(VarDecl, ast::Ident)>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
@@ -153,7 +152,6 @@ impl BasicBlockData {
         BasicBlockData {
             span: span,
             name: name,
-            declared_decls: vec![],
             decls: decls,
             statements: vec![],
             terminator: terminator,
@@ -162,10 +160,6 @@ impl BasicBlockData {
 
     pub fn name(&self) -> Option<&'static str> {
         self.name
-    }
-
-    pub fn declared_decls(&self) -> &[DeclaredDecl] {
-        &self.declared_decls
     }
 
     pub fn decls(&self) -> &[(VarDecl, ast::Ident)] {
@@ -296,6 +290,11 @@ impl Lvalue {
 #[derive(Debug)]
 pub enum Statement {
     Expr(ast::Stmt),
+    Declare {
+        span: Span,
+        decl: VarDecl,
+        ty: Option<P<ast::Ty>>,
+    },
     Let {
         span: Span,
         pat: P<ast::Pat>,
@@ -308,8 +307,11 @@ pub enum Statement {
     },
     Drop {
         span: Span,
-        lvalue: ast::Ident,
-        alias: Option<Alias>,
+        lvalue: VarDecl,
+    },
+    Unshadow {
+        span: Span,
+        shadow: ShadowedDecl,
     },
 }
 
@@ -317,14 +319,17 @@ impl Statement {
     pub fn span(&self) -> Span {
         match *self {
             Statement::Expr(ref stmt) => stmt.span,
-            Statement::Let { span, .. } | Statement::Drop { span, .. } => span,
+            Statement::Declare { span, .. }
+            | Statement::Let { span, .. }
+            | Statement::Drop { span, .. }
+            | Statement::Unshadow { span, .. } => span,
             Statement::Assign { ref lvalue, .. } => lvalue.span(),
         }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct Alias {
+pub struct ShadowedDecl {
     pub lvalue: ast::Ident,
     pub decl: VarDecl,
 }

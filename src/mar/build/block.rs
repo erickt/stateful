@@ -65,11 +65,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for (decl, _) in self.get_decls_from_pat(&local.pat) {
             let lvalue = self.cfg.var_decl_data(decl).ident;
 
-            let alias = self.find_decl(lvalue).map(|decl| {
-                self.alias(block, extent, span, decl)
+            let shadow = self.find_decl(lvalue).map(|decl| {
+                self.shadow(block, extent, span, decl)
             });
 
-            decls.push((decl, alias));
+            decls.push((decl, shadow));
         }
 
         if decls.is_empty() {
@@ -94,25 +94,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    fn alias(&mut self,
-             block: BasicBlock,
-             extent: CodeExtent,
-             span: Span,
-             decl: VarDecl) -> Alias {
+    fn shadow(&mut self,
+              block: BasicBlock,
+              extent: CodeExtent,
+              span: Span,
+              decl: VarDecl) -> ShadowedDecl {
         let lvalue = self.cfg.var_decl_data(decl).ident;
 
         let ast_builder = AstBuilder::new().span(span);
         let alias = ast_builder.id(format!("{}_shadowed_{}", lvalue, decl.index()));
-        let decl = self.cfg.push_decl(ast::Mutability::Immutable, alias, None);
+        let alias_decl = self.cfg.push_decl(ast::Mutability::Immutable, alias, None);
+
+        self.cfg.push_declare_decl(
+            block,
+            span,
+            alias_decl,
+            None);
 
         let destination = Lvalue::Var {
             span: span,
-            decl: decl,
+            decl: alias_decl,
         };
 
         self.into(destination, extent, block, ast_builder.expr().id(lvalue));
 
-        Alias {
+        ShadowedDecl {
             lvalue: alias,
             decl: decl,
         }

@@ -5,12 +5,18 @@
 #![allow(unused_mut)]
 #![allow(non_shorthand_field_patterns)]
 
-#[generator]
-fn gen() -> usize {
-    let _x: () = yield_!(1);
-}
-
 fn main() {
+    #[generator]
+    fn gen() -> String {
+        let x = format!("a");
+        {
+            yield_!(x.clone());
+            let x = format!("b");
+            yield_!(moved!(x));
+        }
+        yield_!(moved!(x));
+    }
+
     for value in gen() {
         println!("{}", value);
     }
