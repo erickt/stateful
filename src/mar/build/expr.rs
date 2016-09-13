@@ -201,7 +201,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
 
-    fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> VarDecl {
+    fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> Var {
         match expr.node {
             ExprKind::Path(None, ref path) => {
                 match self.get_decl_from_path(path) {

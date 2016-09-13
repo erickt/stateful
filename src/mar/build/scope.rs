@@ -30,14 +30,14 @@ pub struct Scope {
     extent: CodeExtent,
     forward_decls: HashMap<ast::Ident, ForwardDecl>,
     drops: Vec<DropDecl>,
-    moved_decls: HashSet<VarDecl>,
+    moved_decls: HashSet<Var>,
 }
 
 
 #[derive(Debug)]
 struct ForwardDecl {
     span: Span,
-    decl: VarDecl,
+    decl: Var,
     ty: Option<P<ast::Ty>>,
     shadow: Option<ShadowedDecl>,
 }
@@ -45,7 +45,7 @@ struct ForwardDecl {
 #[derive(Debug)]
 struct DropDecl {
     span: Span,
-    decl: VarDecl,
+    decl: Var,
     shadow: Option<ShadowedDecl>,
 }
 
@@ -198,7 +198,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn schedule_forward_decl(&mut self,
                                  span: Span,
-                                 decl: VarDecl,
+                                 decl: Var,
                                  ty: Option<P<ast::Ty>>,
                                  shadow: Option<ShadowedDecl>) {
         if let Some(scope) = self.scopes.last_mut() {
@@ -276,7 +276,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.assign_lvalue(block, lvalue, rvalue)
     }
 
-    pub fn find_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
+    pub fn find_decl(&self, lvalue: ast::Ident) -> Option<Var> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
             for dropped_decl in scope.drops.iter().rev() {
@@ -294,7 +294,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         None
     }
 
-    pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<VarDecl> {
+    pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<Var> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
             if let Some(forward_decl) = scope.forward_decls.get(&lvalue) {
@@ -314,7 +314,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// This function constructs a vector of all of the variables in scope, and returns if the
     /// variables are currently shadowed.
-    pub fn find_live_decls(&self) -> Vec<(VarDecl, ast::Ident)> {
+    pub fn find_live_decls(&self) -> Vec<(Var, ast::Ident)> {
         let mut decls = vec![];
         let mut visited_decls = HashSet::new();
 
@@ -363,7 +363,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn schedule_drop(&mut self,
                          span: Span,
                          extent: CodeExtent,
-                         decl: VarDecl,
+                         decl: Var,
                          shadow: Option<ShadowedDecl>) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
@@ -379,7 +379,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          &format!("extent {:?} not in scope to drop {:?}", extent, decl));
     }
 
-    pub fn schedule_move(&mut self, decl: VarDecl) {
+    pub fn schedule_move(&mut self, decl: Var) {
         for scope in self.scopes.iter_mut().rev() {
             scope.moved_decls.insert(decl);
         }
@@ -400,7 +400,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn add_decls_from_pat(&mut self,
                               span: Span,
                               extent: CodeExtent,
-                              pat: &P<ast::Pat>) -> Vec<(VarDecl, ast::Ident)> {
+                              pat: &P<ast::Pat>) -> Vec<(Var, ast::Ident)> {
         let decls = self.get_decls_from_pat(pat);
 
         for &(decl, _) in &decls {
@@ -410,11 +410,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         decls
     }
 
-    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<(VarDecl, ast::Ident)> {
+    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<(Var, ast::Ident)> {
         struct Visitor<'a, 'b: 'a> {
             cx: &'a ExtCtxt<'b>,
             cfg: &'a mut CFG,
-            var_decls: Vec<(VarDecl, ast::Ident)>,
+            var_decls: Vec<(Var, ast::Ident)>,
         }
 
         impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
@@ -453,10 +453,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         visitor.var_decls
     }
 
-    pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<VarDecl> {
+    pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Var> {
         struct Visitor<'a, 'b: 'a> {
             builder: &'a Builder<'a, 'b>,
-            var_decls: Vec<VarDecl>,
+            var_decls: Vec<Var>,
         }
 
         impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
@@ -486,7 +486,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         visitor.var_decls
     }
 
-    pub fn get_decl_from_path(&self, path: &ast::Path) -> Option<VarDecl> {
+    pub fn get_decl_from_path(&self, path: &ast::Path) -> Option<Var> {
         if !path.global && path.segments.len() == 1 {
             let segment = &path.segments[0];
 

@@ -48,9 +48,9 @@ pub struct Mar {
     pub abi: abi::Abi,
     pub generics: ast::Generics,
 
-    pub input_decls: Vec<(VarDecl, ast::Ident)>,
+    pub input_decls: Vec<(Var, ast::Ident)>,
 
-    pub var_decls: IndexVec<VarDecl, VarDeclData>,
+    pub var_decls: IndexVec<Var, VarDecl>,
 
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
     /// that indexes into this vector.
@@ -90,7 +90,7 @@ impl Mar {
         &self.extents[extent]
     }
 
-    pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
+    pub fn var_decl_data(&self, decl: Var) -> &VarDecl {
         &self.var_decls[decl]
     }
 }
@@ -118,20 +118,20 @@ pub const END_BLOCK: BasicBlock = BasicBlock(1);
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
-newtype_index!(VarDecl, "decl");
+newtype_index!(Var, "decl");
 
 #[derive(Debug, PartialEq)]
-pub struct VarDeclData {
+pub struct VarDecl {
     pub mutability: ast::Mutability,
     pub ident: ast::Ident,
     pub ty: Option<P<ast::Ty>>,
 }
 
-impl VarDeclData {
+impl VarDecl {
     pub fn new(mutability: ast::Mutability,
                ident: ast::Ident,
                ty: Option<P<ast::Ty>>) -> Self {
-        VarDeclData {
+        VarDecl {
             mutability: mutability,
             ident: ident,
             ty: ty,
@@ -142,7 +142,7 @@ impl VarDeclData {
 #[derive(Debug)]
 pub struct DeclaredDecl {
     pub span: Span,
-    pub decl: VarDecl,
+    pub decl: Var,
     pub ty: Option<P<ast::Ty>>,
 }
 
@@ -155,7 +155,7 @@ newtype_index!(BasicBlock, "bb");
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub decls: Vec<(VarDecl, ast::Ident)>,
+    pub decls: Vec<(Var, ast::Ident)>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
@@ -163,7 +163,7 @@ pub struct BasicBlockData {
 impl BasicBlockData {
     pub fn new(span: Span,
                name: Option<&'static str>,
-               decls: Vec<(VarDecl, ast::Ident)>,
+               decls: Vec<(Var, ast::Ident)>,
                terminator: Option<Terminator>) -> Self {
         BasicBlockData {
             span: span,
@@ -178,7 +178,7 @@ impl BasicBlockData {
         self.name
     }
 
-    pub fn decls(&self) -> &[(VarDecl, ast::Ident)] {
+    pub fn decls(&self) -> &[(Var, ast::Ident)] {
         &self.decls
     }
 
@@ -279,7 +279,7 @@ pub struct Arm {
 pub enum Lvalue {
     Var {
         span: Span,
-        decl: VarDecl,
+        decl: Var,
     },
     Temp {
         span: Span,
@@ -298,7 +298,7 @@ impl Lvalue {
         }
     }
 
-    pub fn decl(&self) -> Option<VarDecl> {
+    pub fn decl(&self) -> Option<Var> {
         match *self {
             Lvalue::Var { decl, .. } => Some(decl),
             Lvalue::Temp { .. } | Lvalue::ReturnPointer { .. } => None,
@@ -322,7 +322,7 @@ pub enum Statement {
     Expr(ast::Stmt),
     Declare {
         span: Span,
-        decl: VarDecl,
+        decl: Var,
         ty: Option<P<ast::Ty>>,
     },
     Let {
@@ -337,7 +337,7 @@ pub enum Statement {
     },
     Drop {
         span: Span,
-        lvalue: VarDecl,
+        lvalue: Var,
     },
     Unshadow {
         span: Span,
@@ -361,7 +361,7 @@ impl Statement {
 #[derive(Clone, Copy, Debug)]
 pub struct ShadowedDecl {
     pub lvalue: ast::Ident,
-    pub decl: VarDecl,
+    pub decl: Var,
 }
 
 ///////////////////////////////////////////////////////////////////////////

@@ -99,7 +99,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
               block: BasicBlock,
               extent: CodeExtent,
               span: Span,
-              decl: VarDecl) -> ShadowedDecl {
+              decl: Var) -> ShadowedDecl {
         let lvalue = self.cfg.var_decl_data(decl).ident;
 
         let ast_builder = AstBuilder::new().span(span);

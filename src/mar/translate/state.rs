@@ -27,7 +27,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     }
 
-    fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(VarDecl, ast::Ident)> {
+    fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(Var, ast::Ident)> {
         self.mar.basic_block_data(block).decls().to_vec()
     }
 

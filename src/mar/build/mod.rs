@@ -10,7 +10,7 @@ use syntax::ptr::P;
 #[derive(Debug)]
 pub struct CFG {
     basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
-    var_decls: IndexVec<VarDecl, VarDeclData>,
+    var_decls: IndexVec<Var, VarDecl>,
 }
 
 pub struct Builder<'a, 'b: 'a> {

@@ -16,7 +16,7 @@ impl CFG {
     pub fn start_new_block(&mut self,
                            span: Span,
                            name: Option<&'static str>,
-                           decls: Vec<(VarDecl, ast::Ident)>) -> BasicBlock {
+                           decls: Vec<(Var, ast::Ident)>) -> BasicBlock {
         self.basic_blocks.push(BasicBlockData::new(span, name, decls, None))
     }
 
@@ -27,7 +27,7 @@ impl CFG {
     pub fn push_drop(&mut self,
                      block: BasicBlock,
                      span: Span,
-                     decl: VarDecl) {
+                     decl: Var) {
         self.block_data_mut(block).statements.push(Statement::Drop {
             span: span,
             lvalue: decl,
@@ -47,7 +47,7 @@ impl CFG {
     pub fn push_declare_decl(&mut self,
                              block: BasicBlock,
                              span: Span,
-                             decl: VarDecl,
+                             decl: Var,
                              ty: Option<P<ast::Ty>>) {
         self.push(block, Statement::Declare {
             span: span,
@@ -80,19 +80,19 @@ impl CFG {
         });
     }
 
-    pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
+    pub fn var_decl_data(&self, decl: Var) -> &VarDecl {
         &self.var_decls[decl]
     }
 
-    pub fn var_decl_data_mut(&mut self, decl: VarDecl) -> &mut VarDeclData {
+    pub fn var_decl_data_mut(&mut self, decl: Var) -> &mut VarDecl {
         &mut self.var_decls[decl]
     }
 
     pub fn push_decl(&mut self,
                      mutability: ast::Mutability,
                      ident: ast::Ident,
-                     ty: Option<P<ast::Ty>>) -> VarDecl {
-        self.var_decls.push(VarDeclData::new(mutability, ident, ty))
+                     ty: Option<P<ast::Ty>>) -> Var {
+        self.var_decls.push(VarDecl::new(mutability, ident, ty))
     }
 
     pub fn temp_lvalue(&mut self, span: Span, name: Option<&'static str>) -> Lvalue {
