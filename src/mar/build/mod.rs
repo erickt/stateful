@@ -1,15 +1,16 @@
 use aster::AstBuilder;
+use mar::build::simplify::simplify_item;
+use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
 use syntax::ast::{self, ItemKind};
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
-use mar::build::simplify::simplify_item;
 
 #[derive(Debug)]
 pub struct CFG {
-    basic_blocks: Vec<BasicBlockData>,
-    var_decls: Vec<VarDeclData>,
+    basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
+    var_decls: IndexVec<VarDecl, VarDeclData>,
 }
 
 pub struct Builder<'a, 'b: 'a> {
@@ -18,7 +19,7 @@ pub struct Builder<'a, 'b: 'a> {
     cfg: CFG,
     scopes: Vec<scope::Scope>,
     loop_scopes: Vec<scope::LoopScope>,
-    extents: Vec<CodeExtentData>,
+    extents: IndexVec<CodeExtent, CodeExtentData>,
 }
 
 #[derive(Debug)]
@@ -48,12 +49,12 @@ pub fn construct(cx: &ExtCtxt,
         cx: cx,
         state_machine_kind: state_machine_kind,
         cfg: CFG {
-            basic_blocks: vec![],
-            var_decls: vec![],
+            basic_blocks: IndexVec::new(),
+            var_decls: IndexVec::new(),
         },
         scopes: vec![],
         loop_scopes: vec![],
-        extents: vec![],
+        extents: IndexVec::new(),
     };
 
     let extent = builder.start_new_extent();

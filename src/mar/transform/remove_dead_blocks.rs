@@ -8,6 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use mar::indexed_vec::Idx;
 use mar::repr::*;
 use std::collections::BTreeSet;
 use super::pass::MarPass;
@@ -66,12 +67,12 @@ fn retain_basic_blocks(mar: &mut Mar, keep: &BTreeSet<usize>) {
         if *alive_index != used_blocks {
             // Swap the next alive block data with the current available slot. Since alive_index is
             // non-decreasing this is a valid operation.
-            mar.basic_blocks.swap(*alive_index, used_blocks);
+            mar.basic_blocks.raw.swap(*alive_index, used_blocks);
         }
         used_blocks += 1;
     }
 
-    mar.basic_blocks.truncate(used_blocks);
+    mar.basic_blocks.raw.truncate(used_blocks);
 
     // Fix up all of the interior edges.
     for bb in mar.all_basic_blocks() {

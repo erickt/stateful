@@ -1,9 +1,34 @@
+use mar::indexed_vec::{Idx, IndexVec};
 use std::fmt;
+use std::ops::{Index, IndexMut};
 use std::u32;
 use syntax::abi;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
+
+macro_rules! newtype_index {
+    ($name:ident, $debug_name:expr) => (
+        #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+        pub struct $name(u32);
+
+        impl Idx for $name {
+            fn new(value: usize) -> Self {
+                assert!(value < (u32::MAX) as usize);
+                $name(value as u32)
+            }
+            fn index(self) -> usize {
+                self.0 as usize
+            }
+        }
+
+        impl fmt::Debug for $name {
+            fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+                write!(fmt, "{}{}", $debug_name, self.0)
+            }
+        }
+    )
+}
 
 #[derive(Debug)]
 pub enum StateMachineKind {
@@ -25,18 +50,28 @@ pub struct Mar {
 
     pub input_decls: Vec<(VarDecl, ast::Ident)>,
 
-    pub var_decls: Vec<VarDeclData>,
+    pub var_decls: IndexVec<VarDecl, VarDeclData>,
 
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
     /// that indexes into this vector.
-    pub basic_blocks: Vec<BasicBlockData>,
+    pub basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
 
     /// List of extents. References to extents use a newtyped index type `CodeExtent` that indexes
     /// into this vector.
-    pub extents: Vec<CodeExtentData>,
+    pub extents: IndexVec<CodeExtent, CodeExtentData>,
 }
 
 impl Mar {
+    #[inline]
+    pub fn basic_blocks(&self) -> &IndexVec<BasicBlock, BasicBlockData> {
+        &self.basic_blocks
+    }
+
+    #[inline]
+    pub fn basic_blocks_mut(&mut self) -> &mut IndexVec<BasicBlock, BasicBlockData> {
+        &mut self.basic_blocks
+    }
+
     pub fn all_basic_blocks(&self) -> Vec<BasicBlock> {
         (0..self.basic_blocks.len())
             .map(BasicBlock::new)
@@ -44,19 +79,33 @@ impl Mar {
     }
 
     pub fn basic_block_data(&self, bb: BasicBlock) -> &BasicBlockData {
-        &self.basic_blocks[bb.index()]
+        &self.basic_blocks[bb]
     }
 
     pub fn basic_block_data_mut(&mut self, bb: BasicBlock) -> &mut BasicBlockData {
-        &mut self.basic_blocks[bb.index()]
+        &mut self.basic_blocks[bb]
     }
 
     pub fn code_extent_data(&self, extent: CodeExtent) -> &CodeExtentData {
-        &self.extents[extent.index()]
+        &self.extents[extent]
     }
 
     pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
-        &self.var_decls[decl.index()]
+        &self.var_decls[decl]
+    }
+}
+
+impl Index<BasicBlock> for Mar {
+    type Output = BasicBlockData;
+
+    fn index(&self, index: BasicBlock) -> &BasicBlockData {
+        &self.basic_blocks()[index]
+    }
+}
+
+impl IndexMut<BasicBlock> for Mar {
+    fn index_mut(&mut self, index: BasicBlock) -> &mut BasicBlockData {
+        &mut self.basic_blocks_mut()[index]
     }
 }
 
@@ -69,20 +118,7 @@ pub const END_BLOCK: BasicBlock = BasicBlock(1);
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct VarDecl(u32);
-
-impl VarDecl {
-    pub fn new(index: usize) -> Self {
-        assert!(index < (u32::MAX as usize));
-        VarDecl(index as u32)
-    }
-
-    /// Extract the index.
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
+newtype_index!(VarDecl, "decl");
 
 #[derive(Debug, PartialEq)]
 pub struct VarDeclData {
@@ -103,43 +139,17 @@ impl VarDeclData {
     }
 }
 
-///////////////////////////////////////////////////////////////////////////
-// BasicBlock
-
-/// The index of a particular basic block. The index is into the `basic_blocks`
-/// list of the `Mar`.
-///
-/// (We use a `u32` internally just to save memory.)
-#[derive(Copy, Clone, Hash, PartialEq, Eq)]
-pub struct BasicBlock(u32);
-
-impl BasicBlock {
-    pub fn new(index: usize) -> BasicBlock {
-        assert!(index < (u32::MAX as usize));
-        BasicBlock(index as u32)
-    }
-
-    /// Extract the index.
-    pub fn index(self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl fmt::Debug for BasicBlock {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(fmt, "BB({})", self.0)
-    }
-}
-
-///////////////////////////////////////////////////////////////////////////
-// BasicBlock and Terminator
-
 #[derive(Debug)]
 pub struct DeclaredDecl {
     pub span: Span,
     pub decl: VarDecl,
     pub ty: Option<P<ast::Ty>>,
 }
+
+///////////////////////////////////////////////////////////////////////////
+// BasicBlock and Terminator
+
+newtype_index!(BasicBlock, "bb");
 
 #[derive(Debug)]
 pub struct BasicBlockData {
@@ -357,29 +367,7 @@ pub struct ShadowedDecl {
 ///////////////////////////////////////////////////////////////////////////
 // Code Extents
 
-/// The index of a particular basic block. The index is into the `basic_blocks`
-/// list of the `Mar`.
-///
-/// (We use a `u32` internally just to save memory.)
-#[derive(Copy, Clone, PartialEq, Eq)]
-pub struct CodeExtent(u32);
-
-impl CodeExtent {
-    pub fn new(index: usize) -> CodeExtent {
-        assert!(index < (u32::MAX as usize));
-        CodeExtent(index as u32)
-    }
-
-    pub fn index(&self) -> usize {
-        self.0 as usize
-    }
-}
-
-impl fmt::Debug for CodeExtent {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> Result<(), fmt::Error> {
-        write!(fmt, "CodeExtent({})", self.0)
-    }
-}
+newtype_index!(CodeExtent, "extent");
 
 #[derive(Debug)]
 pub enum CodeExtentData {

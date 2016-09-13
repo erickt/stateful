@@ -6,20 +6,18 @@ use syntax::ptr::P;
 
 impl CFG {
     pub fn block_data(&self, block: BasicBlock) -> &BasicBlockData {
-        &self.basic_blocks[block.index()]
+        &self.basic_blocks[block]
     }
 
     pub fn block_data_mut(&mut self, block: BasicBlock) -> &mut BasicBlockData {
-        &mut self.basic_blocks[block.index()]
+        &mut self.basic_blocks[block]
     }
 
     pub fn start_new_block(&mut self,
                            span: Span,
                            name: Option<&'static str>,
                            decls: Vec<(VarDecl, ast::Ident)>) -> BasicBlock {
-        let node_index = self.basic_blocks.len();
-        self.basic_blocks.push(BasicBlockData::new(span, name, decls, None));
-        BasicBlock::new(node_index)
+        self.basic_blocks.push(BasicBlockData::new(span, name, decls, None))
     }
 
     pub fn push(&mut self, block: BasicBlock, statement: Statement) {
@@ -83,21 +81,18 @@ impl CFG {
     }
 
     pub fn var_decl_data(&self, decl: VarDecl) -> &VarDeclData {
-        &self.var_decls[decl.index()]
+        &self.var_decls[decl]
     }
 
     pub fn var_decl_data_mut(&mut self, decl: VarDecl) -> &mut VarDeclData {
-        &mut self.var_decls[decl.index()]
+        &mut self.var_decls[decl]
     }
 
     pub fn push_decl(&mut self,
                      mutability: ast::Mutability,
                      ident: ast::Ident,
                      ty: Option<P<ast::Ty>>) -> VarDecl {
-        let decl = VarDecl::new(self.var_decls.len());
-        let decl_data = VarDeclData::new(mutability, ident, ty);
-        self.var_decls.push(decl_data);
-        decl
+        self.var_decls.push(VarDeclData::new(mutability, ident, ty))
     }
 
     pub fn temp_lvalue(&mut self, span: Span, name: Option<&'static str>) -> Lvalue {

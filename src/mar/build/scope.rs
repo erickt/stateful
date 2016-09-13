@@ -15,6 +15,7 @@ tracks where a `break` and `continue` should go to.
 
 use aster::AstBuilder;
 use mar::build::{Builder, CFG};
+use mar::indexed_vec::Idx;
 use mar::repr::*;
 use std::ascii::AsciiExt;
 use std::collections::{HashMap, HashSet};

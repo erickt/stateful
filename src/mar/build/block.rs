@@ -1,6 +1,7 @@
 use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
+use mar::indexed_vec::Idx;
 use syntax::ast::{self, StmtKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;

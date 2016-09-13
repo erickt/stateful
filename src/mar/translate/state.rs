@@ -1,4 +1,5 @@
 use mar::repr::*;
+use mar::indexed_vec::Idx;
 use mar::translate::Builder;
 use std::collections::HashSet;
 use syntax::ast::{self, Mutability};
