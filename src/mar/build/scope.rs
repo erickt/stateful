@@ -106,7 +106,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // At this point, we can't tell that variables are not being accessed. So we'll create a
         // new block to make sure variables are properly not referenced.
         let end_scope_block = self.start_new_block(span, Some("EndScope"));
-        self.terminate(span, block, TerminatorKind::Goto { target: end_scope_block });
+        self.terminate(
+            span,
+            block,
+            TerminatorKind::Goto {
+                target: end_scope_block,
+                end_scope: true,
+            });
         end_scope_block
     }
 
@@ -193,7 +199,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.terminate(span, block, TerminatorKind::Goto { target: target });
+        self.terminate(
+            span,
+            block,
+            TerminatorKind::Goto {
+                target: target,
+                end_scope: true,
+            });
     }
 
     pub fn schedule_forward_decl(&mut self,

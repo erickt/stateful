@@ -5,7 +5,7 @@ use syntax::codemap::Span;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
-        let block_data = self.mar.basic_block_data(block);
+        let block_data = &self.mar[block];
 
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
@@ -23,7 +23,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(terminator.span);
 
         match terminator.kind {
-            TerminatorKind::Goto { target } => {
+            TerminatorKind::Goto { target, .. } => {
                 self.goto(terminator.span, target)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
@@ -164,6 +164,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn block_span(&self, block: BasicBlock) -> Span {
-        self.mar.basic_block_data(block).span
+        self.mar[block].span
     }
 }

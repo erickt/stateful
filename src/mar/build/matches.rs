@@ -33,7 +33,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.expr(destination.clone(), extent, target.block, &arm.body)
             });
 
-            self.terminate(span, arm_block, TerminatorKind::Goto { target: join_block });
+            self.terminate(
+                span,
+                arm_block,
+                TerminatorKind::Goto { target: join_block, end_scope: true });
         }
 
         self.terminate(span, block, TerminatorKind::Match {

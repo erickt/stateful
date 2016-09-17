@@ -8,7 +8,7 @@ use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn state_id(&self, block: BasicBlock) -> ast::Ident {
-        match self.mar.basic_block_data(block).name {
+        match self.mar[block].name {
             Some(name) => {
                 self.ast_builder.id(format!("State{}{}", block.index(), name))
             }
@@ -28,7 +28,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(Var, ast::Ident)> {
-        self.mar.basic_block_data(block).decls().to_vec()
+        self.mar[block].decls().to_vec()
     }
 
     pub fn state_expr(&self, span: Span, block: BasicBlock) -> P<ast::Expr> {
@@ -54,14 +54,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
 
     pub fn state_enum_default_and_arms(&self) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
-        let all_basic_blocks = self.mar.all_basic_blocks();
+        let all_basic_blocks = self.mar.basic_blocks();
 
         let mut ty_param_ids = Vec::new();
         let mut seen_ty_param_ids = HashSet::new();
         let mut state_variants = Vec::with_capacity(all_basic_blocks.len());
         let mut state_arms = Vec::with_capacity(all_basic_blocks.len());
 
-        for block in all_basic_blocks {
+        for (block, _) in self.mar.basic_blocks().iter_enumerated() {
             let (variant, tp) = self.state_variant(block);
 
             // It's possible for a declaration to be created but not actually get used in the state

@@ -94,7 +94,10 @@ pub fn construct(cx: &ExtCtxt,
 
     builder.pop_scope(extent, block);
 
-    builder.terminate(item.span, block, TerminatorKind::Goto { target: END_BLOCK });
+    builder.terminate(item.span, block, TerminatorKind::Goto {
+        target: END_BLOCK,
+        end_scope: false,
+    });
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
     Ok(Mar {

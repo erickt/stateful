@@ -41,6 +41,16 @@ pub enum StateMachineKind {
 pub struct Mar {
     pub state_machine_kind: StateMachineKind,
 
+    /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
+    /// that indexes into this vector.
+    pub basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
+
+    /*
+    /// List of visibility (lexical) scopes; these are referenced by statements
+    /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
+    pub visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
+    */
+
     pub span: Span,
     pub ident: ast::Ident,
     pub fn_decl: P<ast::FnDecl>,
@@ -52,14 +62,16 @@ pub struct Mar {
 
     pub var_decls: IndexVec<Var, VarDecl>,
 
-    /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
-    /// that indexes into this vector.
-    pub basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
-
     /// List of extents. References to extents use a newtyped index type `CodeExtent` that indexes
     /// into this vector.
     pub extents: IndexVec<CodeExtent, CodeExtentData>,
 }
+
+/// Where execution begins
+pub const START_BLOCK: BasicBlock = BasicBlock(0);
+
+/// Where execution ends.
+pub const END_BLOCK: BasicBlock = BasicBlock(1);
 
 impl Mar {
     #[inline]
@@ -70,20 +82,6 @@ impl Mar {
     #[inline]
     pub fn basic_blocks_mut(&mut self) -> &mut IndexVec<BasicBlock, BasicBlockData> {
         &mut self.basic_blocks
-    }
-
-    pub fn all_basic_blocks(&self) -> Vec<BasicBlock> {
-        (0..self.basic_blocks.len())
-            .map(BasicBlock::new)
-            .collect()
-    }
-
-    pub fn basic_block_data(&self, bb: BasicBlock) -> &BasicBlockData {
-        &self.basic_blocks[bb]
-    }
-
-    pub fn basic_block_data_mut(&mut self, bb: BasicBlock) -> &mut BasicBlockData {
-        &mut self.basic_blocks[bb]
     }
 
     pub fn code_extent_data(&self, extent: CodeExtent) -> &CodeExtentData {
@@ -108,12 +106,6 @@ impl IndexMut<BasicBlock> for Mar {
         &mut self.basic_blocks_mut()[index]
     }
 }
-
-/// Where execution begins
-pub const START_BLOCK: BasicBlock = BasicBlock(0);
-
-/// Where execution ends.
-pub const END_BLOCK: BasicBlock = BasicBlock(1);
 
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
@@ -205,7 +197,8 @@ pub struct Terminator {
 pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
-        target: BasicBlock
+        target: BasicBlock,
+        end_scope: bool,
     },
 
     /// jump to target on next iteration.
@@ -239,7 +232,7 @@ pub enum TerminatorKind {
 impl Terminator {
     pub fn successors(&self) -> Vec<BasicBlock> {
         match self.kind {
-            TerminatorKind::Goto { target } => vec![target],
+            TerminatorKind::Goto { target, .. } => vec![target],
             TerminatorKind::Yield { target, .. } => vec![target],
             TerminatorKind::Match { ref targets, .. } => {
                 targets.iter().map(|arm| arm.block).collect()
@@ -252,7 +245,7 @@ impl Terminator {
 
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match self.kind {
-            TerminatorKind::Goto { ref mut target } => vec![target],
+            TerminatorKind::Goto { ref mut target, .. } => vec![target],
             TerminatorKind::Yield { ref mut target, .. } => vec![target],
             TerminatorKind::Match { ref mut targets, .. } => {
                 targets.iter_mut().map(|arm| &mut arm.block).collect()

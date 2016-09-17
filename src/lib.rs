@@ -2,6 +2,7 @@
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 
 extern crate aster;
+extern crate bit_vec;
 extern crate rustc_plugin;
 extern crate rustc_errors as errors;
 
@@ -18,7 +19,8 @@ use syntax::ext::base::{
     MultiModifier,
 };
 use syntax::print::pprust;
-pub use mar::transform::pass::MarPass;
+use mar::indexed_vec::Idx;
+use mar::repr::Mar;
 
 fn expand_state_machine(cx: &mut ExtCtxt,
                         _sp: Span,
@@ -45,18 +47,18 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
+    validate(cx, &mar);
+
     if let Some(item) = mar::translate::translate(cx, &mar) {
         debug!("{}", pprust::item_to_string(&item));
         debug!("-------");
     }
 
     let mut pass_manager = mar::transform::pass_manager::PassManager::new();
-    pass_manager.add_pass(Box::new(mar::transform::remove_dead_blocks::RemoveDeadBlocks::new()));
-    /*
     pass_manager.add_pass(Box::new(mar::transform::simplify_cfg::SimplifyCfg::new()));
-    pass_manager.add_pass(Box::new(mar::transform::remove_dead_blocks::RemoveDeadBlocks::new()));
-    */
     pass_manager.run(&mut mar);
+
+    validate(cx, &mar);
 
     match mar::translate::translate(cx, &mar) {
         Some(item) => {
@@ -68,6 +70,24 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         None => {
             // We had an error, so just return the input item for a lack of a better option.
             Annotatable::Item(item.clone())
+        }
+    }
+}
+
+fn validate(cx: &mut ExtCtxt, mar: &Mar) {
+    let basic_blocks = mar.basic_blocks();
+    for (bb, block) in basic_blocks.iter_enumerated() {
+        let terminator = block.terminator();
+
+        for succ in terminator.successors() {
+            if succ.index() >= basic_blocks.len() {
+                cx.span_bug(
+                    mar.span,
+                    &format!("block {:?} terminator does not exist: {:?} len: {:?}",
+                            bb,
+                            terminator.kind,
+                            basic_blocks.len()));
+            }
         }
     }
 }

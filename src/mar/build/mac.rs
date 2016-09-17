@@ -103,7 +103,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let loop_block = self.start_new_block(span, Some("AwaitLoop"));
         let exit_block = self.start_new_block(span, Some("AwaitExit"));
 
-        self.terminate(span, block, TerminatorKind::Goto { target: loop_block });
+        self.terminate(span, block, TerminatorKind::Goto {
+            target: loop_block,
+            end_scope: true,
+        });
 
         // Handle the ready arm.
         let ready_ident = builder.id("result");
@@ -138,6 +141,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         self.terminate(span, ready_arm_block, TerminatorKind::Goto {
             target: exit_block,
+            end_scope: true,
         });
 
         // Handle the not ready arm.

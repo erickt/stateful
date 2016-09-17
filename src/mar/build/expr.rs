@@ -68,7 +68,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.terminate(
                     then_expr.span,
                     then_block,
-                    TerminatorKind::Goto { target: join_block });
+                    TerminatorKind::Goto {
+                        target: join_block,
+                        end_scope: true,
+                    });
 
                 self.terminate(
                     match *else_expr {
@@ -76,7 +79,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         None => expr.span,
                     },
                     else_block,
-                    TerminatorKind::Goto { target: join_block });
+                    TerminatorKind::Goto {
+                        target: join_block,
+                        end_scope: true,
+                    });
 
                 join_block
             }
@@ -146,7 +152,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.terminate(
             body.span,
             block,
-            TerminatorKind::Goto { target: loop_block });
+            TerminatorKind::Goto {
+                target: loop_block,
+                end_scope: false,
+            });
 
         self.in_loop_scope(extent, label, loop_block, exit_block, |this| {
             // conduct the test, if necessary
@@ -174,7 +183,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             this.terminate(
                 body.span,
                 body_block_end,
-                TerminatorKind::Goto { target: loop_block });
+                TerminatorKind::Goto {
+                    target: loop_block,
+                    end_scope: true,
+                });
 
             this.assign_lvalue_unit(body.span, exit_block, destination);
 

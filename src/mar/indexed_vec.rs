@@ -12,7 +12,7 @@ use std::fmt::Debug;
 use std::iter::FromIterator;
 use std::slice;
 use std::marker::PhantomData;
-use std::ops::{Index, IndexMut};
+use std::ops::{Index, IndexMut, Range};
 use std::fmt;
 use std::vec;
 use std::u32;
@@ -90,8 +90,8 @@ impl<I: Idx, T> IndexVec<I, T> {
     }
 
     #[inline]
-    pub fn into_iter(self) -> vec::IntoIter<T> {
-        self.raw.into_iter()
+    pub fn into_iter_enumerated(self) -> Enumerated<I, vec::IntoIter<T>> {
+        Enumerated::new(self.raw.into_iter())
     }
 
     #[inline]
@@ -102,6 +102,21 @@ impl<I: Idx, T> IndexVec<I, T> {
     #[inline]
     pub fn iter_mut(&mut self) -> slice::IterMut<T> {
         self.raw.iter_mut()
+    }
+
+    #[inline]
+    pub fn iter_enumerated(&self) -> Enumerated<I, slice::Iter<T>> {
+        Enumerated::new(self.raw.iter())
+    }
+
+    #[inline]
+    pub fn indices(&self) -> Indices<I> {
+        Indices { iter: (0..self.len()), _marker: PhantomData }
+    }
+
+    #[inline]
+    pub fn iter_enumerated_mut(&mut self) -> Enumerated<I, slice::IterMut<T>> {
+        Enumerated::new(self.raw.iter_mut())
     }
 
     #[inline]
@@ -148,7 +163,6 @@ impl<I: Idx, T> IntoIterator for IndexVec<I, T> {
     fn into_iter(self) -> vec::IntoIter<T> {
         self.raw.into_iter()
     }
-
 }
 
 impl<'a, I: Idx, T> IntoIterator for &'a IndexVec<I, T> {
@@ -168,5 +182,52 @@ impl<'a, I: Idx, T> IntoIterator for &'a mut IndexVec<I, T> {
     #[inline]
     fn into_iter(mut self) -> slice::IterMut<'a, T> {
         self.raw.iter_mut()
+    }
+}
+
+pub struct Enumerated<I, Iter> {
+    iter: Iter,
+    idx: usize,
+    _marker: PhantomData<I>,
+}
+
+impl<I, Iter> Enumerated<I, Iter> {
+    fn new(iter: Iter) -> Self {
+        Enumerated {
+            iter: iter,
+            idx: 0,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<I: Idx, Iter: Iterator<Item=T>, T> Iterator for Enumerated<I, Iter> {
+    type Item = (I, T);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(item) => {
+                let idx = I::new(self.idx);
+                self.idx += 1;
+                Some((idx, item))
+            }
+            None => None,
+        }
+    }
+}
+
+pub struct Indices<I> {
+    iter: Range<usize>,
+    _marker: PhantomData<I>,
+}
+
+impl<I: Idx> Iterator for Indices<I> {
+    type Item = I;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(idx) => Some(I::new(idx)),
+            None => None,
+        }
     }
 }
