@@ -58,7 +58,7 @@ pub struct Mar {
     pub abi: abi::Abi,
     pub generics: ast::Generics,
 
-    pub input_decls: Vec<(Var, ast::Ident)>,
+    pub input_decls: Vec<LiveDecl>,
 
     pub var_decls: IndexVec<Var, VarDecl>,
 
@@ -117,6 +117,7 @@ pub struct VarDecl {
     pub mutability: ast::Mutability,
     pub ident: ast::Ident,
     pub ty: Option<P<ast::Ty>>,
+    pub shadowed_decl: Option<Var>,
 }
 
 #[derive(Debug)]
@@ -124,6 +125,12 @@ pub struct DeclaredDecl {
     pub span: Span,
     pub decl: Var,
     pub ty: Option<P<ast::Ty>>,
+}
+
+#[derive(Debug)]
+pub enum LiveDecl {
+    Active(Var),
+    Moved(Var),
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -135,7 +142,7 @@ newtype_index!(BasicBlock, "bb");
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub decls: Vec<(Var, ast::Ident)>,
+    pub decls: Vec<LiveDecl>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
@@ -143,7 +150,7 @@ pub struct BasicBlockData {
 impl BasicBlockData {
     pub fn new(span: Span,
                name: Option<&'static str>,
-               decls: Vec<(Var, ast::Ident)>,
+               decls: Vec<LiveDecl>,
                terminator: Option<Terminator>) -> Self {
         BasicBlockData {
             span: span,
@@ -158,7 +165,7 @@ impl BasicBlockData {
         self.name
     }
 
-    pub fn decls(&self) -> &[(Var, ast::Ident)] {
+    pub fn decls(&self) -> &[LiveDecl] {
         &self.decls
     }
 
@@ -319,10 +326,7 @@ pub enum Statement {
     Drop {
         span: Span,
         lvalue: Var,
-    },
-    Unshadow {
-        span: Span,
-        shadow: ShadowedDecl,
+        moved: bool,
     },
 }
 
@@ -332,8 +336,7 @@ impl Statement {
             Statement::Expr(ref stmt) => stmt.span,
             Statement::Declare { span, .. }
             | Statement::Let { span, .. }
-            | Statement::Drop { span, .. }
-            | Statement::Unshadow { span, .. } => span,
+            | Statement::Drop { span, .. } => span,
             Statement::Assign { ref lvalue, .. } => lvalue.span(),
         }
     }

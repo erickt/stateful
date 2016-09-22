@@ -28,7 +28,35 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(Var, ast::Ident)> {
-        self.mar[block].decls().to_vec()
+        let mut decls = vec![];
+
+        for live_decl in self.mar[block].decls() {
+            // Only add active decls to the state.
+            let var = match *live_decl {
+                LiveDecl::Active(var) => {
+                    decls.push((var, self.mar.var_decls[var].ident));
+                    var
+                }
+                LiveDecl::Moved(var) => var,
+            };
+
+            self.get_shadowed_decls(&mut decls, var);
+        }
+
+        debug!("decls: {:?} {:?}", block, decls);
+        debug!("---------------");
+
+        decls
+    }
+
+    fn get_shadowed_decls(&self, decls: &mut Vec<(Var, ast::Ident)>, var: Var) {
+        if let Some(decl) = self.mar.var_decls[var].shadowed_decl {
+            debug!("get_shadowed_decl: {:?} {:?}", decl, self.mar.var_decls[decl]);
+
+            decls.push((decl, self.shadowed_ident(decl)));
+
+            self.get_shadowed_decls(decls, decl);
+        }
     }
 
     pub fn state_expr(&self, span: Span, block: BasicBlock) -> P<ast::Expr> {

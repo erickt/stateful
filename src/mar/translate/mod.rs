@@ -1,4 +1,5 @@
 use aster::AstBuilder;
+use mar::indexed_vec::Idx;
 use mar::repr::*;
 use syntax::ast::{self, FunctionRetTy};
 use syntax::ext::base::ExtCtxt;
@@ -170,6 +171,13 @@ pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     ast_builder: AstBuilder,
     mar: &'a Mar,
+}
+
+impl<'a, 'b: 'a> Builder<'a, 'b> {
+    pub fn shadowed_ident(&self, decl: Var) -> ast::Ident {
+        let decl_ident = self.mar.var_decls[decl].ident;
+        self.ast_builder.id(format!("{}_shadowed_{}", decl_ident, decl.index()))
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////

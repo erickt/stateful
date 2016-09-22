@@ -1,7 +1,5 @@
-use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
-use mar::indexed_vec::Idx;
 use syntax::ast::{self, StmtKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
@@ -61,25 +59,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                  mut block: BasicBlock,
                  span: Span,
                  local: &P<ast::Local>) -> BasicBlock {
-        let mut decls = vec![];
-
-        for decl in self.get_decls_from_pat(&local.pat) {
-            let lvalue = self.var_decls[decl].ident;
-
-            let shadow = self.find_decl(lvalue).map(|decl| {
-                self.shadow(block, extent, span, decl)
-            });
-
-            decls.push((decl, shadow));
-        }
+        let decls = self.get_decls_from_pat(&local.pat);
 
         if decls.is_empty() {
             self.cx.span_bug(span, "No decls found?")
         } else if decls.len() == 1 {
-            let (decl, alias) = decls[0];
+            let decl = decls[0];
             self.var_decls[decl].ty = local.ty.clone();
 
-            self.declare_binding(span, decl, alias);
+            self.declare_binding(span, decl);
 
             if let Some(ref init) = local.init {
                 let destination = Lvalue::Var {
@@ -93,36 +81,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             block
         } else {
             self.cx.span_bug(span, "Cannot handle multiple decls at the moment?")
-        }
-    }
-
-    fn shadow(&mut self,
-              block: BasicBlock,
-              extent: CodeExtent,
-              span: Span,
-              decl: Var) -> ShadowedDecl {
-        let lvalue = self.var_decls[decl].ident;
-
-        let ast_builder = AstBuilder::new().span(span);
-        let alias = ast_builder.id(format!("{}_shadowed_{}", lvalue, decl.index()));
-        let alias_decl = self.push_decl(ast::Mutability::Immutable, alias, None);
-
-        self.cfg.push_declare_decl(
-            block,
-            span,
-            alias_decl,
-            None);
-
-        let destination = Lvalue::Var {
-            span: span,
-            decl: alias_decl,
-        };
-
-        self.into(destination, extent, block, ast_builder.expr().id(lvalue));
-
-        ShadowedDecl {
-            lvalue: alias,
-            decl: decl,
         }
     }
 }

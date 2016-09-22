@@ -16,7 +16,7 @@ impl CFG {
     pub fn start_new_block(&mut self,
                            span: Span,
                            name: Option<&'static str>,
-                           decls: Vec<(Var, ast::Ident)>) -> BasicBlock {
+                           decls: Vec<LiveDecl>) -> BasicBlock {
         self.basic_blocks.push(BasicBlockData::new(span, name, decls, None))
     }
 
@@ -27,20 +27,12 @@ impl CFG {
     pub fn push_drop(&mut self,
                      block: BasicBlock,
                      span: Span,
-                     decl: Var) {
+                     decl: Var,
+                     moved: bool) {
         self.block_data_mut(block).statements.push(Statement::Drop {
             span: span,
             lvalue: decl,
-        });
-    }
-
-    pub fn push_unshadow(&mut self,
-                         block: BasicBlock,
-                         span: Span,
-                         shadow: ShadowedDecl) {
-        self.block_data_mut(block).statements.push(Statement::Unshadow {
-            span: span,
-            shadow: shadow,
+            moved: moved,
         });
     }
 

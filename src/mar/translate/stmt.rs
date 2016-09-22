@@ -7,14 +7,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
             Statement::Declare { span, decl, ref ty } => {
-                let id = self.mar.var_decl_data(decl).ident;
+                let ast_builder = self.ast_builder.span(span);
 
-                vec![
+                let decl = self.mar.var_decl_data(decl);
+
+                let mut stmts = vec![];
+
+                if let Some(shadowed_decl) = decl.shadowed_decl {
+                    let shadowed_ident = self.shadowed_ident(shadowed_decl);
+
+                    stmts.push(
+                        ast_builder.stmt().let_id(shadowed_ident).id(decl.ident)
+                    );
+                }
+
+                stmts.push(
                     self.ast_builder.span(span).stmt().build_let(
-                        self.ast_builder.pat().id(id),
+                        self.ast_builder.pat().id(decl.ident),
                         ty.clone(),
                         None)
-                ]
+                );
+
+                stmts
             }
             Statement::Let { span, ref pat, ref ty, ref init } => {
                 vec![
@@ -55,36 +69,37 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            Statement::Drop { span, lvalue } => {
-                let id = self.mar.var_decl_data(lvalue).ident;
+            Statement::Drop { span, lvalue, moved } => {
+                let ast_builder = self.ast_builder.span(span);
+                let decl = self.mar.var_decl_data(lvalue);
 
                 // We need an explicit drop here to make sure we drop variables as they go out of
                 // a block scope. Otherwise, they won't be dropped until the next yield point,
                 // which wouldn't match the Rust semantics.
-                vec![
-                    self.ast_builder
-                        .span(span)
-                        .stmt().semi().call()
+                let mut stmts = vec![];
+
+                // Only drop if we were not moved.
+                if !moved {
+                    stmts.push(
+                        ast_builder.stmt().semi().call()
                             .path()
                                 .global()
                                 .ids(&["std", "mem", "drop"])
                                 .build()
-                        .arg().id(id)
-                        .build()
-                ]
-            }
-            Statement::Unshadow { span, ref shadow } => {
-                let (mode, ident) = {
-                    let decl = self.mar.var_decl_data(shadow.decl);
-                    let mode = ast::BindingMode::ByValue(decl.mutability);
-                    (mode, decl.ident)
-                };
+                            .arg().id(decl.ident)
+                            .build()
+                    );
+                }
 
-                vec![
-                    self.ast_builder.span(span).stmt()
-                        .let_().build_id(mode, ident, None)
-                        .expr().id(shadow.lvalue)
-                ]
+                if let Some(shadowed_decl) = decl.shadowed_decl {
+                    let shadowed_ident = self.shadowed_ident(shadowed_decl);
+
+                    stmts.push(
+                        ast_builder.stmt().let_id(decl.ident).id(shadowed_ident)
+                    );
+                }
+
+                stmts
             }
         }
     }

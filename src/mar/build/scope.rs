@@ -15,7 +15,6 @@ tracks where a `break` and `continue` should go to.
 
 use aster::AstBuilder;
 use mar::build::{Builder, CFG};
-use mar::indexed_vec::Idx;
 use mar::repr::*;
 use std::ascii::AsciiExt;
 use std::collections::{HashMap, HashSet};
@@ -36,14 +35,12 @@ pub struct Scope {
 struct ForwardDecl {
     span: Span,
     decl: Var,
-    shadow: Option<ShadowedDecl>,
 }
 
 #[derive(Debug)]
 struct DropData {
     span: Span,
     decl: Var,
-    shadow: Option<ShadowedDecl>,
 }
 
 impl From<ForwardDecl> for DropData {
@@ -51,7 +48,6 @@ impl From<ForwardDecl> for DropData {
         DropData {
             span: forward_decl.span,
             decl: forward_decl.decl,
-            shadow: forward_decl.shadow,
         }
     }
 }
@@ -205,17 +201,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             });
     }
 
-    pub fn declare_binding(&mut self,
-                           span: Span,
-                           decl: Var,
-                           shadow: Option<ShadowedDecl>) {
+    pub fn declare_decl(&mut self,
+                        mutability: ast::Mutability,
+                        ident: ast::Ident,
+                        ty: Option<P<ast::Ty>>) -> Var {
+        let shadowed_decl = self.find_decl(ident);
+
+        let decl = self.var_decls.push(VarDecl {
+            mutability: mutability,
+            ident: ident,
+            ty: ty,
+            shadowed_decl: shadowed_decl,
+        });
+
+        debug!("declaring {:?} as {:?} shadowing {:?}", ident, decl, shadowed_decl);
+
+        decl
+    }
+
+    pub fn declare_binding(&mut self, span: Span, decl: Var) {
         if let Some(scope) = self.scopes.last_mut() {
             let ident = self.var_decls[decl].ident;
 
             scope.forward_decls.insert(ident, ForwardDecl {
                 span: span,
                 decl: decl,
-                shadow: shadow,
             });
         } else {
             self.cx.span_bug(span, "no scopes?");
@@ -319,41 +329,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// This function constructs a vector of all of the variables in scope, and returns if the
     /// variables are currently shadowed.
-    pub fn find_live_decls(&self) -> Vec<(Var, ast::Ident)> {
+    pub fn find_live_decls(&self) -> Vec<LiveDecl> {
         let mut decls = vec![];
         let mut visited_decls = HashSet::new();
-
-        debug!("find_live_decls: scopes: {:?}", self.scopes);
 
         // We build up the list of declarations by walking up the scopes, and walking through each
         // scope backwards. If this is the first time we've seen a variable with this name, we just
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
-            debug!("find_live_decls: scope: {:?}", scope.moved_decls);
-
             for dropped_decl in scope.drops.iter().rev() {
                 let decl = dropped_decl.decl;
                 let ident = self.var_decls[decl].ident;
 
-                if scope.moved_decls.contains(&decl) {
-                    debug!("find_live_decls: decl moved {:?}", decl);
-
-                    if let Some(shadow) = dropped_decl.shadow {
-                        if visited_decls.insert(ident) {
-                        } else {
-                            decls.push((shadow.decl, shadow.lvalue));
-                        }
+                if visited_decls.insert(ident) {
+                    if scope.moved_decls.contains(&decl) {
+                        debug!("find_live_decls: decl moved {:?}", decl);
+                        decls.push(LiveDecl::Moved(decl));
+                    } else {
+                        decls.push(LiveDecl::Active(decl));
                     }
-                } else if visited_decls.insert(ident) {
-                        // We haven't seen this decl before, so keep it's name.
-                        decls.push((decl, ident));
-                } else {
-                    // Otherwise, we need to rename it.
-                    let shadowed_ident = AstBuilder::new().id(
-                        format!("{}_shadowed_{}", ident, decl.index()));
-
-                    decls.push((decl, shadowed_ident));
                 }
             }
         }
@@ -365,17 +360,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
-    pub fn schedule_drop(&mut self,
-                         span: Span,
-                         extent: CodeExtent,
-                         decl: Var,
-                         shadow: Option<ShadowedDecl>) {
+    pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, decl: Var) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
                 scope.drops.push(DropData {
                     span: span,
                     decl: decl,
-                    shadow: shadow,
                 });
                 return;
             }
@@ -398,8 +388,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     {
         for pat in pats {
             for decl in self.add_decls_from_pat(pat.span, extent, pat) {
-                let ident = self.var_decls[decl].ident;
-                self.cfg.block_data_mut(block).decls.push((decl, ident));
+                self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(decl));
             }
         }
     }
@@ -411,7 +400,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let decls = self.get_decls_from_pat(pat);
 
         for decl in &decls {
-            self.schedule_drop(span, extent, *decl, None);
+            self.schedule_drop(span, extent, *decl);
         }
 
         decls
@@ -432,11 +421,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let first_char = id_str.chars().next().unwrap();
 
                         if first_char == first_char.to_ascii_lowercase() {
-                            let var = self.builder.var_decls.push(VarDecl {
-                                mutability: mutability,
-                                ident: id.node,
-                                ty: None,
-                            });
+                            let var = self.builder.declare_decl(
+                                mutability,
+                                id.node,
+                                None,
+                            );
                             self.new_vars.push(var);
                         }
                     }
@@ -509,35 +498,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         None
     }
-
-    pub fn push_decl(&mut self,
-                     mutability: ast::Mutability,
-                     ident: ast::Ident,
-                     ty: Option<P<ast::Ty>>) -> Var {
-        self.var_decls.push(VarDecl {
-            mutability: mutability,
-            ident: ident,
-            ty: ty,
-        })
-    }
 }
 
 fn drop_decl(cfg: &mut CFG,
              block: BasicBlock,
              scope: &Scope,
              dropped_decl: &DropData) {
-    if !scope.moved_decls.contains(&dropped_decl.decl) {
-        debug!("pop_scope: decl moved {:?}", dropped_decl.decl);
-        cfg.push_drop(
-            block,
-            dropped_decl.span,
-            dropped_decl.decl);
-    }
-
-    if let Some(shadow) = dropped_decl.shadow {
-        cfg.push_unshadow(
-            block,
-            dropped_decl.span,
-            shadow);
-    }
+    let moved = scope.moved_decls.contains(&dropped_decl.decl);
+    cfg.push_drop(
+        block,
+        dropped_decl.span,
+        dropped_decl.decl,
+        moved,
+    );
 }

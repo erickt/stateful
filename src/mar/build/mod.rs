@@ -71,19 +71,19 @@ pub fn construct(cx: &ExtCtxt,
 
     // Register return pointer.
     let return_ident = AstBuilder::new().id("return_");
-    let return_decl = builder.push_decl(
+    let return_decl = builder.declare_decl(
         ast::Mutability::Immutable,
         return_ident,
         None,
     );
 
-    builder.declare_binding(item.span, return_decl, None);
+    builder.declare_binding(item.span, return_decl);
 
     let destination = Lvalue::Var {
         span: ast_block.span,
         decl: return_decl,
     };
-    builder.cfg.block_data_mut(END_BLOCK).decls.push((return_decl, return_ident));
+    builder.cfg.block_data_mut(END_BLOCK).decls.push(LiveDecl::Active(return_decl));
 
     block = builder.ast_block(destination, extent, block, &ast_block);
 
@@ -132,7 +132,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
               unsafety: ast::Unsafety,
               abi: abi::Abi,
               generics: ast::Generics,
-              live_decls: Vec<(Var, ast::Ident)>) -> Mar {
+              live_decls: Vec<LiveDecl>) -> Mar {
         for (index, block) in self.cfg.basic_blocks.iter().enumerate() {
             if block.terminator.is_none() {
                 self.cx.span_bug(
