@@ -77,8 +77,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_bug(span, "No decls found?")
         } else if decls.len() == 1 {
             let (decl, alias) = decls[0];
+            self.var_decls[decl].ty = local.ty.clone();
 
-            self.schedule_forward_decl(span, decl, local.ty.clone(), alias);
+            self.declare_binding(span, decl, alias);
 
             if let Some(ref init) = local.init {
                 let destination = Lvalue::Var {

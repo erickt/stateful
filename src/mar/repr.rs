@@ -119,18 +119,6 @@ pub struct VarDecl {
     pub ty: Option<P<ast::Ty>>,
 }
 
-impl VarDecl {
-    pub fn new(mutability: ast::Mutability,
-               ident: ast::Ident,
-               ty: Option<P<ast::Ty>>) -> Self {
-        VarDecl {
-            mutability: mutability,
-            ident: ident,
-            ty: ty,
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct DeclaredDecl {
     pub span: Span,

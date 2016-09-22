@@ -28,29 +28,27 @@ use syntax::visit;
 pub struct Scope {
     extent: CodeExtent,
     forward_decls: HashMap<ast::Ident, ForwardDecl>,
-    drops: Vec<DropDecl>,
+    drops: Vec<DropData>,
     moved_decls: HashSet<Var>,
 }
-
 
 #[derive(Debug)]
 struct ForwardDecl {
     span: Span,
     decl: Var,
-    ty: Option<P<ast::Ty>>,
     shadow: Option<ShadowedDecl>,
 }
 
 #[derive(Debug)]
-struct DropDecl {
+struct DropData {
     span: Span,
     decl: Var,
     shadow: Option<ShadowedDecl>,
 }
 
-impl From<ForwardDecl> for DropDecl {
+impl From<ForwardDecl> for DropData {
     fn from(forward_decl: ForwardDecl) -> Self {
-        DropDecl {
+        DropData {
             span: forward_decl.span,
             decl: forward_decl.decl,
             shadow: forward_decl.shadow,
@@ -207,18 +205,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             });
     }
 
-    pub fn schedule_forward_decl(&mut self,
-                                 span: Span,
-                                 decl: Var,
-                                 ty: Option<P<ast::Ty>>,
-                                 shadow: Option<ShadowedDecl>) {
+    pub fn declare_binding(&mut self,
+                           span: Span,
+                           decl: Var,
+                           shadow: Option<ShadowedDecl>) {
         if let Some(scope) = self.scopes.last_mut() {
             let ident = self.var_decls[decl].ident;
 
             scope.forward_decls.insert(ident, ForwardDecl {
                 span: span,
                 decl: decl,
-                ty: ty,
                 shadow: shadow,
             });
         } else {
@@ -243,10 +239,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     block,
                     forward_decl.span,
                     forward_decl.decl,
-                    forward_decl.ty.clone(),
+                    self.var_decls[forward_decl.decl].ty.clone(),
                 );
 
-                scope.drops.push(DropDecl::from(forward_decl));
+                scope.drops.push(DropData::from(forward_decl));
                 break;
             }
         }
@@ -266,10 +262,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         block,
                         forward_decl.span,
                         forward_decl.decl,
-                        forward_decl.ty.clone(),
+                        self.var_decls[forward_decl.decl].ty.clone(),
                     );
 
-                    scope.drops.push(DropDecl::from(forward_decl));
+                    scope.drops.push(DropData::from(forward_decl));
                     break;
                 }
             }
@@ -376,7 +372,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          shadow: Option<ShadowedDecl>) {
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
-                scope.drops.push(DropDecl {
+                scope.drops.push(DropData {
                     span: span,
                     decl: decl,
                     shadow: shadow,
@@ -518,14 +514,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      mutability: ast::Mutability,
                      ident: ast::Ident,
                      ty: Option<P<ast::Ty>>) -> Var {
-        self.var_decls.push(VarDecl::new(mutability, ident, ty))
+        self.var_decls.push(VarDecl {
+            mutability: mutability,
+            ident: ident,
+            ty: ty,
+        })
     }
 }
 
 fn drop_decl(cfg: &mut CFG,
              block: BasicBlock,
              scope: &Scope,
-             dropped_decl: &DropDecl) {
+             dropped_decl: &DropData) {
     if !scope.moved_decls.contains(&dropped_decl.decl) {
         debug!("pop_scope: decl moved {:?}", dropped_decl.decl);
         cfg.push_drop(

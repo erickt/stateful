@@ -77,7 +77,7 @@ pub fn construct(cx: &ExtCtxt,
         None,
     );
 
-    builder.schedule_forward_decl(item.span, return_decl, None, None);
+    builder.declare_binding(item.span, return_decl, None);
 
     let destination = Lvalue::Var {
         span: ast_block.span,
