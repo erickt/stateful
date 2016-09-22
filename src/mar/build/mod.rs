@@ -2,6 +2,7 @@ use aster::AstBuilder;
 use mar::build::simplify::simplify_item;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
+use syntax::abi;
 use syntax::ast::{self, ItemKind};
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
@@ -10,16 +11,26 @@ use syntax::ptr::P;
 #[derive(Debug)]
 pub struct CFG {
     basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
-    var_decls: IndexVec<Var, VarDecl>,
 }
 
 pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
-    state_machine_kind: StateMachineKind,
     cfg: CFG,
+    state_machine_kind: StateMachineKind,
+
+    fn_span: Span,
+
+    /// the current set of scopes, updated as we traverse;
+    /// see the `scope` module for more details
     scopes: Vec<scope::Scope>,
+
+    /// the current set of loops; see the `scope` module for more
+    /// details
     loop_scopes: Vec<scope::LoopScope>,
+
     extents: IndexVec<CodeExtent, CodeExtentData>,
+
+    var_decls: IndexVec<Var, VarDecl>,
 }
 
 #[derive(Debug)]
@@ -45,22 +56,8 @@ pub fn construct(cx: &ExtCtxt,
         }
     };
 
-    let mut builder = Builder {
-        cx: cx,
-        state_machine_kind: state_machine_kind,
-        cfg: CFG {
-            basic_blocks: IndexVec::new(),
-            var_decls: IndexVec::new(),
-        },
-        scopes: vec![],
-        loop_scopes: vec![],
-        extents: IndexVec::new(),
-    };
-
+    let mut builder = Builder::new(cx, item.span, state_machine_kind);
     let extent = builder.start_new_extent();
-
-    assert_eq!(builder.start_new_block(item.span, Some("Start")), START_BLOCK);
-    assert_eq!(builder.start_new_block(item.span, Some("End")), END_BLOCK);
 
     let mut block = START_BLOCK;
 
@@ -74,7 +71,7 @@ pub fn construct(cx: &ExtCtxt,
 
     // Register return pointer.
     let return_ident = AstBuilder::new().id("return_");
-    let return_decl = builder.cfg.push_decl(
+    let return_decl = builder.push_decl(
         ast::Mutability::Immutable,
         return_ident,
         None,
@@ -100,22 +97,65 @@ pub fn construct(cx: &ExtCtxt,
     });
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
 
-    Ok(Mar {
-        state_machine_kind: builder.state_machine_kind,
-        span: item.span,
-        ident: item.ident,
-        fn_decl: fn_decl.clone(),
-        unsafety: unsafety,
-        abi: abi,
-        generics: generics.clone(),
-        input_decls: live_decls,
-        basic_blocks: builder.cfg.basic_blocks,
-        var_decls: builder.cfg.var_decls,
-        extents: builder.extents,
-    })
+    Ok(builder.finish(item.ident,
+                      fn_decl,
+                      unsafety,
+                      abi,
+                      generics,
+                      live_decls))
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
+    fn new(cx: &'a ExtCtxt<'b>,
+           span: Span,
+           state_machine_kind: StateMachineKind) -> Self {
+        let mut builder = Builder {
+            cx: cx,
+            cfg: CFG { basic_blocks: IndexVec::new() },
+            fn_span: span,
+            state_machine_kind: state_machine_kind,
+            scopes: vec![],
+            loop_scopes: vec![],
+            var_decls: IndexVec::new(),
+            extents: IndexVec::new(),
+        };
+
+        assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
+        assert_eq!(builder.start_new_block(span, Some("End")), END_BLOCK);
+
+        builder
+    }
+
+    fn finish(self,
+              ident: ast::Ident,
+              fn_decl: P<ast::FnDecl>,
+              unsafety: ast::Unsafety,
+              abi: abi::Abi,
+              generics: ast::Generics,
+              live_decls: Vec<(Var, ast::Ident)>) -> Mar {
+        for (index, block) in self.cfg.basic_blocks.iter().enumerate() {
+            if block.terminator.is_none() {
+                self.cx.span_bug(
+                    self.fn_span,
+                    &format!("no terminator on block {:?}", index));
+            }
+        }
+
+        Mar {
+            state_machine_kind: self.state_machine_kind,
+            span: self.fn_span,
+            ident: ident,
+            fn_decl: fn_decl.clone(),
+            unsafety: unsafety,
+            abi: abi,
+            generics: generics.clone(),
+            input_decls: live_decls,
+            basic_blocks: self.cfg.basic_blocks,
+            var_decls: self.var_decls,
+            extents: self.extents,
+        }
+    }
+
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
         self.cfg.start_new_block(span, name, decls)

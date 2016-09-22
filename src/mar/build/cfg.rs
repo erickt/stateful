@@ -80,21 +80,6 @@ impl CFG {
         });
     }
 
-    pub fn var_decl_data(&self, decl: Var) -> &VarDecl {
-        &self.var_decls[decl]
-    }
-
-    pub fn var_decl_data_mut(&mut self, decl: Var) -> &mut VarDecl {
-        &mut self.var_decls[decl]
-    }
-
-    pub fn push_decl(&mut self,
-                     mutability: ast::Mutability,
-                     ident: ast::Ident,
-                     ty: Option<P<ast::Ty>>) -> Var {
-        self.var_decls.push(VarDecl::new(mutability, ident, ty))
-    }
-
     pub fn temp_lvalue(&mut self, span: Span, name: Option<&'static str>) -> Lvalue {
         Lvalue::Temp {
             span: span,

@@ -63,8 +63,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                  local: &P<ast::Local>) -> BasicBlock {
         let mut decls = vec![];
 
-        for (decl, _) in self.get_decls_from_pat(&local.pat) {
-            let lvalue = self.cfg.var_decl_data(decl).ident;
+        for decl in self.get_decls_from_pat(&local.pat) {
+            let lvalue = self.var_decls[decl].ident;
 
             let shadow = self.find_decl(lvalue).map(|decl| {
                 self.shadow(block, extent, span, decl)
@@ -100,11 +100,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
               extent: CodeExtent,
               span: Span,
               decl: Var) -> ShadowedDecl {
-        let lvalue = self.cfg.var_decl_data(decl).ident;
+        let lvalue = self.var_decls[decl].ident;
 
         let ast_builder = AstBuilder::new().span(span);
         let alias = ast_builder.id(format!("{}_shadowed_{}", lvalue, decl.index()));
-        let alias_decl = self.cfg.push_decl(ast::Mutability::Immutable, alias, None);
+        let alias_decl = self.push_decl(ast::Mutability::Immutable, alias, None);
 
         self.cfg.push_declare_decl(
             block,

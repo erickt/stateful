@@ -20,7 +20,6 @@ use mar::repr::*;
 use std::ascii::AsciiExt;
 use std::collections::{HashMap, HashSet};
 use syntax::ast::{self, PatKind};
-use syntax::ext::base::ExtCtxt;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::visit;
@@ -214,7 +213,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                  ty: Option<P<ast::Ty>>,
                                  shadow: Option<ShadowedDecl>) {
         if let Some(scope) = self.scopes.last_mut() {
-            let ident = self.cfg.var_decl_data(decl).ident;
+            let ident = self.var_decls[decl].ident;
 
             scope.forward_decls.insert(ident, ForwardDecl {
                 span: span,
@@ -233,8 +232,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for scope in self.scopes.iter_mut().rev() {
             // Check if we are shadowing another variable.
             for dropped_decl in scope.drops.iter().rev() {
-                let decl_data = self.cfg.var_decl_data(dropped_decl.decl);
-                if lvalue == decl_data.ident {
+                if lvalue == self.var_decls[dropped_decl.decl].ident {
                     return;
                 }
             }
@@ -259,7 +257,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          lvalue: Lvalue,
                          rvalue: P<ast::Expr>) {
         if let Some(lvalue_decl) = lvalue.decl() {
-            let lvalue_ident = self.cfg.var_decl_data(lvalue_decl).ident;
+            let lvalue_ident = self.var_decls[lvalue_decl].ident;
 
             for scope in self.scopes.iter_mut().rev() {
                 // Declare the lvalue now that we're assigning to it.
@@ -292,8 +290,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
             for dropped_decl in scope.drops.iter().rev() {
-                let decl_data = self.cfg.var_decl_data(dropped_decl.decl);
-                if lvalue == decl_data.ident {
+                if lvalue == self.var_decls[dropped_decl.decl].ident {
                     return Some(dropped_decl.decl);
                 }
             }
@@ -341,7 +338,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             for dropped_decl in scope.drops.iter().rev() {
                 let decl = dropped_decl.decl;
-                let ident = self.cfg.var_decl_data(decl).ident;
+                let ident = self.var_decls[decl].ident;
 
                 if scope.moved_decls.contains(&decl) {
                     debug!("find_live_decls: decl moved {:?}", decl);
@@ -404,32 +401,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
-            let decls = self.add_decls_from_pat(pat.span, extent, pat);
-            self.cfg.block_data_mut(block).decls.extend(decls);
+            for decl in self.add_decls_from_pat(pat.span, extent, pat) {
+                let ident = self.var_decls[decl].ident;
+                self.cfg.block_data_mut(block).decls.push((decl, ident));
+            }
         }
     }
 
     pub fn add_decls_from_pat(&mut self,
                               span: Span,
                               extent: CodeExtent,
-                              pat: &P<ast::Pat>) -> Vec<(Var, ast::Ident)> {
+                              pat: &P<ast::Pat>) -> Vec<Var> {
         let decls = self.get_decls_from_pat(pat);
 
-        for &(decl, _) in &decls {
-            self.schedule_drop(span, extent, decl, None);
+        for decl in &decls {
+            self.schedule_drop(span, extent, *decl, None);
         }
 
         decls
     }
 
-    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<(Var, ast::Ident)> {
-        struct Visitor<'a, 'b: 'a> {
-            cx: &'a ExtCtxt<'b>,
-            cfg: &'a mut CFG,
-            var_decls: Vec<(Var, ast::Ident)>,
+    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<Var> {
+        struct Visitor<'a, 'b: 'a, 'c: 'b> {
+            builder: &'a mut Builder<'b, 'c>,
+            new_vars: Vec<Var>,
         }
 
-        impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
+        impl<'a, 'b: 'a, 'c: 'b> visit::Visitor for Visitor<'a, 'b, 'c> {
             fn visit_pat(&mut self, pat: &ast::Pat) {
                 match pat.node {
                     PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
@@ -438,12 +436,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let first_char = id_str.chars().next().unwrap();
 
                         if first_char == first_char.to_ascii_lowercase() {
-                            let decl = self.cfg.push_decl(mutability, id.node, None);
-                            self.var_decls.push((decl, id.node));
+                            let var = self.builder.var_decls.push(VarDecl {
+                                mutability: mutability,
+                                ident: id.node,
+                                ty: None,
+                            });
+                            self.new_vars.push(var);
                         }
                     }
                     PatKind::Ident(..) => {
-                        self.cx.span_bug(pat.span, &format!("Canot handle pat {:?}", pat))
+                        self.builder.cx.span_bug(
+                            pat.span,
+                            &format!("Canot handle pat {:?}", pat))
                     }
                     _ => { }
                 }
@@ -455,14 +459,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         let mut visitor = Visitor {
-            cx: self.cx,
-            cfg: &mut self.cfg,
-            var_decls: Vec::new(),
+            builder: self,
+            new_vars: vec![],
         };
 
         visit::Visitor::visit_pat(&mut visitor, pat);
 
-        visitor.var_decls
+        visitor.new_vars
     }
 
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Var> {
@@ -509,6 +512,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         None
+    }
+
+    pub fn push_decl(&mut self,
+                     mutability: ast::Mutability,
+                     ident: ast::Ident,
+                     ty: Option<P<ast::Ty>>) -> Var {
+        self.var_decls.push(VarDecl::new(mutability, ident, ty))
     }
 }
 
