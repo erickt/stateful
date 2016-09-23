@@ -194,12 +194,6 @@ pub enum TerminatorKind {
         end_scope: bool,
     },
 
-    /// jump to target on next iteration.
-    Yield {
-        expr: P<ast::Expr>,
-        target: BasicBlock,
-    },
-
     /// jump to branch 0 if this lvalue evaluates to true
     If {
         cond: P<ast::Expr>,
@@ -220,26 +214,33 @@ pub enum TerminatorKind {
     Await {
         target: BasicBlock,
     },
+
+    /// jump to target on next iteration.
+    Suspend {
+        // FIXME: We don't yet support resuming the coroutine with a value yet.
+        // lvalue: Lvalue,
+        rvalue: P<ast::Expr>,
+        target: BasicBlock,
+    },
 }
 
 impl Terminator {
     pub fn successors(&self) -> Vec<BasicBlock> {
         match self.kind {
             TerminatorKind::Goto { target, .. } => vec![target],
-            TerminatorKind::Yield { target, .. } => vec![target],
             TerminatorKind::Match { ref targets, .. } => {
                 targets.iter().map(|arm| arm.block).collect()
             }
             TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
             TerminatorKind::Return => vec![],
             TerminatorKind::Await { target } => vec![target],
+            TerminatorKind::Suspend { target, .. } => vec![target],
         }
     }
 
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match self.kind {
             TerminatorKind::Goto { ref mut target, .. } => vec![target],
-            TerminatorKind::Yield { ref mut target, .. } => vec![target],
             TerminatorKind::Match { ref mut targets, .. } => {
                 targets.iter_mut().map(|arm| &mut arm.block).collect()
             }
@@ -248,6 +249,7 @@ impl Terminator {
             }
             TerminatorKind::Return => vec![],
             TerminatorKind::Await { ref mut target } => vec![target],
+            TerminatorKind::Suspend { ref mut target, .. } => vec![target],
         }
     }
 }

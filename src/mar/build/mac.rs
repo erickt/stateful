@@ -16,7 +16,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         match self.state_machine_kind {
             StateMachineKind::Generator => {
                 if transition::is_yield_path(&mac.node.path) {
-                    Some(self.mac_yield(block, mac))
+                    let destination = self.cfg.temp_lvalue(mac.span, Some("_yield_temp"));
+
+                    Some(self.mac_yield(destination, block, mac))
                 } else {
                     None
                 }
@@ -41,8 +43,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         match self.state_machine_kind {
             StateMachineKind::Generator => {
                 if transition::is_yield_path(&mac.node.path) {
-                    block = self.mac_yield(block, mac);
-                    self.assign_lvalue_unit(mac.span, block, destination);
+                    block = self.mac_yield(destination, block, mac);
                 }
             }
             StateMachineKind::Async => {
@@ -55,18 +56,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         block
     }
 
-    fn mac_yield(&mut self, block: BasicBlock, mac: &ast::Mac) -> BasicBlock {
+    fn mac_yield(&mut self,
+                 destination: Lvalue,
+                 block: BasicBlock,
+                 mac: &ast::Mac) -> BasicBlock {
         let expr = parse_mac_yield(self.cx, mac);
         let expr = self.expand_moved(&expr);
 
-        let next_block = self.start_new_block(mac.span, Some("AfterYield"));
-
-        self.terminate(mac.span, block, TerminatorKind::Yield {
-            expr: expr,
-            target: next_block,
-        });
-
-        next_block
+        self.expr_yield(destination, block, expr)
     }
 
     fn mac_await(&mut self,

@@ -69,24 +69,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build()
                 ]
             }
-            TerminatorKind::Yield { ref expr, target } => {
-                let ast_builder = ast_builder.span(expr.span);
-                let yielded_expr = ast_builder.expr()
-                    .some()
-                    .build(expr.clone());
-                let next_state = self.state_expr(terminator.span, target);
-
-                let tuple = ast_builder.expr().tuple()
-                    .expr().build(yielded_expr)
-                    .expr().build(next_state)
-                    .build();
-
-                vec![
-                    ast_builder.stmt().semi()
-                        .return_expr()
-                        .build(tuple)
-                ]
-            }
             TerminatorKind::Return => {
                 let next_state = ast_builder.expr().path()
                     .span(self.mar.span)
@@ -137,6 +119,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let tuple = ast_builder.expr().ok().tuple()
                     .expr().build(awaited_expr)
+                    .expr().build(next_state)
+                    .build();
+
+                vec![
+                    ast_builder.stmt().semi()
+                        .return_expr()
+                        .build(tuple)
+                ]
+            }
+            TerminatorKind::Suspend { ref rvalue, target } => {
+                let ast_builder = ast_builder.span(rvalue.span);
+                let next_state = self.state_expr(terminator.span, target);
+
+                let tuple = ast_builder.expr().tuple()
+                    .expr().build(rvalue.clone())
                     .expr().build(next_state)
                     .build();
 

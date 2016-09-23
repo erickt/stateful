@@ -222,3 +222,4 @@ mod moved;
 mod scope;
 mod transition;
 mod simplify;
+mod suspend;
