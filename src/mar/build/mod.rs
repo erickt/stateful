@@ -163,7 +163,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn start_new_extent(&mut self) -> CodeExtent {
         let extent = CodeExtent::new(self.extents.len());
-        self.extents.push(CodeExtentData::Misc(0));
+        self.extents.push(CodeExtentData::Misc(ast::DUMMY_NODE_ID));
 
         extent
     }

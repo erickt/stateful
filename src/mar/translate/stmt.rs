@@ -17,23 +17,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     let shadowed_ident = self.shadowed_ident(shadowed_decl);
 
                     stmts.push(
-                        ast_builder.stmt().let_id(shadowed_ident).id(decl.ident)
+                        ast_builder.stmt().let_id(shadowed_ident)
+                        .expr().id(decl.ident)
                     );
                 }
 
                 stmts.push(
-                    self.ast_builder.span(span).stmt().build_let(
-                        self.ast_builder.pat().id(decl.ident),
-                        ty.clone(),
-                        None)
+                    self.ast_builder.span(span).stmt().let_id(decl.ident)
+                        .build_option_ty(ty.clone())
+                        .build()
                 );
 
                 stmts
             }
             Statement::Let { span, ref pat, ref ty, ref init } => {
                 vec![
-                    self.ast_builder.span(span).stmt()
-                        .build_let(pat.clone(), ty.clone(), init.clone())
+                    self.ast_builder.span(span).stmt().let_()
+                        .build(pat.clone())
+                        .build_option_ty(ty.clone())
+                        .build_option_expr(init.clone())
                 ]
 
             }
@@ -52,7 +54,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         if let Some(name) = name {
                             vec![
                                 self.ast_builder.span(span).stmt().let_id(name)
-                                    .build(rvalue.clone())
+                                    .expr().build(rvalue.clone())
                             ]
                         } else {
                             vec![
@@ -95,7 +97,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     let shadowed_ident = self.shadowed_ident(shadowed_decl);
 
                     stmts.push(
-                        ast_builder.stmt().let_id(decl.ident).id(shadowed_ident)
+                        ast_builder.stmt().let_id(decl.ident).expr().id(shadowed_ident)
                     );
                 }
 

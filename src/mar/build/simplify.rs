@@ -10,7 +10,7 @@ use mar::build::transition::ContainsTransition;
 
 pub fn simplify_item(item: P<Item>) -> Item {
     let mut expander = Expander::new();
-    let mut assigner = Assigner { next_node_id: 1 };
+    let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
 
     let expanded = expander.fold_item_simple(item.unwrap());
     assigner.fold_item_simple(expanded)
@@ -26,8 +26,8 @@ impl Folder for Assigner {
 
         let node_id = self.next_node_id;
 
-        let next_node_id = match self.next_node_id.checked_add(1) {
-            Some(next_node_id) => next_node_id,
+        let next_node_id = match self.next_node_id.as_usize().checked_add(1) {
+            Some(next_node_id) => ast::NodeId::new(next_node_id),
             None => { panic!("ran out of node ids!") }
         };
         self.next_node_id = next_node_id;
