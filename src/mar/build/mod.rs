@@ -89,13 +89,15 @@ pub fn construct(cx: &ExtCtxt,
 
     let live_decls = builder.find_live_decls();
 
-    builder.pop_scope(extent, block);
-
     builder.terminate(item.span, block, TerminatorKind::Goto {
         target: END_BLOCK,
         end_scope: false,
     });
     builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
+
+    // The return value shouldn't be dropped.
+    builder.schedule_move(return_decl);
+    builder.pop_scope(extent, END_BLOCK);
 
     Ok(builder.finish(item.ident,
                       fn_decl,
