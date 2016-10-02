@@ -30,15 +30,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
-            Statement::Let { span, ref pat, ref ty, ref init } => {
-                vec![
-                    self.ast_builder.span(span).stmt().let_()
-                        .build(pat.clone())
-                        .build_option_ty(ty.clone())
-                        .build_option_expr(init.clone())
-                ]
-
-            }
             Statement::Assign { ref lvalue, ref rvalue } => {
                 match *lvalue {
                     Lvalue::Var { span, decl, .. } => {

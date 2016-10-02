@@ -313,12 +313,6 @@ pub enum Statement {
         decl: Var,
         ty: Option<P<ast::Ty>>,
     },
-    Let {
-        span: Span,
-        pat: P<ast::Pat>,
-        ty: Option<P<ast::Ty>>,
-        init: Option<P<ast::Expr>>,
-    },
     Assign {
         lvalue: Lvalue,
         rvalue: P<ast::Expr>,
@@ -335,7 +329,6 @@ impl Statement {
         match *self {
             Statement::Expr(ref stmt) => stmt.span,
             Statement::Declare { span, .. }
-            | Statement::Let { span, .. }
             | Statement::Drop { span, .. } => span,
             Statement::Assign { ref lvalue, .. } => lvalue.span(),
         }
