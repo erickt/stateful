@@ -198,3 +198,25 @@ fn test_impl_trait() {
     assert_eq!(gen.next(), Some(1));
     assert_eq!(gen.next(), None);
 }
+
+#[test]
+fn test_if_yield() {
+    #[generator]
+    fn gen(cond: bool) -> Box<Iterator<Item=usize>> {
+        if { yield_!(1); cond } {
+            yield_!(2)
+        } else {
+            yield_!(3)
+        }
+    }
+
+    let mut gen = gen(true);
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), Some(2));
+    assert_eq!(gen.next(), None);
+
+    let mut gen = gen(false);
+    assert_eq!(gen.next(), Some(1));
+    assert_eq!(gen.next(), Some(3));
+    assert_eq!(gen.next(), None);
+}
