@@ -29,7 +29,7 @@ impl CFG {
                      span: Span,
                      decl: Var,
                      moved: bool) {
-        self.block_data_mut(block).statements.push(Statement::Drop {
+        self.push(block, Statement::Drop {
             span: span,
             lvalue: decl,
             moved: moved,
