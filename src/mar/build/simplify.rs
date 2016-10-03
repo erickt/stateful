@@ -1,14 +1,13 @@
 use aster::AstBuilder;
 
-use syntax::ast::{self, Expr, ExprKind, Pat,
-                  Block, SpannedIdent, Item};
+use syntax::ast::{self, ExprKind};
 use syntax::fold::{self, Folder};
 use syntax::ptr::P;
 use syntax::codemap::{respan, Span};
 
 use mar::build::transition::ContainsTransition;
 
-pub fn simplify_item(item: P<Item>) -> Item {
+pub fn simplify_item(item: P<ast::Item>) -> ast::Item {
     let mut expander = Expander::new();
     let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
 
@@ -53,13 +52,16 @@ impl Expander {
         self.loop_depth != 0
     }
 
-    fn fold_sub_expr(&mut self, e: Expr) -> P<Expr> {
+    fn fold_sub_expr(&mut self, e: ast::Expr) -> P<ast::Expr> {
         P(fold::noop_fold_expr(e, self))
     }
 
-    fn construct_expr(&mut self, node: ExprKind, id: ast::NodeId, span: Span,
-                        attrs: ast::ThinVec<ast::Attribute>) -> P<Expr> {
-        P(Expr {
+    fn construct_expr(&mut self,
+                      node: ast::ExprKind,
+                      id: ast::NodeId,
+                      span: Span,
+                      attrs: ast::ThinVec<ast::Attribute>) -> P<ast::Expr> {
+        P(ast::Expr {
             node: node,
             id: self.new_id(id),
             span: self.new_span(span),
@@ -69,7 +71,7 @@ impl Expander {
 }
 
 impl fold::Folder for Expander {
-    fn fold_expr(&mut self, e: P<Expr>) -> P<Expr> {
+    fn fold_expr(&mut self, e: P<ast::Expr>) -> P<ast::Expr> {
         if !e.contains_transition(self.is_in_loop()) {
             return e;
         }
@@ -113,7 +115,10 @@ impl fold::Folder for Expander {
 }
 
 
-fn desugar_for_loop(pat: P<Pat>, expr: P<Expr>, loop_block: P<Block>, label: Option<SpannedIdent>) -> Expr {
+fn desugar_for_loop(pat: P<ast::Pat>,
+                    expr: P<ast::Expr>,
+                    loop_block: P<ast::Block>,
+                    label: Option<ast::SpannedIdent>) -> ast::Expr {
     // Desugar a for loop into:
     //
     // {
@@ -198,7 +203,10 @@ fn desugar_for_loop(pat: P<Pat>, expr: P<Expr>, loop_block: P<Block>, label: Opt
         .build().unwrap()
 }
 
-fn desugar_if_let(pat: P<Pat>, expr: P<Expr>, then_block: P<Block>, else_block: Option<P<Expr>>) -> Expr {
+fn desugar_if_let(pat: P<ast::Pat>,
+                  expr: P<ast::Expr>,
+                  then_block: P<ast::Block>,
+                  else_block: Option<P<ast::Expr>>) -> ast::Expr {
     // Desugar an if-let:
     //
     // match $expr {
@@ -230,7 +238,10 @@ fn desugar_if_let(pat: P<Pat>, expr: P<Expr>, then_block: P<Block>, else_block: 
         .build().unwrap()
 }
 
-fn desugar_while_let(pat: P<Pat>, expr: P<Expr>, then_block: P<Block>, label: Option<SpannedIdent>) -> Expr {
+fn desugar_while_let(pat: P<ast::Pat>,
+                     expr: P<ast::Expr>,
+                     then_block: P<ast::Block>,
+                     label: Option<ast::SpannedIdent>) -> ast::Expr {
     // Desugar an while-let:
     //
     // 'label: loop {
