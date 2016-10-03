@@ -44,7 +44,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         debug!("decls: {:?} {:?}", block, decls);
-        debug!("---------------");
 
         decls
     }
