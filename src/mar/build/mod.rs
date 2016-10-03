@@ -1,4 +1,4 @@
-use aster::AstBuilder;
+use aster::ident::ToIdent;
 use mar::build::simplify::simplify_item;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
@@ -63,44 +63,38 @@ pub fn construct(cx: &ExtCtxt,
     let extent = builder.start_new_extent();
 
     let mut block = START_BLOCK;
+    {
+        // Create an initial scope for the function.
+        builder.push_scope(extent, block);
 
-    builder.push_scope(extent, block);
+        block = builder.args_and_body(extent, block, &fn_decl.inputs, ast_block);
 
-    // Register the arguments as declarations.
-    builder.add_decls_from_pats(
-        extent,
-        block,
-        fn_decl.inputs.iter().map(|arg| &arg.pat));
+        let return_block = builder.return_block();
 
-    // Register return pointer.
-    let return_ident = AstBuilder::new().id("return_");
-    let return_decl = builder.declare_decl(
-        ast::Mutability::Immutable,
-        return_ident,
-        None,
-    );
+        builder.terminate(item.span, block, TerminatorKind::Goto {
+            target: return_block,
+            end_scope: true,
+        });
 
-    builder.declare_binding(item.span, return_decl);
+        // The return value shouldn't be dropped when we pop the scope.
+        builder.schedule_move(RETURN_POINTER);
 
-    let destination = Lvalue::Var {
-        span: ast_block.span,
-        decl: return_decl,
-    };
-    builder.cfg.block_data_mut(END_BLOCK).decls.push(LiveDecl::Active(return_decl));
+        builder.pop_scope(extent, return_block);
 
-    block = builder.ast_block(destination, extent, block, &ast_block);
+        // Make sure the return pointer was actually initialized.
+        // FIXME: The return pointer really shouldn't be considered active here, but I'm not sure
+        // how to fix that yet.
+        {
+            let end_decls = &builder.cfg.basic_blocks[return_block].decls;
+            if end_decls.first() != Some(&LiveDecl::Active(RETURN_POINTER)) {
+                cx.span_bug(
+                    item.span,
+                    &format!("return pointer not initialized? {:?}", end_decls));
+            }
+        }
 
-    let live_decls = builder.find_live_decls();
-
-    builder.terminate(item.span, block, TerminatorKind::Goto {
-        target: END_BLOCK,
-        end_scope: false,
-    });
-    builder.terminate(item.span, END_BLOCK, TerminatorKind::Return);
-
-    // The return value shouldn't be dropped.
-    builder.schedule_move(return_decl);
-    builder.pop_scope(extent, END_BLOCK);
+        builder.terminate(item.span, return_block, TerminatorKind::Return);
+    }
 
     Ok(builder.finish(item.ident,
                       fn_decl,
@@ -126,6 +120,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         };
 
         assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
+
+        builder.var_decls.push(VarDecl {
+            mutability: ast::Mutability::Immutable,
+            ident: "return_".to_ident(),
+            ty: None,
+            shadowed_decl: None,
+        });
 
         builder
     }
@@ -156,6 +157,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             var_decls: self.var_decls,
             extents: self.extents,
         }
+    }
+
+    fn args_and_body(&mut self,
+                     extent: CodeExtent,
+                     block: BasicBlock,
+                     arguments: &[ast::Arg],
+                     ast_block: P<ast::Block>) -> BasicBlock {
+        self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
+
+        // Register the arguments as declarations.
+        self.add_decls_from_pats(
+            block,
+            arguments.iter().map(|arg| &arg.pat));
+
+        let destination = Lvalue::Var {
+            span: ast_block.span,
+            decl: RETURN_POINTER,
+        };
+
+        self.ast_block(destination, extent, block, &ast_block)
     }
 
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {

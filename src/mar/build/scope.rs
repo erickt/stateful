@@ -201,6 +201,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             });
     }
 
+    pub fn extent_of_innermost_scope(&self) -> CodeExtent {
+        self.scopes.last().map(|scope| scope.extent).unwrap()
     }
 
     pub fn assign_lvalue(&mut self,

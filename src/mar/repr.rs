@@ -107,6 +107,8 @@ impl IndexMut<BasicBlock> for Mar {
 
 newtype_index!(Var, "decl");
 
+pub const RETURN_POINTER: Var = Var(0);
+
 #[derive(Debug, PartialEq)]
 pub struct VarDecl {
     pub mutability: ast::Mutability,
