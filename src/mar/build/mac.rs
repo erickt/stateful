@@ -128,7 +128,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         };
 
         let ready_arm_block = self.in_scope(extent, span, block, |this| {
-            this.add_decls_from_pats(extent, ready_arm.block, ready_arm.pats.iter());
+            this.add_decls_from_pats(ready_arm.block, ready_arm.pats.iter());
 
             // Don't try to store the result if we're just writing into a temporary.
             if destination.is_temp() {

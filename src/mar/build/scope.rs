@@ -201,61 +201,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             });
     }
 
-    pub fn declare_decl(&mut self,
-                        mutability: ast::Mutability,
-                        ident: ast::Ident,
-                        ty: Option<P<ast::Ty>>) -> Var {
-        let shadowed_decl = self.find_decl(ident);
-
-        let decl = self.var_decls.push(VarDecl {
-            mutability: mutability,
-            ident: ident,
-            ty: ty,
-            shadowed_decl: shadowed_decl,
-        });
-
-        debug!("declaring {:?} as {:?} shadowing {:?}", ident, decl, shadowed_decl);
-
-        decl
-    }
-
-    pub fn declare_binding(&mut self, span: Span, decl: Var) {
-        if let Some(scope) = self.scopes.last_mut() {
-            let ident = self.var_decls[decl].ident;
-
-            scope.forward_decls.insert(ident, ForwardDecl {
-                span: span,
-                decl: decl,
-            });
-        } else {
-            self.cx.span_bug(span, "no scopes?");
-        }
-    }
-
-    pub fn assign_decl(&mut self,
-                       block: BasicBlock,
-                       lvalue: ast::Ident) {
-        for scope in self.scopes.iter_mut().rev() {
-            // Check if we are shadowing another variable.
-            for dropped_decl in scope.drops.iter().rev() {
-                if lvalue == self.var_decls[dropped_decl.decl].ident {
-                    return;
-                }
-            }
-
-            // Declare the lvalue now that we're assigning to it.
-            if let Some(forward_decl) = scope.forward_decls.remove(&lvalue) {
-                self.cfg.push_declare_decl(
-                    block,
-                    forward_decl.span,
-                    forward_decl.decl,
-                    self.var_decls[forward_decl.decl].ty.clone(),
-                );
-
-                scope.drops.push(DropData::from(forward_decl));
-                break;
-            }
-        }
     }
 
     pub fn assign_lvalue(&mut self,
@@ -390,36 +335,30 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn add_decls_from_pats<'c, I>(&mut self,
-                                      extent: CodeExtent,
-                                      block: BasicBlock,
-                                      pats: I)
+    pub fn add_decls_from_pats<'c, I>(&mut self, block: BasicBlock, pats: I)
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
-            for decl in self.add_decls_from_pat(pat.span, extent, pat) {
-                self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(decl));
+            for var in self.add_decls_from_pat(pat) {
+                let ident = self.var_decls[var].ident;
+
+                self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(var));
+                self.scopes.last_mut().unwrap().forward_decls.remove(&ident);
             }
         }
     }
 
-    pub fn add_decls_from_pat(&mut self,
-                              span: Span,
-                              extent: CodeExtent,
-                              pat: &P<ast::Pat>) -> Vec<Var> {
-        let decls = self.get_decls_from_pat(pat);
-
-        for decl in &decls {
-            self.schedule_drop(span, extent, *decl);
-        }
-
-        decls
+    pub fn add_decls_from_pat(&mut self, pat: &P<ast::Pat>) -> Vec<Var> {
+        self.get_decls_from_pat(pat, None)
     }
 
-    pub fn get_decls_from_pat(&mut self, pat: &ast::Pat) -> Vec<Var> {
+    pub fn get_decls_from_pat(&mut self,
+                              pat: &ast::Pat,
+                              ty: Option<P<ast::Ty>>) -> Vec<Var> {
         struct Visitor<'a, 'b: 'a, 'c: 'b> {
             builder: &'a mut Builder<'b, 'c>,
             new_vars: Vec<Var>,
+            ty: Option<P<ast::Ty>>,
         }
 
         impl<'a, 'b: 'a, 'c: 'b> visit::Visitor for Visitor<'a, 'b, 'c> {
@@ -431,10 +370,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let first_char = id_str.chars().next().unwrap();
 
                         if first_char == first_char.to_ascii_lowercase() {
-                            let var = self.builder.declare_decl(
+                            let var = self.builder.declare_binding(
+                                pat.span,
                                 mutability,
                                 id.node,
-                                None,
+                                self.ty.clone(),
                             );
                             self.new_vars.push(var);
                         }
@@ -456,6 +396,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut visitor = Visitor {
             builder: self,
             new_vars: vec![],
+            ty: ty,
         };
 
         visit::Visitor::visit_pat(&mut visitor, pat);

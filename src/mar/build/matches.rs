@@ -1,3 +1,4 @@
+use aster::ident::ToIdent;
 use mar::build::Builder;
 use mar::repr::*;
 use syntax::ast;
@@ -27,9 +28,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         for (arm, target) in arms.iter().zip(targets.iter()) {
             let arm_block = self.in_scope(extent, span, block, |this| {
-                this.add_decls_from_pats(extent,
-                                         target.block,
-                                         arm.pats.iter());
+                this.add_decls_from_pats(target.block, arm.pats.iter());
                 this.expr(destination.clone(), extent, target.block, &arm.body)
             });
 
@@ -45,5 +44,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
 
         join_block
+    }
+
+    pub fn declare_binding<T>(&mut self,
+                              span: Span,
+                              mutability: ast::Mutability,
+                              name: T,
+                              var_ty: Option<P<ast::Ty>>) -> Var
+        where T: ToIdent,
+    {
+        let name = name.to_ident();
+        debug!("declare_binding(name={:?}, var_ty={:?}, span={:?})",
+               name, var_ty, span);
+
+        let shadowed_decl = self.find_decl(name);
+        let var = self.var_decls.push(VarDecl {
+            mutability: mutability,
+            ident: name,
+            ty: var_ty,
+            shadowed_decl: shadowed_decl,
+        });
+        let extent = self.extent_of_innermost_scope();
+        self.schedule_drop(span, extent, var);
+
+        debug!("declare_binding: var={:?}", var);
+
+        var
     }
 }

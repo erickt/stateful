@@ -59,15 +59,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                  mut block: BasicBlock,
                  span: Span,
                  local: &P<ast::Local>) -> BasicBlock {
-        let decls = self.get_decls_from_pat(&local.pat);
+        let decls = self.get_decls_from_pat(&local.pat, local.ty.clone());
 
         if decls.is_empty() {
             self.cx.span_bug(span, "No decls found?")
         } else if decls.len() == 1 {
             let decl = decls[0];
             self.var_decls[decl].ty = local.ty.clone();
-
-            self.declare_binding(span, decl);
 
             if let Some(ref init) = local.init {
                 let destination = Lvalue::Var {
