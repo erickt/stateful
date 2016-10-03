@@ -71,4 +71,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         var
     }
+
+    /// Create a new temporary variable that has a unique name.
+    pub fn declare_temp<T>(&mut self, span: Span, name: T) -> Var
+        where T: ToIdent,
+    {
+        // Add a unique number to the name.
+        let name = format!("{}{}", name.to_ident(), self.var_decls.len());
+        self.declare_binding(span, ast::Mutability::Immutable, name, None)
+    }
 }

@@ -1,3 +1,4 @@
+use aster::AstBuilder;
 use mar::build::CFG;
 use mar::repr::*;
 use syntax::ast;
@@ -77,5 +78,14 @@ impl CFG {
             span: span,
             name: name,
         }
+    }
+
+    pub fn temp_lvalue_and_expr(&mut self,
+                                span: Span,
+                                name: &'static str) -> (Lvalue, P<ast::Expr>) {
+        let lvalue = self.temp_lvalue(span, Some(name));
+        let expr = AstBuilder::new().span(span).expr().id(name);
+
+        (lvalue, expr)
     }
 }
