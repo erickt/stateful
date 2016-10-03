@@ -43,7 +43,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             StmtKind::Mac(ref mac) => {
                 let (ref mac, _, _) = **mac;
-                match self.stmt_mac(extent, block, mac) {
+                let destination = self.cfg.temp_lvalue(mac.span, Some("_stmt_result_temp"));
+
+                match self.expr_mac(destination, extent, block, mac) {
                     Some(block) => block,
                     None => {
                         self.cfg.push(block, Statement::Expr(stmt.clone()));

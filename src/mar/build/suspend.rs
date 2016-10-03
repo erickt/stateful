@@ -24,6 +24,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         next_block
     }
 
+    pub fn expr_suspend_unit(&mut self,
+                             block: BasicBlock,
+                             expr: P<ast::Expr>) -> BasicBlock {
+        let lvalue = self.cfg.temp_lvalue(expr.span, Some("suspend"));
+        self.expr_suspend(lvalue, block, expr)
+    }
+
     /// Compile `yield_!($expr)` into:
     ///
     /// ```
@@ -41,6 +48,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       destination: Lvalue,
                       block: BasicBlock,
                       expr: P<ast::Expr>) -> BasicBlock {
+        let expr = self.expand_moved(&expr);
         let expr = AstBuilder::new().span(expr.span).expr()
             .some()
             .build(expr);
@@ -63,8 +71,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     ///             let () = suspend!(Ok(Async::NotReady));
     ///             goto!('await_loop);
     ///         }
-    ///         poll_result => {
-    ///             $result = poll_result;
+    ///         Ok(Async::Ready(result)) => {
+    ///             $result = Ok(result);
+    ///             goto!('await_exit);
+    ///         }
+    ///         Err(err) => {
+    ///             $result = Err(err);
     ///             goto!('await_exit);
     ///         }
     ///     }
@@ -79,6 +91,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       extent: CodeExtent,
                       mut block: BasicBlock,
                       expr: P<ast::Expr>) -> BasicBlock {
+        let expr = self.expand_moved(&expr);
         let span = expr.span;
         let builder = AstBuilder::new().span(span);
 

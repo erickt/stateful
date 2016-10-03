@@ -117,7 +117,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.expr(lvalue, extent, block, rvalue)
             }
             ExprKind::Mac(ref mac) => {
-                self.expr_mac(destination, extent, block, mac)
+                match self.expr_mac(destination.clone(), extent, block, mac) {
+                    Some(block) => block,
+                    None => self.into(destination, extent, block, expr.clone()),
+                }
             }
             _ => {
                 self.cx.span_bug(expr.span,
