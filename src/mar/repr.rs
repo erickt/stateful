@@ -122,8 +122,9 @@ pub struct DeclaredDecl {
     pub ty: Option<P<ast::Ty>>,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
+    Forward(Var),
     Active(Var),
     Moved(Var),
 }

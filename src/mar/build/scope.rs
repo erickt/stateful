@@ -220,7 +220,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         self.var_decls[forward_decl.decl].ty.clone(),
                     );
 
-                    scope.drops.push(DropData::from(forward_decl));
                     break;
                 }
             }
@@ -288,8 +287,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let ident = self.var_decls[decl].ident;
 
                 if visited_decls.insert(ident) {
-                    if scope.moved_decls.contains(&decl) {
-                        debug!("find_live_decls: decl moved {:?}", decl);
+                    if scope.forward_decls.contains_key(&ident) {
+                        decls.push(LiveDecl::Forward(decl));
+                    } else if scope.moved_decls.contains(&decl) {
                         decls.push(LiveDecl::Moved(decl));
                     } else {
                         decls.push(LiveDecl::Active(decl));
@@ -316,6 +316,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
         }
+
+        if let Some(scope) = self.scopes.last_mut() {
+            let ident = self.var_decls[decl].ident;
+
+            scope.forward_decls.insert(ident, ForwardDecl {
+                span: span,
+                decl: decl,
+            });
+        } else {
+            self.cx.span_bug(span, "no scopes?");
+        }
+
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
                 scope.drops.push(DropData {
