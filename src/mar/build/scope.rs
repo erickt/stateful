@@ -361,6 +361,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
     pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, decl: Var) {
+        // FIXME: Make sure we aren't double dropping a variable.
+        for scope in self.scopes.iter_mut().rev() {
+            for drop in &scope.drops {
+                if drop.decl == decl {
+                    self.cx.span_bug(
+                        span,
+                        &format!("variable already scheduled for drop: {:?}", decl));
+                }
+            }
+        }
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
                 scope.drops.push(DropData {
