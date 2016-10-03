@@ -42,11 +42,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let block = self.into(destination, extent, block, &assign_expr);
 
-                self.exit_scope(expr.span, extent, block, END_BLOCK);
+                let return_block = self.return_block();
+                self.exit_scope(expr.span, extent, block, return_block);
                 self.start_new_block(expr.span, Some("AfterReturn"))
             }
             ExprKind::Ret(None) => {
-                self.exit_scope(expr.span, extent, block, END_BLOCK);
+                let return_block = self.return_block();
+                self.exit_scope(expr.span, extent, block, return_block);
                 self.start_new_block(expr.span, Some("AfterReturn"))
             }
             ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {

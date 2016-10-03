@@ -68,9 +68,6 @@ pub struct Mar {
 /// Where execution begins
 pub const START_BLOCK: BasicBlock = BasicBlock(0);
 
-/// Where execution ends.
-pub const END_BLOCK: BasicBlock = BasicBlock(1);
-
 impl Mar {
     #[inline]
     pub fn basic_blocks(&self) -> &IndexVec<BasicBlock, BasicBlockData> {

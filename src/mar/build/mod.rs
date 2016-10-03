@@ -31,6 +31,9 @@ pub struct Builder<'a, 'b: 'a> {
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
     var_decls: IndexVec<Var, VarDecl>,
+
+    /// cached block with the RETURN terminator
+    cached_return_block: Option<BasicBlock>,
 }
 
 #[derive(Debug)]
@@ -119,10 +122,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             loop_scopes: vec![],
             var_decls: IndexVec::new(),
             extents: IndexVec::new(),
+            cached_return_block: None,
         };
 
         assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
-        assert_eq!(builder.start_new_block(span, Some("End")), END_BLOCK);
 
         builder
     }
@@ -169,6 +172,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn is_inside_loop(&self) -> bool {
         !self.loop_scopes.is_empty()
+    }
+
+    fn return_block(&mut self) -> BasicBlock {
+        match self.cached_return_block {
+            Some(rb) => rb,
+            None => {
+                let span = self.fn_span;
+                let rb = self.start_new_block(span, Some("End"));
+                self.cached_return_block = Some(rb);
+                rb
+            }
+        }
     }
 }
 
