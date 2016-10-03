@@ -58,8 +58,6 @@ pub struct Mar {
     pub abi: abi::Abi,
     pub generics: ast::Generics,
 
-    pub input_decls: Vec<LiveDecl>,
-
     pub var_decls: IndexVec<Var, VarDecl>,
 
     /// List of extents. References to extents use a newtyped index type `CodeExtent` that indexes

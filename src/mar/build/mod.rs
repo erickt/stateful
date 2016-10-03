@@ -103,8 +103,7 @@ pub fn construct(cx: &ExtCtxt,
                       fn_decl,
                       unsafety,
                       abi,
-                      generics,
-                      live_decls))
+                      generics))
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -133,8 +132,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
               fn_decl: P<ast::FnDecl>,
               unsafety: ast::Unsafety,
               abi: abi::Abi,
-              generics: ast::Generics,
-              live_decls: Vec<LiveDecl>) -> Mar {
+              generics: ast::Generics) -> Mar {
         for (index, block) in self.cfg.basic_blocks.iter().enumerate() {
             if block.terminator.is_none() {
                 self.cx.span_bug(
@@ -151,7 +149,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             unsafety: unsafety,
             abi: abi,
             generics: generics.clone(),
-            input_decls: live_decls,
             basic_blocks: self.cfg.basic_blocks,
             var_decls: self.var_decls,
             extents: self.extents,
