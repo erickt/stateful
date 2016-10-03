@@ -1,21 +1,24 @@
 use aster::AstBuilder;
-
-use syntax::ast::{self, ExprKind};
-use syntax::fold::{self, Folder};
-use syntax::ptr::P;
+use mar::build::transition::{self, ContainsTransition, Transition};
+use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::codemap::{respan, Span};
+use syntax::ext::base::ExtCtxt;
+use syntax::ext::tt::transcribe::new_tt_reader;
+use syntax::fold::{self, Folder};
+use syntax::parse::parser::Parser;
+use syntax::parse::token::Token;
+use syntax::ptr::P;
+use syntax::util::small_vector::SmallVector;
 
-use mar::build::transition::ContainsTransition;
-
-pub fn simplify_item(item: P<ast::Item>) -> ast::Item {
-    let mut expander = Expander::new();
+pub fn simplify_item(cx: &ExtCtxt, item: P<ast::Item>) -> ast::Item {
+    let mut expander = Expander::new(cx);
     let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
 
     let expanded = expander.fold_item_simple(item.unwrap());
     assigner.fold_item_simple(expanded)
 }
 
-pub struct Assigner {
+struct Assigner {
     pub next_node_id: ast::NodeId,
 }
 
@@ -39,21 +42,25 @@ impl Folder for Assigner {
     }
 }
 
-pub struct Expander {
+struct Expander<'a, 'b: 'a> {
+    cx: &'a ExtCtxt<'b>,
     loop_depth: usize,
 }
 
-impl Expander {
-    pub fn new() -> Expander {
-        Expander { loop_depth: 0 }
+impl<'a, 'b> Expander<'a, 'b> {
+    fn new(cx: &'a ExtCtxt<'b>) -> Self {
+        Expander {
+            cx: cx,
+            loop_depth: 0,
+        }
     }
 
     fn is_in_loop(&self) -> bool {
         self.loop_depth != 0
     }
 
-    fn fold_sub_expr(&mut self, e: ast::Expr) -> P<ast::Expr> {
-        P(fold::noop_fold_expr(e, self))
+    fn fold_sub_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
+        expr.map(|expr| fold::noop_fold_expr(expr, self))
     }
 
     fn construct_expr(&mut self,
@@ -70,13 +77,13 @@ impl Expander {
     }
 }
 
-impl fold::Folder for Expander {
-    fn fold_expr(&mut self, e: P<ast::Expr>) -> P<ast::Expr> {
-        if !e.contains_transition(self.is_in_loop()) {
-            return e;
+impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
+    fn fold_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
+        if !expr.contains_transition(self.is_in_loop()) {
+            return expr;
         }
 
-        let expr = e.unwrap();
+        let expr = expr.unwrap();
 
         match expr.node {
             ExprKind::ForLoop(pat, expr, loop_block, label) => {
@@ -105,33 +112,83 @@ impl fold::Folder for Expander {
                 self.loop_depth -= 1;
                 self.construct_expr(node, expr.id, expr.span, expr.attrs)
             }
-            _ => P(expr),
+            ExprKind::Mac(mac) => {
+                if is_try_path(&mac.node.path) {
+                    let expr = desugar_try(self.cx, &mac);
+                    self.fold_expr(expr)
+                } else {
+                    self.construct_expr(ExprKind::Mac(mac), expr.id, expr.span, expr.attrs)
+                }
+            }
+            _ => {
+                P(expr)
+            }
+        }
+    }
+
+    fn fold_stmt(&mut self, stmt: ast::Stmt) -> SmallVector<ast::Stmt> {
+        match stmt.node {
+            StmtKind::Mac(ref mac) if is_try_path(&mac.0.node.path) => {
+                let expr = self.fold_expr(desugar_try(self.cx, &mac.0));
+
+                let stmt = match mac.1 {
+                    ast::MacStmtStyle::Semicolon => {
+                        AstBuilder::new().stmt().semi().build(expr)
+                    }
+                    ast::MacStmtStyle::Braces | ast::MacStmtStyle::NoBraces => {
+                        AstBuilder::new().stmt().expr().build(expr)
+                    }
+                };
+
+                SmallVector::one(stmt)
+            }
+            _ => fold::noop_fold_stmt(stmt, self),
         }
     }
 
     fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
-        fold::noop_fold_mac(mac, self)
+        // this macro may contain transitions. So parse it, expand the inner expression,
+        // then convert it back into a macro.
+        match transition::parse_mac_transition(self.cx, &mac) {
+            Some(Transition::Yield(expr)) | Some(Transition::Await(expr)) => {
+                let expr = self.fold_expr(expr);
+                AstBuilder::new().span(mac.span).mac()
+                    .build_path(mac.node.path.clone())
+                    .with_arg(expr)
+                    .build()
+            }
+            None => {
+                fold::noop_fold_mac(mac, self)
+            }
+        }
     }
 }
 
+pub fn is_try_path(path: &ast::Path) -> bool {
+    let builder = AstBuilder::new();
+    let yield_ = builder.path().id("try").build();
 
+    !path.global && path.segments == yield_.segments
+}
+
+/// Desugar a for loop into:
+///
+/// ```
+/// {
+///     let mut iter = ::std::iter::IntoIterator::into_iter($iter);
+///     'label: loop {
+///         match iter.next() {
+///             ::std::option::Option::Some($pat) => $body,
+///             ::std::option::Option::None => break,
+///         }
+///     }
+/// }
+/// ```
 fn desugar_for_loop(pat: P<ast::Pat>,
-                    expr: P<ast::Expr>,
-                    loop_block: P<ast::Block>,
-                    label: Option<ast::SpannedIdent>) -> ast::Expr {
-    // Desugar a for loop into:
-    //
-    // {
-    //     let mut iter = ::std::iter::IntoIterator::into_iter($expr);
-    //     'label: loop {
-    //         match iter.next() {
-    //             ::std::option::Option::Some($pat) => $loop_block,
-    //             ::std::option::Option::None => break,
-    //         }
-    //     }
-    // }
-
-    let builder = AstBuilder::new().span(expr.span);
+                    iter: P<ast::Expr>,
+                    body: P<ast::Block>,
+                    label: Option<ast::SpannedIdent>) -> P<ast::Expr> {
+    let builder = AstBuilder::new().span(iter.span);
 
     // ::std::iter::IntoIterator::into_iter($expr)
     let into_iter = builder.expr().call()
@@ -139,7 +196,7 @@ fn desugar_for_loop(pat: P<ast::Pat>,
             .global()
             .ids(&["std", "iter", "IntoIterator", "into_iter"])
             .build()
-        .with_arg(expr.clone())
+        .with_arg(iter.clone())
         .build();
 
     // iter.next()
@@ -153,10 +210,10 @@ fn desugar_for_loop(pat: P<ast::Pat>,
         .pat().build(pat.clone())
         .build();
 
-    // $some_pat => $loop_block
+    // $some_pat => $body
     let some_arm = builder.arm()
         .with_pat(some_pat)
-        .body().build_block(loop_block.clone());
+        .body().build_block(body.clone());
 
     // ::std::option::Option::None
     let none_pat = builder.pat().path()
@@ -200,19 +257,21 @@ fn desugar_for_loop(pat: P<ast::Pat>,
     builder.expr().block()
         .with_stmt(iter)
         .stmt().build_expr(loop_)
-        .build().unwrap()
+        .build()
 }
 
+/// Desugar an if-let:
+///
+/// ```rust
+/// match $expr {
+///     $pat => $then_block,
+///     _ => $else_block,
+/// }
+/// ```
 fn desugar_if_let(pat: P<ast::Pat>,
                   expr: P<ast::Expr>,
                   then_block: P<ast::Block>,
-                  else_block: Option<P<ast::Expr>>) -> ast::Expr {
-    // Desugar an if-let:
-    //
-    // match $expr {
-    //     $pat => $then_block,
-    //     _ => $else_block,
-    // }
+                  else_block: Option<P<ast::Expr>>) -> P<ast::Expr> {
 
     let builder = AstBuilder::new().span(expr.span);
 
@@ -235,22 +294,23 @@ fn desugar_if_let(pat: P<ast::Pat>,
         .match_().build(expr.clone())
         .with_arm(then_arm)
         .with_arm(else_arm)
-        .build().unwrap()
+        .build()
 }
 
+/// Desugar an while-let:
+///
+/// ```rust
+/// 'label: loop {
+///     match $expr {
+///         $pat => $body_block,
+///         _ => break,
+///     }
+/// }
+/// ```
 fn desugar_while_let(pat: P<ast::Pat>,
                      expr: P<ast::Expr>,
                      then_block: P<ast::Block>,
-                     label: Option<ast::SpannedIdent>) -> ast::Expr {
-    // Desugar an while-let:
-    //
-    // 'label: loop {
-    //     match $expr {
-    //         $pat => $body_block,
-    //         _ => break,
-    //     }
-    // }
-
+                     label: Option<ast::SpannedIdent>) -> P<ast::Expr> {
     let builder = AstBuilder::new().span(expr.span);
 
     // $pat => $then_block
@@ -282,5 +342,33 @@ fn desugar_while_let(pat: P<ast::Pat>,
 
     loop_builder.block()
         .stmt().build_expr(match_expr)
-        .build().unwrap()
+        .build()
+}
+
+fn parse_mac_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
+
+    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
+
+    expr
+}
+
+/// Desugar a `try!(...)`:
+///
+/// ```
+/// match $expr {
+///     ::std::result::Result::Ok(expr) => expr,
+///     ::std::result::Result::Err(err) =>
+///         return ::std::result::Result::Err(::std::convert::From::from(err)),
+/// }
+/// ```
+fn desugar_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let expr = parse_mac_try(cx, mac);
+    AstBuilder::new().span(expr.span).expr().try().build(expr)
 }

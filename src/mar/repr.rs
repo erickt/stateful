@@ -30,7 +30,7 @@ macro_rules! newtype_index {
     )
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum StateMachineKind {
     Generator,
     Async,

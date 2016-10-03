@@ -1,6 +1,10 @@
 use aster::AstBuilder;
 use mar::build::Builder;
 use syntax::ast::{self, ExprKind, StmtKind};
+use syntax::ext::base::ExtCtxt;
+use syntax::ext::tt::transcribe::new_tt_reader;
+use syntax::parse::parser::Parser;
+use syntax::parse::token::Token;
 use syntax::ptr::P;
 use syntax::visit;
 
@@ -53,6 +57,12 @@ impl ContainsTransition for ast::Expr {
     }
 }
 
+impl ContainsTransition for ast::Mac {
+    fn contains_transition(&self, _inside_loop: bool) -> bool {
+        is_transition_path(&self.node.path)
+    }
+}
+
 struct ContainsTransitionVisitor {
     inside_loop: bool,
     contains_transition: bool,
@@ -90,10 +100,7 @@ impl visit::Visitor for ContainsTransitionVisitor {
             ExprKind::Continue(_) if self.inside_loop => {
                 self.contains_transition = true;
             }
-            ExprKind::Mac(ref mac) if is_transition_path(&mac.node.path) => {
-                self.contains_transition = true;
-            }
-            ExprKind::Path(None, ref path) if is_transition_path(path) => {
+            ExprKind::Mac(ref mac) if mac.contains_transition(self.inside_loop) => {
                 self.contains_transition = true;
             }
             _ => {
@@ -103,6 +110,49 @@ impl visit::Visitor for ContainsTransitionVisitor {
     }
 
     fn visit_mac(&mut self, _mac: &ast::Mac) { }
+}
+
+pub enum Transition {
+    Yield(P<ast::Expr>),
+    Await(P<ast::Expr>),
+}
+
+pub fn parse_mac_transition(cx: &ExtCtxt, mac: &ast::Mac) -> Option<Transition> {
+    if is_yield_path(&mac.node.path) {
+        Some(Transition::Yield(parse_mac_yield(cx, mac)))
+    } else if is_await_path(&mac.node.path) {
+        Some(Transition::Await(parse_mac_await(cx, mac)))
+    } else {
+        None
+    }
+}
+
+pub fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
+
+    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
+
+    expr
+}
+
+pub fn parse_mac_await(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+    let rdr = new_tt_reader(
+        &cx.parse_sess().span_diagnostic,
+        None,
+        None,
+        mac.node.tts.clone());
+
+    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let expr = panictry!(parser.parse_expr());
+    panictry!(parser.expect(&Token::Eof));
+
+    expr
 }
 
 pub fn is_transition_path(path: &ast::Path) -> bool {

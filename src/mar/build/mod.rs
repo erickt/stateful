@@ -46,7 +46,7 @@ pub struct Error;
 pub fn construct(cx: &ExtCtxt,
                  item: P<ast::Item>,
                  state_machine_kind: StateMachineKind) -> Result<Mar, Error> {
-    let item = simplify_item(item);
+    let item = simplify_item(cx, item);
 
     let (fn_decl, unsafety, abi, generics, ast_block) = match item.node {
         ItemKind::Fn(fn_decl, unsafety, _, abi, generics, block) => {
