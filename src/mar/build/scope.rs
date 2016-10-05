@@ -26,7 +26,16 @@ use syntax::visit;
 #[derive(Debug)]
 pub struct Scope {
     extent: CodeExtent,
+
+    /// Declarations created in this scope.
+    decls: HashSet<Var>,
+
+    /// Uninitialized declarations in this scope
     forward_decls: HashMap<ast::Ident, Var>,
+
+    /// Declarations that are initialized, and may be in this scope or a parent scope.
+    initialized_decls: HashSet<Var>,
+
     drops: Vec<Var>,
     moved_decls: HashSet<Var>,
 }
@@ -95,9 +104,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn push_scope(&mut self, extent: CodeExtent, _block: BasicBlock) {
         self.scopes.push(Scope {
             extent: extent,
-            drops: vec![],
+            decls: HashSet::new(),
             forward_decls: HashMap::new(),
+            initialized_decls: HashSet::new(),
             moved_decls: HashSet::new(),
+            drops: vec![],
         });
     }
 
@@ -114,6 +125,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // have drops already)
         for dropped_decl in scope.drops.iter().rev() {
             drop_decl(&mut self.cfg, block, &scope, *dropped_decl);
+        }
+
+        if let Some(current_scope) = self.scopes.last_mut() {
+            for var in scope.initialized_decls {
+                let ident = self.var_decls[var].ident;
+                current_scope.forward_decls.remove(&ident);
+
+                if !current_scope.decls.contains(&var) {
+                    current_scope.initialized_decls.insert(var);
+                }
+            }
         }
     }
 
@@ -194,22 +216,37 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          lvalue: Lvalue,
                          rvalue: P<ast::Expr>) {
         if let Some(lvalue_decl) = lvalue.decl() {
-            let lvalue_ident = self.var_decls[lvalue_decl].ident;
-
-            for scope in self.scopes.iter_mut().rev() {
-                // Declare the lvalue now that we're assigning to it.
-                if let Some(forward_decl) = scope.forward_decls.remove(&lvalue_ident) {
-                    self.cfg.push_declare_decl(
-                        block,
-                        forward_decl,
-                    );
-
-                    break;
-                }
+            if self.initialize_decl(block, lvalue_decl) {
+                self.cfg.push_declare_decl(block, lvalue_decl);
             }
         }
 
         self.cfg.push_assign(block, lvalue, rvalue);
+    }
+
+    /// Try to mark a variable declaration initialized if it's not already initialized.
+    fn initialize_decl(&mut self, block: BasicBlock, var: Var) -> bool {
+        let ident = self.var_decls[var].ident;
+        debug!("initialize_decl: block={:?} var={:?} ident={:?}", block, var, ident);
+
+        // Only initialize if it hasn't already been initialized.
+        for scope in self.scopes.iter_mut().rev() {
+            debug!("initialize_decl: scope={:?}", scope);
+
+            if scope.initialized_decls.contains(&var) {
+                return false;
+            }
+
+            scope.initialized_decls.insert(var);
+            scope.forward_decls.remove(&ident);
+
+            if scope.decls.contains(&var) {
+                return true;
+            }
+        }
+
+        self.cx.span_bug(self.var_decls[var].span,
+                         &format!("var {:?} not in scope to initialize", var));
     }
 
     pub fn assign_lvalue_unit(&mut self,
@@ -305,6 +342,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         if let Some(scope) = self.scopes.last_mut() {
             let ident = self.var_decls[var].ident;
 
+            scope.decls.insert(var);
             scope.forward_decls.insert(ident, var);
         } else {
             self.cx.span_bug(span, "no scopes?");
