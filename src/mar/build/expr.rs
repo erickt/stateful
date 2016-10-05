@@ -59,45 +59,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.start_new_block(expr.span, Some("AfterReturn"))
             }
             ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {
-                let (block, cond_expr) = self.expr_temp(
+                self.expr_if(
+                    destination,
                     extent,
                     block,
+                    expr.span,
                     cond_expr,
-                    "if_cond");
-
-                let mut then_block = self.start_new_block(expr.span, Some("Then"));
-                let mut else_block = self.start_new_block(expr.span, Some("Else"));
-
-                self.terminate(expr.span, block, TerminatorKind::If {
-                    cond: cond_expr.clone(),
-                    targets: (then_block, else_block),
-                });
-
-                then_block = self.into(destination.clone(), extent, then_block, then_expr);
-                else_block = self.into(destination, extent, else_block, else_expr);
-
-                let join_block = self.start_new_block(expr.span, Some("IfJoin"));
-
-                self.terminate(
-                    then_expr.span,
-                    then_block,
-                    TerminatorKind::Goto {
-                        target: join_block,
-                        end_scope: true,
-                    });
-
-                self.terminate(
-                    match *else_expr {
-                        Some(ref expr) => expr.span,
-                        None => expr.span,
-                    },
-                    else_block,
-                    TerminatorKind::Goto {
-                        target: join_block,
-                        end_scope: true,
-                    });
-
-                join_block
+                    then_expr,
+                    else_expr)
             }
             ExprKind::Match(ref discriminant, ref arms) => {
                 let (block, discriminant) = self.expr_temp(
@@ -145,7 +114,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let lvalue = Lvalue::Var {
                     span: lvalue.span,
-                    decl: self.find_lvalue(&lvalue),
+                    decl: self.find_lvalue(lvalue),
                 };
 
                 self.expr(lvalue, extent, block, &rvalue)
@@ -186,6 +155,55 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .id(self.var_decls[temp_decl].ident);
 
         (block, temp_expr)
+    }
+
+    fn expr_if(&mut self,
+               destination: Lvalue,
+               extent: CodeExtent,
+               block: BasicBlock,
+               span: Span,
+               cond_expr: &P<ast::Expr>,
+               then_expr: &P<ast::Block>,
+               else_expr: &Option<P<ast::Expr>>) -> BasicBlock {
+        let (block, cond_expr) = self.expr_temp(
+            extent,
+            block,
+            cond_expr,
+            "if_cond");
+
+        let mut then_block = self.start_new_block(span, Some("Then"));
+        let mut else_block = self.start_new_block(span, Some("Else"));
+
+        self.terminate(span, block, TerminatorKind::If {
+            cond: cond_expr.clone(),
+            targets: (then_block, else_block),
+        });
+
+        then_block = self.into(destination.clone(), extent, then_block, then_expr);
+        else_block = self.into(destination, extent, else_block, else_expr);
+
+        let join_block = self.start_new_block(span, Some("IfJoin"));
+
+        self.terminate(
+            then_expr.span,
+            then_block,
+            TerminatorKind::Goto {
+                target: join_block,
+                end_scope: true,
+            });
+
+        self.terminate(
+            match *else_expr {
+                Some(ref expr) => expr.span,
+                None => span,
+            },
+            else_block,
+            TerminatorKind::Goto {
+                target: join_block,
+                end_scope: true,
+            });
+
+        join_block
     }
 
     fn expr_loop(&mut self,

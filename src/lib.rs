@@ -1,5 +1,6 @@
 #![cfg_attr(feature = "unstable", feature(plugin, plugin_registrar, rustc_private, quote))]
 #![cfg_attr(feature = "clippy", plugin(clippy))]
+#![cfg_attr(feature = "clippy", allow(too_many_arguments))]
 
 extern crate aster;
 extern crate bit_vec;
