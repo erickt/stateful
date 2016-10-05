@@ -26,30 +26,9 @@ use syntax::visit;
 #[derive(Debug)]
 pub struct Scope {
     extent: CodeExtent,
-    forward_decls: HashMap<ast::Ident, ForwardDecl>,
-    drops: Vec<DropData>,
+    forward_decls: HashMap<ast::Ident, Var>,
+    drops: Vec<Var>,
     moved_decls: HashSet<Var>,
-}
-
-#[derive(Debug)]
-struct ForwardDecl {
-    span: Span,
-    decl: Var,
-}
-
-#[derive(Debug)]
-struct DropData {
-    span: Span,
-    decl: Var,
-}
-
-impl From<ForwardDecl> for DropData {
-    fn from(forward_decl: ForwardDecl) -> Self {
-        DropData {
-            span: forward_decl.span,
-            decl: forward_decl.decl,
-        }
-    }
 }
 
 #[derive(Clone)]
@@ -134,7 +113,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
         for dropped_decl in scope.drops.iter().rev() {
-            drop_decl(&mut self.cfg, block, &scope, dropped_decl);
+            drop_decl(&mut self.cfg, block, &scope, *dropped_decl);
         }
     }
 
@@ -187,8 +166,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             };
 
         for scope in self.scopes.iter_mut().rev().take(popped_scopes) {
-            for dropped_decl in &scope.drops {
-                drop_decl(&mut self.cfg, block, scope, dropped_decl);
+            for var in &scope.drops {
+                drop_decl(&mut self.cfg, block, scope, *var);
             }
         }
 
@@ -217,9 +196,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 if let Some(forward_decl) = scope.forward_decls.remove(&lvalue_ident) {
                     self.cfg.push_declare_decl(
                         block,
-                        forward_decl.span,
-                        forward_decl.decl,
-                        self.var_decls[forward_decl.decl].ty.clone(),
+                        forward_decl,
                     );
 
                     break;
@@ -241,14 +218,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<Var> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
-            for dropped_decl in scope.drops.iter().rev() {
-                if lvalue == self.var_decls[dropped_decl.decl].ident {
-                    return Some(dropped_decl.decl);
+            for var in scope.drops.iter().rev() {
+                if lvalue == self.var_decls[*var].ident {
+                    return Some(*var);
                 }
             }
 
-            if let Some(forward_decl) = scope.forward_decls.get(&lvalue) {
-                return Some(forward_decl.decl);
+            if let Some(var) = scope.forward_decls.get(&lvalue) {
+                return Some(*var);
             }
         }
 
@@ -258,8 +235,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<Var> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
-            if let Some(forward_decl) = scope.forward_decls.get(&lvalue) {
-                return Some(forward_decl.decl);
+            if let Some(var) = scope.forward_decls.get(&lvalue) {
+                return Some(*var);
             }
         }
 
@@ -284,17 +261,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
-            for dropped_decl in scope.drops.iter().rev() {
-                let decl = dropped_decl.decl;
-                let ident = self.var_decls[decl].ident;
+            debug!("find_live_decls: scope={:?}", scope);
+
+            for var in scope.drops.iter().rev() {
+                let ident = self.var_decls[*var].ident;
 
                 if visited_decls.insert(ident) {
                     if scope.forward_decls.contains_key(&ident) {
-                        decls.push(LiveDecl::Forward(decl));
-                    } else if scope.moved_decls.contains(&decl) {
-                        decls.push(LiveDecl::Moved(decl));
+                        decls.push(LiveDecl::Forward(*var));
+                    } else if scope.moved_decls.contains(var) {
+                        decls.push(LiveDecl::Moved(*var));
                     } else {
-                        decls.push(LiveDecl::Active(decl));
+                        decls.push(LiveDecl::Active(*var));
                     }
                 }
             }
@@ -307,40 +285,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
-    pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, decl: Var) {
+    pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, var: Var) {
         // FIXME: Make sure we aren't double dropping a variable.
         for scope in self.scopes.iter_mut().rev() {
             for drop in &scope.drops {
-                if drop.decl == decl {
+                if var == *drop {
                     self.cx.span_bug(
                         span,
-                        &format!("variable already scheduled for drop: {:?}", decl));
+                        &format!("variable already scheduled for drop: {:?}", var));
                 }
             }
         }
 
         if let Some(scope) = self.scopes.last_mut() {
-            let ident = self.var_decls[decl].ident;
+            let ident = self.var_decls[var].ident;
 
-            scope.forward_decls.insert(ident, ForwardDecl {
-                span: span,
-                decl: decl,
-            });
+            scope.forward_decls.insert(ident, var);
         } else {
             self.cx.span_bug(span, "no scopes?");
         }
 
         for scope in self.scopes.iter_mut().rev() {
             if scope.extent == extent {
-                scope.drops.push(DropData {
-                    span: span,
-                    decl: decl,
-                });
+                scope.drops.push(var);
                 return;
             }
         }
         self.cx.span_bug(span,
-                         &format!("extent {:?} not in scope to drop {:?}", extent, decl));
+                         &format!("extent {:?} not in scope to drop {:?}", extent, var));
     }
 
     pub fn schedule_move(&mut self, decl: Var) {
@@ -465,15 +437,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 }
 
-fn drop_decl(cfg: &mut CFG,
-             block: BasicBlock,
-             scope: &Scope,
-             dropped_decl: &DropData) {
-    let moved = scope.moved_decls.contains(&dropped_decl.decl);
-    cfg.push_drop(
-        block,
-        dropped_decl.span,
-        dropped_decl.decl,
-        moved,
-    );
+fn drop_decl(cfg: &mut CFG, block: BasicBlock, scope: &Scope, var: Var) {
+    let moved = scope.moved_decls.contains(&var);
+    cfg.push_drop(block, var, moved);
 }

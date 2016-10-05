@@ -63,6 +63,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ident: name,
             ty: var_ty,
             shadowed_decl: shadowed_decl,
+            span: span,
         });
         let extent = self.extent_of_innermost_scope();
         self.schedule_drop(span, extent, var);

@@ -25,27 +25,16 @@ impl CFG {
         self.block_data_mut(block).statements.push(statement);
     }
 
-    pub fn push_drop(&mut self,
-                     block: BasicBlock,
-                     span: Span,
-                     decl: Var,
-                     moved: bool) {
+    pub fn push_drop(&mut self, block: BasicBlock, lvalue: Var, moved: bool) {
         self.push(block, Statement::Drop {
-            span: span,
-            lvalue: decl,
+            lvalue: lvalue,
             moved: moved,
         });
     }
 
-    pub fn push_declare_decl(&mut self,
-                             block: BasicBlock,
-                             span: Span,
-                             decl: Var,
-                             ty: Option<P<ast::Ty>>) {
+    pub fn push_declare_decl(&mut self, block: BasicBlock, var: Var) {
         self.push(block, Statement::Declare {
-            span: span,
-            decl: decl,
-            ty: ty,
+            var: var,
         });
     }
 

@@ -126,6 +126,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ident: "return_".to_ident(),
             ty: None,
             shadowed_decl: None,
+            span: span,
         });
 
         builder

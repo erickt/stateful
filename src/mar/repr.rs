@@ -115,13 +115,12 @@ pub struct VarDecl {
     pub ident: ast::Ident,
     pub ty: Option<P<ast::Ty>>,
     pub shadowed_decl: Option<Var>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct DeclaredDecl {
-    pub span: Span,
     pub decl: Var,
-    pub ty: Option<P<ast::Ty>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -309,30 +308,16 @@ impl Lvalue {
 pub enum Statement {
     Expr(ast::Stmt),
     Declare {
-        span: Span,
-        decl: Var,
-        ty: Option<P<ast::Ty>>,
+        var: Var,
     },
     Assign {
         lvalue: Lvalue,
         rvalue: P<ast::Expr>,
     },
     Drop {
-        span: Span,
         lvalue: Var,
         moved: bool,
     },
-}
-
-impl Statement {
-    pub fn span(&self) -> Span {
-        match *self {
-            Statement::Expr(ref stmt) => stmt.span,
-            Statement::Declare { span, .. }
-            | Statement::Drop { span, .. } => span,
-            Statement::Assign { ref lvalue, .. } => lvalue.span(),
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]

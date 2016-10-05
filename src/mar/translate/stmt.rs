@@ -6,25 +6,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
-            Statement::Declare { span, decl, ref ty } => {
-                let ast_builder = self.ast_builder.span(span);
-
-                let decl = self.mar.var_decl_data(decl);
+            Statement::Declare { var } => {
+                let var_decl = self.mar.var_decl_data(var);
+                let ast_builder = self.ast_builder.span(var_decl.span);
 
                 let mut stmts = vec![];
 
-                if let Some(shadowed_decl) = decl.shadowed_decl {
+                if let Some(shadowed_decl) = var_decl.shadowed_decl {
                     let shadowed_ident = self.shadowed_ident(shadowed_decl);
 
                     stmts.push(
                         ast_builder.stmt().let_id(shadowed_ident)
-                        .expr().id(decl.ident)
+                        .expr().id(var_decl.ident)
                     );
                 }
 
                 stmts.push(
-                    self.ast_builder.span(span).stmt().let_id(decl.ident)
-                        .build_option_ty(ty.clone())
+                    ast_builder.stmt().let_id(var_decl.ident)
+                        .build_option_ty(var_decl.ty.clone())
                         .build()
                 );
 
@@ -62,9 +61,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            Statement::Drop { span, lvalue, moved } => {
-                let ast_builder = self.ast_builder.span(span);
+            Statement::Drop { lvalue, moved } => {
                 let decl = self.mar.var_decl_data(lvalue);
+                let ast_builder = self.ast_builder.span(decl.span);
 
                 // We need an explicit drop here to make sure we drop variables as they go out of
                 // a block scope. Otherwise, they won't be dropped until the next yield point,
