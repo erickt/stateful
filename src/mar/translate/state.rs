@@ -43,7 +43,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.get_shadowed_decls(&mut decls, var);
         }
 
-        debug!("decls: {:?} {:?}", block, decls);
+        //debug!("decls: {:?} {:?}", block, decls);
 
         decls
     }

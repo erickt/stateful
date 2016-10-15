@@ -2,16 +2,13 @@ use aster::ident::ToIdent;
 use mar::build::simplify::simplify_item;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
+use std::collections::HashSet;
+use std::u32;
 use syntax::abi;
 use syntax::ast::{self, ItemKind};
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
-
-#[derive(Debug)]
-pub struct CFG {
-    basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
-}
 
 pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
@@ -24,9 +21,17 @@ pub struct Builder<'a, 'b: 'a> {
     /// see the `scope` module for more details
     scopes: Vec<scope::Scope>,
 
+    ///  for each scope, a span of blocks that defines it;
+    ///  we track these for use in region and borrow checking,
+    ///  but these are liable to get out of date once optimization
+    ///  begins. They are also hopefully temporary, and will be
+    ///  no longer needed when we adopt graph-based regions.
+    scope_auxiliary: IndexVec<ScopeId, ScopeAuxiliary>,
+
     /// the current set of loops; see the `scope` module for more
     /// details
     loop_scopes: Vec<scope::LoopScope>,
+    conditional_scopes: HashSet<ScopeId>,
 
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
@@ -34,6 +39,49 @@ pub struct Builder<'a, 'b: 'a> {
 
     /// cached block with the RETURN terminator
     cached_return_block: Option<BasicBlock>,
+}
+
+#[derive(Debug)]
+pub struct CFG {
+    basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ScopeId(u32);
+
+impl Idx for ScopeId {
+    fn new(index: usize) -> ScopeId {
+        assert!(index < (u32::MAX as usize));
+        ScopeId(index as u32)
+    }
+
+    fn index(self) -> usize {
+        self.0 as usize
+    }
+}
+
+/// For each scope, we track the extent (from the HIR) and a
+/// single-entry-multiple-exit subgraph that contains all the
+/// statements/terminators within it.
+///
+/// This information is separated out from the main `ScopeData`
+/// because it is short-lived. First, the extent contains node-ids,
+/// so it cannot be saved and re-loaded. Second, any optimization will mess up
+/// the dominator/postdominator information.
+///
+/// The intention is basically to use this information to do
+/// regionck/borrowck and then throw it away once we are done.
+pub struct ScopeAuxiliary {
+    /// extent of this scope from the MIR.
+    pub extent: CodeExtent,
+
+    /*
+    /// "entry point": dominator of all nodes in the scope
+    pub dom: Location,
+
+    /// "exit points": mutual postdominators of all nodes in the scope
+    pub postdoms: Vec<Location>,
+    */
 }
 
 #[derive(Debug)]
@@ -113,7 +161,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             fn_span: span,
             state_machine_kind: state_machine_kind,
             scopes: vec![],
+            scope_auxiliary: IndexVec::new(),
             loop_scopes: vec![],
+            conditional_scopes: HashSet::new(),
             var_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
