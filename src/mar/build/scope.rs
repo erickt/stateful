@@ -25,6 +25,8 @@ use syntax::visit;
 
 #[derive(Debug)]
 pub struct Scope {
+    kind: ScopeKind,
+
     extent: CodeExtent,
 
     /// Declarations created in this scope.
@@ -38,6 +40,14 @@ pub struct Scope {
 
     drops: Vec<Var>,
     moved_decls: HashSet<Var>,
+}
+
+#[derive(Debug)]
+enum ScopeKind {
+    Normal,
+    Conditional {
+        scopes: Vec<Scope>,
+    }
 }
 
 #[derive(Clone)]
@@ -68,6 +78,44 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.loop_scopes.push(loop_scope);
         let block = f(self);
         self.loop_scopes.pop();
+        block
+    }
+
+    /// Start a loop scope, which tracks where `continue` and `break`
+    /// should branch to. See module comment for more details.
+    pub fn in_conditional_scope<F>(&mut self,
+                                   extent: CodeExtent,
+                                   f: F) -> BasicBlock
+        where F: FnOnce(&mut Builder) -> BasicBlock
+    {
+        self.push_scope_kind(extent, ScopeKind::Conditional {
+            scopes: vec![],
+        });
+        let block = f(self);
+
+        {
+            let current_scope = self.scopes.last_mut().unwrap();
+
+            match current_scope.kind {
+                ScopeKind::Conditional { ref scopes } => {
+                    debug!("in_conditional_scope: {:?}", scopes);
+
+                    for scope in scopes {
+                        for var in &scope.initialized_decls {
+                            let ident = self.var_decls[*var].ident;
+                            current_scope.forward_decls.remove(&ident);
+
+                            if !current_scope.decls.contains(var) {
+                                current_scope.initialized_decls.insert(*var);
+                            }
+                        }
+                    }
+                }
+                ScopeKind::Normal => unreachable!(),
+            }
+        }
+
+        self.pop_scope(extent, block);
         block
     }
 
@@ -102,7 +150,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// calls must be paired; using `in_scope` as a convenience
     /// wrapper maybe preferable.
     pub fn push_scope(&mut self, extent: CodeExtent, _block: BasicBlock) {
+        self.push_scope_kind(extent, ScopeKind::Normal);
+    }
+
+    fn push_scope_kind(&mut self, extent: CodeExtent, kind: ScopeKind) {
         self.scopes.push(Scope {
+            kind: kind,
             extent: extent,
             decls: HashSet::new(),
             forward_decls: HashMap::new(),
@@ -128,15 +181,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         if let Some(current_scope) = self.scopes.last_mut() {
-            for var in scope.initialized_decls {
-                let ident = self.var_decls[var].ident;
-                current_scope.forward_decls.remove(&ident);
+            debug!("pop_scope: {:?}", current_scope);
 
-                if !current_scope.decls.contains(&var) {
-                    current_scope.initialized_decls.insert(var);
+            match current_scope.kind {
+                ScopeKind::Normal => {
+                    for var in &scope.initialized_decls {
+                        let ident = self.var_decls[*var].ident;
+                        current_scope.forward_decls.remove(&ident);
+
+                        if !current_scope.decls.contains(var) {
+                            current_scope.initialized_decls.insert(*var);
+                        }
+                    }
+                }
+                ScopeKind::Conditional { ref mut scopes } => {
+                    println!("pop_scope: conditional: {:?}", scope);
+                    scopes.push(scope);
                 }
             }
+        } else {
+            unreachable!()
         }
+
     }
 
     /// Returns if we are currently in a loop.

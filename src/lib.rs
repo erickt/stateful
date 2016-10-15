@@ -50,6 +50,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
 
     validate(cx, &mar);
 
+    /*
     if let Some(item) = mar::translate::translate(cx, &mar) {
         debug!("{}", pprust::item_to_string(&item));
         debug!("-------");
@@ -58,6 +59,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     let mut pass_manager = mar::transform::pass_manager::PassManager::new();
     pass_manager.add_pass(Box::new(mar::transform::simplify_cfg::SimplifyCfg::new()));
     pass_manager.run(&mut mar);
+    */
 
     validate(cx, &mar);
 

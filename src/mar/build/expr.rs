@@ -197,45 +197,47 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                cond_expr: &P<ast::Expr>,
                then_expr: &P<ast::Block>,
                else_expr: &Option<P<ast::Expr>>) -> BasicBlock {
-        let (block, cond_expr) = self.expr_temp(
-            extent,
-            block,
-            cond_expr,
-            "if_cond");
+        self.in_conditional_scope(extent, |this| {
+            let (block, cond_expr) = this.expr_temp(
+                extent,
+                block,
+                cond_expr,
+                "if_cond");
 
-        let mut then_block = self.start_new_block(span, Some("Then"));
-        let mut else_block = self.start_new_block(span, Some("Else"));
+            let mut then_block = this.start_new_block(span, Some("Then"));
+            let mut else_block = this.start_new_block(span, Some("Else"));
 
-        self.terminate(span, block, TerminatorKind::If {
-            cond: cond_expr.clone(),
-            targets: (then_block, else_block),
-        });
-
-        then_block = self.into(destination.clone(), extent, then_block, then_expr);
-        else_block = self.into(destination, extent, else_block, else_expr);
-
-        let join_block = self.start_new_block(span, Some("IfJoin"));
-
-        self.terminate(
-            then_expr.span,
-            then_block,
-            TerminatorKind::Goto {
-                target: join_block,
-                end_scope: true,
+            this.terminate(span, block, TerminatorKind::If {
+                cond: cond_expr.clone(),
+                targets: (then_block, else_block),
             });
 
-        self.terminate(
-            match *else_expr {
-                Some(ref expr) => expr.span,
-                None => span,
-            },
-            else_block,
-            TerminatorKind::Goto {
-                target: join_block,
-                end_scope: true,
-            });
+            then_block = this.into(destination.clone(), extent, then_block, then_expr);
+            else_block = this.into(destination, extent, else_block, else_expr);
 
-        join_block
+            let join_block = this.start_new_block(span, Some("IfJoin"));
+
+            this.terminate(
+                then_expr.span,
+                then_block,
+                TerminatorKind::Goto {
+                    target: join_block,
+                    end_scope: true,
+                });
+
+            this.terminate(
+                match *else_expr {
+                    Some(ref expr) => expr.span,
+                    None => span,
+                },
+                else_block,
+                TerminatorKind::Goto {
+                    target: join_block,
+                    end_scope: true,
+                });
+
+            join_block
+        })
     }
 
     fn expr_loop(&mut self,
