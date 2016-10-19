@@ -27,7 +27,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr_suspend_unit(&mut self,
                              block: BasicBlock,
                              expr: P<ast::Expr>) -> BasicBlock {
-        let lvalue = self.cfg.temp_lvalue(expr.span, Some("suspend"));
+        let lvalue = self.declare_temp_lvalue(expr.span, "suspend");
         self.expr_suspend(lvalue, block, expr)
     }
 

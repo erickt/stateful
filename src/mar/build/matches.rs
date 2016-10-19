@@ -81,4 +81,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let name = format!("{}{}", name.to_ident(), self.var_decls.len());
         self.declare_binding(span, ast::Mutability::Immutable, name, None)
     }
+
+    /// Create a new temporary lvalue that has a unique name.
+    pub fn declare_temp_lvalue<T>(&mut self, span: Span, name: T) -> Lvalue
+        where T: ToIdent,
+    {
+        let temp_decl = self.declare_temp(span, name);
+        Lvalue::Var {
+            span: span,
+            decl: temp_decl,
+        }
+    }
 }

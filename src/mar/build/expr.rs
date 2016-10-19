@@ -292,7 +292,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             // execute the body, branching back to the test
-            let lvalue = this.cfg.temp_lvalue(body.span, Some("_loop_result_temp"));
+            let lvalue = this.declare_temp_lvalue(body.span, "_loop_result_temp");
             let body_block_end = this.into(lvalue, extent, body_block, body);
 
             this.terminate(
