@@ -1,8 +1,9 @@
-use aster::ident::ToIdent;
+//use aster::ident::ToIdent;
 use mar::build::simplify::simplify_item;
+use mar::build::scope::ConditionalScope;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::u32;
 use syntax::abi;
 use syntax::ast::{self, ItemKind};
@@ -31,7 +32,7 @@ pub struct Builder<'a, 'b: 'a> {
     /// the current set of loops; see the `scope` module for more
     /// details
     loop_scopes: Vec<scope::LoopScope>,
-    conditional_scopes: HashSet<ScopeId>,
+    conditional_scopes: HashMap<ScopeId, ConditionalScope>,
 
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
@@ -115,9 +116,31 @@ pub fn construct(cx: &ExtCtxt,
         // Create an initial scope for the function.
         builder.push_scope(extent, block);
 
-        block = builder.args_and_body(extent, block, &fn_decl.inputs, ast_block);
+        // Declare the return pointer.
+        builder.declare_binding(
+            item.span,
+            ast::Mutability::Immutable,
+            "return_",
+            None,
+        );
+
+        block = builder.in_scope(extent, item.span, block, |this| {
+            this.args_and_body(extent, block, &fn_decl.inputs, ast_block)
+        });
 
         let return_block = builder.return_block();
+
+        // Make sure the return pointer was actually initialized.
+        // FIXME: The return pointer really shouldn't be considered active here, but I'm not sure
+        // how to fix that yet.
+        {
+            let end_decls = &builder.cfg.basic_blocks[return_block].decls;
+            if end_decls.first() != Some(&LiveDecl::Active(RETURN_POINTER)) {
+                cx.span_warn(
+                    item.span,
+                    &format!("return pointer not initialized? {:?}", end_decls));
+            }
+        }
 
         builder.terminate(item.span, block, TerminatorKind::Goto {
             target: return_block,
@@ -128,18 +151,6 @@ pub fn construct(cx: &ExtCtxt,
         builder.schedule_move(RETURN_POINTER);
 
         builder.pop_scope(extent, return_block);
-
-        // Make sure the return pointer was actually initialized.
-        // FIXME: The return pointer really shouldn't be considered active here, but I'm not sure
-        // how to fix that yet.
-        {
-            let end_decls = &builder.cfg.basic_blocks[return_block].decls;
-            if end_decls.first() != Some(&LiveDecl::Active(RETURN_POINTER)) {
-                cx.span_bug(
-                    item.span,
-                    &format!("return pointer not initialized? {:?}", end_decls));
-            }
-        }
 
         builder.terminate(item.span, return_block, TerminatorKind::Return);
     }
@@ -163,21 +174,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             scopes: vec![],
             scope_auxiliary: IndexVec::new(),
             loop_scopes: vec![],
-            conditional_scopes: HashSet::new(),
+            conditional_scopes: HashMap::new(),
             var_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
         };
 
         assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
-
-        builder.var_decls.push(VarDecl {
-            mutability: ast::Mutability::Immutable,
-            ident: "return_".to_ident(),
-            ty: None,
-            shadowed_decl: None,
-            span: span,
-        });
 
         builder
     }
@@ -215,7 +218,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      block: BasicBlock,
                      arguments: &[ast::Arg],
                      ast_block: P<ast::Block>) -> BasicBlock {
-        self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
+        //self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
 
         // Register the arguments as declarations.
         self.add_decls_from_pats(
@@ -232,7 +235,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
-        self.cfg.start_new_block(span, name, decls)
+
+        /*
+        let decls = vec![];
+        */
+
+        let block = self.cfg.start_new_block(span, name, decls.clone());
+
+        debug!("start_new_block: id={:?} decls={:?}", block, decls); 
+
+        block
     }
 
     pub fn start_new_extent(&mut self) -> CodeExtent {

@@ -78,13 +78,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 match self.mar.state_machine_kind {
                     StateMachineKind::Generator => {
                         vec![
-                            ast_builder.stmt().semi().call()
-                                    .path()
-                                        .global()
-                                        .ids(&["std", "mem", "drop"])
-                                        .build()
-                                .arg().id("return_")
-                                .build(),
+                            // generate `let () = return_;` to make sure it's been assigned the
+                            // right type.
+                            ast_builder.stmt().let_()
+                                    .tuple().build()
+                                .expr().id("return_"),
                             ast_builder.stmt().semi().return_expr().tuple()
                                 .expr().none()
                                 .expr().build(next_state)

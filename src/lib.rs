@@ -40,7 +40,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
-    let mut mar = match mar::build::construct(cx, item.clone(), state_machine_kind) {
+    let mar = match mar::build::construct(cx, item.clone(), state_machine_kind) {
         Ok(mar) => mar,
         Err(mar::build::Error) => {
             // We had an error, so just return the input item for a lack of a better option.
@@ -66,7 +66,6 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     match mar::translate::translate(cx, &mar) {
         Some(item) => {
             debug!("{}", pprust::item_to_string(&item));
-            //println!("{}", pprust::item_to_string(&item));
 
             Annotatable::Item(item)
         }

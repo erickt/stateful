@@ -3,21 +3,19 @@
 #![allow(unused_variables)]
 #![allow(unused_mut)]
 #![allow(non_shorthand_field_patterns)]
+#![allow(unused_imports)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/*
 #[generator]
 fn gen(cond: bool) -> Box<Iterator<Item=usize>> {
-    if cond == true {
-        yield_!(2);
-    } else {
-        yield_!(3);
+    if cond {
+        yield_!(1);
     }
 }
-*/
 
+/*
 fn gen(cond: bool) -> Box<Iterator<Item = usize>> {
     struct StateMachine<S, F> {
         state: S,
@@ -195,6 +193,7 @@ fn gen(cond: bool) -> Box<Iterator<Item = usize>> {
                                                      }
                                                  } }))
 }
+*/
 
 fn main() {
     for value in gen(true) {
