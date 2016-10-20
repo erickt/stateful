@@ -13,6 +13,7 @@ use futures_cpupool::CpuPool;
 use std::time::*;
 use tokio_timer::*;
 
+/*
 #[async]
 fn short_running_future(timer: Timer) -> Box<Future<Item=(), Error=TimerError> + Send> {
     println!("short sleep");
@@ -21,11 +22,15 @@ fn short_running_future(timer: Timer) -> Box<Future<Item=(), Error=TimerError> +
 
     ()
 }
+*/
 
 #[async]
 fn long_running_future(timer: Timer,
                        times: u64,
                        a: u64) -> Box<Future<Item=u64, Error=TimerError> + Send> {
+    await!(timer.sleep(Duration::from_millis(20)));
+
+    /*
     await!(short_running_future(timer.clone()));
 
     for i in 0 .. times {
@@ -37,6 +42,7 @@ fn long_running_future(timer: Timer,
             await!(short_running_future(timer.clone()));
         }
     }
+    */
 
     println!("done sleeping");
 

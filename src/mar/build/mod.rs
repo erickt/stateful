@@ -3,7 +3,7 @@ use mar::build::simplify::simplify_item;
 use mar::build::scope::ConditionalScope;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::u32;
 use syntax::abi;
 use syntax::ast::{self, ItemKind};
@@ -148,7 +148,7 @@ pub fn construct(cx: &ExtCtxt,
         });
 
         // The return value shouldn't be dropped when we pop the scope.
-        builder.schedule_move(RETURN_POINTER);
+        builder.schedule_move(item.span, RETURN_POINTER);
 
         builder.pop_scope(extent, return_block);
 
@@ -197,6 +197,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     self.fn_span,
                     &format!("no terminator on block {:?}", index));
             }
+        }
+
+        // We need to make sure all variables have actually been initialized.
+        // First, gather up them all.
+        let mut initialized_vars = HashSet::new();
+        for block in self.cfg.basic_blocks.iter() {
+            for live_decl in &block.decls {
+                match *live_decl {
+                    LiveDecl::Active(var) | LiveDecl::Moved(var) => {
+                        initialized_vars.insert(var);
+                    }
+                    LiveDecl::Forward(_) => {}
+                }
+            }
+        }
+
+        // Now take the difference between the initialized vars and the total set of variables.
+        let mut uninitialized_vars = vec![];
+        for var in self.var_decls.indices() {
+            if !initialized_vars.contains(&var) {
+                uninitialized_vars.push(var);
+            }
+        }
+
+        if !uninitialized_vars.is_empty() {
+            self.cx.span_warn(
+                self.fn_span,
+                &format!("uninitialized variables: {:?}", uninitialized_vars));
         }
 
         Mar {

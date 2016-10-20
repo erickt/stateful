@@ -138,7 +138,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where T: ToIdent,
     {
         let temp_decl = self.declare_temp(expr.span, name);
-        self.schedule_move(temp_decl);
+        self.schedule_move(expr.span, temp_decl);
 
         let temp_lvalue = Lvalue::Var {
             span: expr.span,

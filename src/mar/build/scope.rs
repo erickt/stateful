@@ -636,9 +636,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          &format!("extent {:?} not in scope to drop {:?}", extent, var));
     }
 
-    pub fn schedule_move(&mut self, decl: Var) {
+    pub fn schedule_move(&mut self, span: Span, var: Var) {
+        let ident = self.var_decls[var].ident;
+
         for scope in self.scopes.iter_mut().rev() {
-            scope.moved_decls.insert(decl);
+            // Make sure the decl isn't a forward declaration.
+            if scope.forward_decls.contains_key(&ident) {
+                self.cx.span_bug(span,
+                                 &format!("trying to move an uninitialized var {:?}?", var));
+            }
+
+            scope.moved_decls.insert(var);
         }
     }
 

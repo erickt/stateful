@@ -45,9 +45,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let (ref mac, _, _) = **mac;
                 let destination = self.declare_temp_lvalue(stmt.span, "_stmt_result_temp");
 
-                match self.expr_mac(destination, extent, block, mac) {
+                match self.expr_mac(destination.clone(), extent, block, mac) {
                     Some(block) => block,
                     None => {
+                        self.assign_lvalue_unit(stmt.span, block, destination);
                         self.cfg.push(block, Statement::Expr(stmt.clone()));
                         block
                     }

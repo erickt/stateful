@@ -122,6 +122,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             end_scope: true,
         });
 
+        // Handle the not ready arm.
+        let not_ready_path = builder.path()
+            .global()
+            .ids(&["futures", "Async", "NotReady"])
+            .build();
+
+        let not_ready_pat = builder.pat().path()
+            .build(not_ready_path);
+
+        let not_ready_arm = Arm {
+            pats: vec![not_ready_pat],
+            guard: None,
+            block: self.start_new_block(span, Some("AwaitNotReady")),
+        };
+
+        self.terminate(span, not_ready_arm.block, TerminatorKind::Await {
+            target: loop_block,
+        });
+
         // Handle the ready arm.
         let ready_ident = builder.id("result");
 
@@ -156,25 +175,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.terminate(span, ready_arm_block, TerminatorKind::Goto {
             target: exit_block,
             end_scope: true,
-        });
-
-        // Handle the not ready arm.
-        let not_ready_path = builder.path()
-            .global()
-            .ids(&["futures", "Async", "NotReady"])
-            .build();
-
-        let not_ready_pat = builder.pat().path()
-            .build(not_ready_path);
-
-        let not_ready_arm = Arm {
-            pats: vec![not_ready_pat],
-            guard: None,
-            block: self.start_new_block(span, Some("AwaitNotReady")),
-        };
-
-        self.terminate(span, not_ready_arm.block, TerminatorKind::Await {
-            target: loop_block,
         });
 
         // Finally, handle the match.

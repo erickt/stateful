@@ -19,7 +19,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         for moved_ident in expander.moved_idents {
             if let Some(decl) = self.find_decl(moved_ident) {
-                self.schedule_move(decl);
+                self.schedule_move(expr.span, decl);
             } else {
                 self.cx.span_bug(
                     expr.span,
