@@ -24,14 +24,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
+        let mut arm_blocks = vec![];
+
+        self.in_conditional_scope(extent, |this| {
+            for (arm, target) in arms.iter().zip(targets.iter()) {
+                this.next_conditional_scope();
+
+                let arm_block = this.in_scope(extent, span, block, |this| {
+                    this.add_decls_from_pats(target.block, arm.pats.iter());
+                    this.expr(destination.clone(), extent, target.block, &arm.body)
+                });
+
+                arm_blocks.push(arm_block);
+            }
+        });
+
         let join_block = self.start_new_block(span, Some("MatchJoin"));
 
-        for (arm, target) in arms.iter().zip(targets.iter()) {
-            let arm_block = self.in_scope(extent, span, block, |this| {
-                this.add_decls_from_pats(target.block, arm.pats.iter());
-                this.expr(destination.clone(), extent, target.block, &arm.body)
-            });
-
+        for arm_block in arm_blocks {
             self.terminate(
                 span,
                 arm_block,

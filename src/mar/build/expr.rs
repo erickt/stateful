@@ -212,9 +212,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
 
         self.in_conditional_scope(extent, |this| {
-            then_block = this.into(destination.clone(), extent, then_block, then_expr);
             this.next_conditional_scope();
 
+            then_block = this.into(destination.clone(), extent, then_block, then_expr);
+
+            this.next_conditional_scope();
             else_block = match *else_expr {
                 Some(ref else_expr) => this.into(destination, extent, else_block, else_expr),
                 None => {

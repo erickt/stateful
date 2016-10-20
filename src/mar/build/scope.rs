@@ -112,7 +112,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("in_conditional_scope: ++++++++++ {:?}", scope_id);
 
         self.conditional_scopes.insert(scope_id, ConditionalScope {
-            initialized_decls: vec![HashSet::new()],
+            initialized_decls: vec![],
         });
 
         let result = f(self);

@@ -10,8 +10,9 @@ use std::rc::Rc;
 
 #[generator]
 fn gen(cond: bool) -> Box<Iterator<Item=usize>> {
-    if cond {
-        yield_!(1);
+    match cond {
+        true => yield_!(1),
+        false => yield_!(2),
     }
 }
 
