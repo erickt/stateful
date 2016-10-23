@@ -36,27 +36,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                        block,
                                        |loop_scope| loop_scope.break_block)
             }
-            ExprKind::Ret(Some(ref returned_expr)) => {
-                let (block, returned_expr) = self.expr_temp(
+            ExprKind::Ret(ref returned_expr) => {
+                self.expr_ret(
+                    destination,
                     extent,
                     block,
-                    returned_expr,
-                    "returned_expr");
-
-                let assign_expr = AstBuilder::new().span(expr.span).expr().assign()
-                    .id(self.var_decls[RETURN_POINTER].ident)
-                    .build(returned_expr.clone());
-
-                let block = self.into(destination, extent, block, &assign_expr);
-
-                let return_block = self.return_block();
-                self.exit_scope(expr.span, extent, block, return_block);
-                self.start_new_block(expr.span, Some("AfterReturn"))
-            }
-            ExprKind::Ret(None) => {
-                let return_block = self.return_block();
-                self.exit_scope(expr.span, extent, block, return_block);
-                self.start_new_block(expr.span, Some("AfterReturn"))
+                    expr.span,
+                    returned_expr)
             }
             ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {
                 self.expr_if(
@@ -155,6 +141,42 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .id(self.var_decls[temp_decl].ident);
 
         (block, temp_expr)
+    }
+
+    /// Compile `return $expr` into:
+    ///
+    /// ```
+    /// 'block:
+    ///     $return pointer = $expr;
+    ///     goto 'exit;
+    ///
+    /// 'after_return:
+    ///     ...
+    /// ```
+    fn expr_ret(&mut self,
+                destination: Lvalue,
+                extent: CodeExtent,
+                mut block: BasicBlock,
+                span: Span,
+                returned_expr: &Option<P<ast::Expr>>) -> BasicBlock {
+        // Assign the return pointer.
+        let return_pointer = self.var_decls[RETURN_POINTER].ident;
+
+        let expr = if let Some(ref returned_expr) = *returned_expr {
+            quote_expr!(self.cx, $return_pointer = $returned_expr)
+        } else {
+            quote_expr!(self.cx, $return_pointer = ())
+        };
+
+        block = self.expr(destination, extent, block, &expr);
+
+        // Exit our scope.
+        let return_block = self.return_block();
+        self.exit_scope(span, extent, block, return_block);
+
+        // We need to start a new block after this one since there might be trailing expressions
+        // that we need to type check.
+        self.start_new_block(span, Some("AfterReturn"))
     }
 
     fn expr_if(&mut self,
