@@ -117,6 +117,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
+    /// Returns if we are currently in a loop.
+    pub fn is_in_loop(&self) -> bool {
+        !self.loop_scopes.is_empty()
+    }
+
     /// Finds the loop scope for a given label. This is used for
     /// resolving `break` and `continue`.
     pub fn find_loop_scope(&mut self,

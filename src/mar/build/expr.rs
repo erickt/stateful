@@ -285,6 +285,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             -> BasicBlock
         where F: FnOnce(&LoopScope) -> BasicBlock
     {
+        if !self.is_in_loop() {
+            self.cx.span_err(span, "cannot break outside of a loop");
+        }
+
         let loop_scope = self.find_loop_scope(span, label);
         let exit_block = exit_selector(&loop_scope);
         self.exit_scope(span, loop_scope.extent, block, exit_block);
