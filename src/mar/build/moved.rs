@@ -21,7 +21,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             if let Some(decl) = self.find_decl(moved_ident) {
                 self.schedule_move(expr.span, decl);
             } else {
-                self.cx.span_bug(
+                self.cx.span_warn(
                     expr.span,
                     &format!("ident `{}` not in scope?", moved_ident));
             }

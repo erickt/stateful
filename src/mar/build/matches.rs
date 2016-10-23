@@ -6,7 +6,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn match_expr(&mut self,
+    pub fn expr_match(&mut self,
                       destination: Lvalue,
                       extent: CodeExtent,
                       span: Span,
@@ -14,6 +14,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       discriminant: P<ast::Expr>,
                       arms: &[ast::Arm])
                       -> BasicBlock {
+        let (block, _temp_var, discriminant) = self.expr_temp(
+            extent,
+            block,
+            &discriminant,
+            "temp_match_cond");
+
         let targets = arms.iter()
             .map(|arm| {
                 Arm {
@@ -26,7 +32,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let mut arm_blocks = vec![];
 
-        self.in_conditional_scope(extent, |this| {
+        self.in_conditional_scope(span, extent, |this| {
             for (arm, target) in arms.iter().zip(targets.iter()) {
                 this.next_conditional_scope();
 

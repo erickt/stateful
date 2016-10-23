@@ -157,6 +157,10 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
                     .with_arg(expr)
                     .build()
             }
+            Some(Transition::Suspend(_)) => {
+                self.cx.span_err(mac.span, "suspend!(...) cannot be directly called");
+                fold::noop_fold_mac(mac, self)
+            }
             None => {
                 fold::noop_fold_mac(mac, self)
             }

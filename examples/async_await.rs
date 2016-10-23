@@ -42,12 +42,14 @@ fn long_running_future(timer: Timer,
             await!(short_running_future(timer.clone()));
         }
     }
-    */
 
     println!("done sleeping");
+    */
 
     a
 }
+
+
 
 fn main() {
     // Create a worker thread pool with four threads

@@ -102,6 +102,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Start a loop scope, which tracks where `continue` and `break`
     /// should branch to. See module comment for more details.
     pub fn in_conditional_scope<F, T>(&mut self,
+                                      span: Span,
                                       _extent: CodeExtent,
                                       f: F) -> T
         where F: FnOnce(&mut Builder) -> T
@@ -126,8 +127,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut iter = conditional_scopes.initialized_decls.iter();
         let initialized_decls = iter.next().unwrap();
 
-        assert!(iter.all(|decls| decls == initialized_decls),
-            "some variables not conditionally initialized?");
+        if iter.any(|decls| decls != initialized_decls) {
+            self.cx.span_warn(
+                span,
+                "some variables not conditionally initialized?");
+        }
 
         // The conditionally initialized variables should be initialized.
         for var in initialized_decls {
@@ -642,8 +646,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for scope in self.scopes.iter_mut().rev() {
             // Make sure the decl isn't a forward declaration.
             if scope.forward_decls.contains_key(&ident) {
-                self.cx.span_bug(span,
-                                 &format!("trying to move an uninitialized var {:?}?", var));
+                self.cx.span_warn(span,
+                                  &format!("trying to move an uninitialized var {:?}?", var));
             }
 
             scope.moved_decls.insert(var);

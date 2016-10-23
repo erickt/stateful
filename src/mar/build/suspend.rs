@@ -1,4 +1,3 @@
-use aster::AstBuilder;
 use mar::build::Builder;
 use mar::repr::*;
 use syntax::ast;
@@ -8,6 +7,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Generate code to suspend the coroutine.
     pub fn expr_suspend(&mut self,
                         destination: Lvalue,
+                        _extent: CodeExtent,
                         block: BasicBlock,
                         expr: P<ast::Expr>) -> BasicBlock {
         let next_block = self.start_new_block(expr.span, Some("AfterSuspend"));
@@ -25,10 +25,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn expr_suspend_unit(&mut self,
+                             extent: CodeExtent,
                              block: BasicBlock,
                              expr: P<ast::Expr>) -> BasicBlock {
         let lvalue = self.declare_temp_lvalue(expr.span, "suspend");
-        self.expr_suspend(lvalue, block, expr)
+        self.expr_suspend(lvalue, extent, block, expr)
     }
 
     /// Compile `yield_!($expr)` into:
@@ -46,14 +47,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// ```
     pub fn expr_yield(&mut self,
                       destination: Lvalue,
+                      extent: CodeExtent,
                       block: BasicBlock,
                       expr: P<ast::Expr>) -> BasicBlock {
-        let expr = self.expand_moved(&expr);
+        let expr = quote_expr!(
+            self.cx,
+            suspend!(Some($expr))
+        );
+
+        self.expr(destination, extent, block, &expr)
+
+        /*
         let expr = AstBuilder::new().span(expr.span).expr()
             .some()
             .build(expr);
 
         self.expr_suspend(destination, block, expr)
+        */
     }
 
     /// Compile `$result = await!($expr)` into:
@@ -65,7 +75,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     ///     goto!('await_loop);
     /// }
     ///
-    /// 'await_loop: {
+    /// let result;
+    ///
+    /// loop {
     ///     match future.poll() {
     ///         Ok(Async::NotReady) => {
     ///             let () = suspend!(Ok(Async::NotReady));
@@ -89,19 +101,90 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr_await(&mut self,
                       destination: Lvalue,
                       extent: CodeExtent,
-                      mut block: BasicBlock,
-                      expr: P<ast::Expr>) -> BasicBlock {
-        let expr = self.expand_moved(&expr);
-        let span = expr.span;
+                      block: BasicBlock,
+                      future_expr: P<ast::Expr>) -> BasicBlock {
+        self.in_scope(extent, future_expr.span, block, |this| {
+            let (block, _temp_var, future_expr) = this.expr_temp(
+                extent,
+                block,
+                &future_expr,
+                "temp_future");
+
+            let expr = quote_expr!(this.cx,
+                {
+                    let result;
+
+                    //loop {
+                        let thing2 = match ::futures::Future::poll(&mut $future_expr) {
+                            /*
+                            ::std::result::Result::Ok(::futures::Async::NotReady) => {
+                                let thing = suspend!(::futures::Async::NotReady);
+                            }
+                            */
+                            ::std::result::Result::Ok(::futures::Async::Ready(ok)) => {
+                                result = ::std::result::Result::Ok(ok);
+                                //break;
+                            }
+
+                            /*
+                            ::std::result::Result::Err(err) => {
+                                result = ::std::result::Result::Err(moved!(err));
+                                break;
+                            }
+                            */
+                        };
+                    //}
+
+                    result
+                }
+            );
+
+            this.expr(destination, extent, block, &expr)
+        })
+
+        /*
+        let loop_block = self.start_new_block(body.span, Some("Loop"));
+        let exit_block = self.start_new_block(body.span, Some("LoopExit"));
+
+        // start the loop
+        self.terminate(
+            body.span,
+            block,
+            TerminatorKind::Goto {
+                target: loop_block,
+                end_scope: false,
+            });
+
+        self.in_loop_scope(extent, None, loop_block, exit_block, |this| {
+            // execute the body, branching back to the test
+            let body_block_end = this.into(lvalue, extent, body_block, body);
+
+            this.terminate(
+                body.span,
+                body_block_end,
+                TerminatorKind::Goto {
+                    target: loop_block,
+                    end_scope: true,
+                });
+
+            exit_block
+        })
+    }
+
+    fn expr_await_loop(&mut self,
+                       destination: Lvalue,
+                       extent: CodeExtent,
+                       block: BasicBlock,
+                       future_expr: P<ast::Expr>) -> BasicBlock {
+        let future_expr = self.expand_moved(&future_expr);
+        let span = future_expr.span;
         let builder = AstBuilder::new().span(span);
 
-        // Declare a variable which will store the awaited future.
-        let future_ident = builder.id("future");
-
-        let future_stmt = builder.stmt()
-            .let_().mut_id(future_ident).build_expr(expr);
-
-        block = self.stmt(extent, block, &future_stmt);
+        let (block, future_expr) = self.expr_temp(
+            extent,
+            block,
+            &future_expr,
+            "future");
 
         // Next, construct a match that polls the future until it's ready:
         //
@@ -113,14 +196,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         //         return Async::NotReady
         //     }
         // }
-
-        let loop_block = self.start_new_block(span, Some("AwaitLoop"));
-        let exit_block = self.start_new_block(span, Some("AwaitExit"));
-
-        self.terminate(span, block, TerminatorKind::Goto {
-            target: loop_block,
-            end_scope: true,
-        });
 
         // Handle the not ready arm.
         let not_ready_path = builder.path()
@@ -136,10 +211,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             guard: None,
             block: self.start_new_block(span, Some("AwaitNotReady")),
         };
-
-        self.terminate(span, not_ready_arm.block, TerminatorKind::Await {
-            target: loop_block,
-        });
 
         // Handle the ready arm.
         let ready_ident = builder.id("result");
@@ -159,6 +230,106 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             guard: None,
             block: self.start_new_block(span, Some("AwaitReady")),
         };
+
+        let mut arm_blocks = vec![];
+
+        self.in_conditional_scope(extent, |this| {
+            this.next_conditional_scope();
+
+            let arm_block = this.in_scope(extent, span, block, |this| {
+                this.expr(
+                    destination.clone(),
+                    extent,
+                    not_ready_arm.block, 
+                    &builder.expr().unit())
+            });
+
+            arm_blocks.push(arm_block);
+
+            ///////////////////////////////////////////////////////////////////
+
+            this.next_conditional_scope();
+
+            let arm_block = this.in_scope(extent, span, block, |this| {
+                this.expr(
+                    destination.clone(),
+                    extent,
+                    ready_arm.block, 
+                    &builder.expr().unit())
+            });
+
+            arm_blocks.push(arm_block);
+        });
+
+        let join_block = self.start_new_block(span, Some("MatchJoin"));
+
+        for arm_block in arm_blocks {
+            self.terminate(
+                span,
+                arm_block,
+                TerminatorKind::Goto { target: join_block, end_scope: true });
+        }
+
+        // Finally, handle the match.
+        let poll_path = builder.path()
+            .global()
+            .ids(&["futures", "Future", "poll"])
+            .build();
+
+        let future_poll_expr = builder.expr()
+            .try()
+            .call()
+            .path().build(poll_path)
+            .arg()
+            .mut_ref().build(future_expr)
+            .build();
+
+        self.terminate(span, block, TerminatorKind::Match {
+            discr: future_poll_expr,
+            targets: vec![not_ready_arm, ready_arm],
+        });
+
+        join_block
+
+
+        /*
+        let loop_block = self.start_new_block(span, Some("AwaitLoop"));
+        let exit_block = self.start_new_block(span, Some("AwaitExit"));
+
+        let mut not_ready_block = self.start_new_block(span, Some("AwaitNotReady"));
+        let mut ready_block = self.start_new_block(span, Some("AwaitReady"));
+
+        self.terminate(span, block, TerminatorKind::Goto {
+            target: loop_block,
+            end_scope: true,
+        });
+
+        // Handle the not ready arm.
+        let not_ready_path = builder.path()
+            .global()
+            .ids(&["futures", "Async", "NotReady"])
+            .build();
+
+        let not_ready_pat = builder.pat().path()
+            .build(not_ready_path);
+
+
+        self.terminate(span, not_ready_arm.block, TerminatorKind::Await {
+            target: loop_block,
+        });
+
+        // Handle the ready arm.
+        let ready_ident = builder.id("result");
+
+        let ready_path = builder.path()
+            .global()
+            .ids(&["futures", "Async", "Ready"])
+            .build();
+
+        let ready_pat = builder.pat().enum_()
+            .build(ready_path)
+            .id(ready_ident)
+            .build();
 
         let ready_arm_block = self.in_scope(extent, span, block, |this| {
             this.add_decls_from_pats(ready_arm.block, ready_arm.pats.iter());
@@ -197,5 +368,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
 
         exit_block
+        */
+        */
     }
 }

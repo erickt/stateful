@@ -10,10 +10,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     mac: &ast::Mac) -> Option<BasicBlock> {
         match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
             (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
-                Some(self.expr_yield(destination, block, expr))
+                let expr = self.expand_moved(&expr);
+
+                Some(self.expr_yield(destination, extent, block, expr))
             }
             (StateMachineKind::Async, Some(transition::Transition::Await(expr))) => {
+                let expr = self.expand_moved(&expr);
+
                 Some(self.expr_await(destination, extent, block, expr))
+            }
+            (_, Some(transition::Transition::Suspend(expr))) => {
+                let expr = self.expand_moved(&expr);
+
+                Some(self.expr_suspend(destination, extent, block, expr))
             }
             _ => None,
         }

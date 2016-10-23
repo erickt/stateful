@@ -55,13 +55,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     else_expr)
             }
             ExprKind::Match(ref discriminant, ref arms) => {
-                let (block, discriminant) = self.expr_temp(
-                    extent,
-                    block,
-                    discriminant,
-                    "match_cond");
-
-                self.match_expr(
+                self.expr_match(
                     destination,
                     extent,
                     expr.span,
@@ -78,7 +72,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block
             }
             ExprKind::While(ref cond_expr, ref body, label) => {
-                let (block, cond_expr) = self.expr_temp(
+                let (block, _temp_var, cond_expr) = self.expr_temp(
                     extent,
                     block,
                     cond_expr,
@@ -97,6 +91,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 panic!("{:?} Should never reach this point - `preapare` should have desugared this.", expr);
             }
             ExprKind::Assign(ref lvalue, ref rvalue) => {
+                // `$rvalue = $lvalue` has a type of `()`.
+                self.assign_lvalue_unit(expr.span, block, destination);
+
                 // FIXME: We don't try to expand the lvalue, which even though it's an expression,
                 // it's only allowed to have certain expressions. This means that `x[0] = 1` is
                 // valid, but `{ x[0] } = 1` is an error.
@@ -106,14 +103,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // yet have the ability to distinguish between valid and invalid lvalues, nor a
                 // way to skip generating a temporary lvalue when it's unnecessary, we're just not
                 // going to expand lvalue for the moment.
-                let (block, rvalue) = self.expr_temp(extent, block, rvalue, "rvalue");
+                let (mut block, _temp_var, rvalue) = self.expr_temp(
+                    extent,
+                    block,
+                    rvalue,
+                    "rvalue");
 
                 let lvalue = Lvalue::Var {
                     span: lvalue.span,
                     decl: self.find_lvalue(lvalue),
                 };
 
-                self.expr(lvalue, extent, block, &rvalue)
+                block = self.expr(lvalue, extent, block, &rvalue);
+
+                block
             }
             ExprKind::Mac(ref mac) => {
                 match self.expr_mac(destination.clone(), extent, block, mac) {
@@ -128,29 +131,27 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    /// Expand an expression into a new temporary value. Note that this temporary value is marked
-    /// as "moved", so make sure to use it before another potential yield point.
-    fn expr_temp<T>(&mut self,
-                    extent: CodeExtent,
-                    block: BasicBlock,
-                    expr: &P<ast::Expr>,
-                    name: T) -> (BasicBlock, P<ast::Expr>)
+    /// Expand an expression into a new temporary value.
+    pub fn expr_temp<T>(&mut self,
+                        extent: CodeExtent,
+                        block: BasicBlock,
+                        expr: &P<ast::Expr>,
+                        name: T) -> (BasicBlock, Var, P<ast::Expr>)
         where T: ToIdent,
     {
-        let temp_decl = self.declare_temp(expr.span, name);
-        self.schedule_move(expr.span, temp_decl);
+        let temp_var = self.declare_temp(expr.span, name);
 
         let temp_lvalue = Lvalue::Var {
             span: expr.span,
-            decl: temp_decl,
+            decl: temp_var,
         };
 
         let block = self.expr(temp_lvalue, extent, block, expr);
 
         let temp_expr = AstBuilder::new().span(expr.span).expr()
-            .id(self.var_decls[temp_decl].ident);
+            .id(self.var_decls[temp_var].ident);
 
-        (block, temp_expr)
+        (block, temp_var, temp_expr)
     }
 
     /// Compile `return $expr` into:
@@ -197,21 +198,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                cond_expr: &P<ast::Expr>,
                then_expr: &P<ast::Block>,
                else_expr: &Option<P<ast::Expr>>) -> BasicBlock {
-        let (block, cond_expr) = self.expr_temp(
+        let (block, _temp_var, cond_expr) = self.expr_temp(
             extent,
             block,
             cond_expr,
             "if_cond");
 
+        //self.schedule_move(cond_expr.span, temp_var);
+
         let mut then_block = self.start_new_block(span, Some("Then"));
         let mut else_block = self.start_new_block(span, Some("Else"));
 
         self.terminate(span, block, TerminatorKind::If {
-            cond: cond_expr.clone(),
+            cond: cond_expr,
             targets: (then_block, else_block),
         });
 
-        self.in_conditional_scope(extent, |this| {
+        self.in_conditional_scope(span, extent, |this| {
             this.next_conditional_scope();
 
             then_block = this.into(destination.clone(), extent, then_block, then_expr);

@@ -115,19 +115,22 @@ impl visit::Visitor for ContainsTransitionVisitor {
 pub enum Transition {
     Yield(P<ast::Expr>),
     Await(P<ast::Expr>),
+    Suspend(P<ast::Expr>),
 }
 
 pub fn parse_mac_transition(cx: &ExtCtxt, mac: &ast::Mac) -> Option<Transition> {
     if is_yield_path(&mac.node.path) {
-        Some(Transition::Yield(parse_mac_yield(cx, mac)))
+        Some(Transition::Yield(parse_mac(cx, mac)))
     } else if is_await_path(&mac.node.path) {
-        Some(Transition::Await(parse_mac_await(cx, mac)))
+        Some(Transition::Await(parse_mac(cx, mac)))
+    } else if is_suspend_path(&mac.node.path) {
+        Some(Transition::Suspend(parse_mac(cx, mac)))
     } else {
         None
     }
 }
 
-pub fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
+fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
     let rdr = new_tt_reader(
         &cx.parse_sess().span_diagnostic,
         None,
@@ -141,38 +144,28 @@ pub fn parse_mac_yield(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
     expr
 }
 
-pub fn parse_mac_await(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
-    let rdr = new_tt_reader(
-        &cx.parse_sess().span_diagnostic,
-        None,
-        None,
-        mac.node.tts.clone());
+fn is_transition_path(path: &ast::Path) -> bool {
+    if path.global {
+        return false;
+    }
 
-    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
-    let expr = panictry!(parser.parse_expr());
-    panictry!(parser.expect(&Token::Eof));
-
-    expr
+    is_yield_path(path) || is_await_path(path) || is_suspend_path(path)
 }
 
-pub fn is_transition_path(path: &ast::Path) -> bool {
-    is_yield_path(path) || is_await_path(path)
+fn is_yield_path(path: &ast::Path) -> bool {
+    is_path(path, "yield_")
 }
 
-pub fn is_yield_path(path: &ast::Path) -> bool {
-    let builder = AstBuilder::new();
-    let yield_ = builder.path()
-        .id("yield_")
-        .build();
-
-    !path.global && path.segments == yield_.segments
+fn is_await_path(path: &ast::Path) -> bool {
+    is_path(path, "await")
 }
 
-pub fn is_await_path(path: &ast::Path) -> bool {
-    let builder = AstBuilder::new();
-    let await = builder.path()
-        .id("await")
-        .build();
+fn is_suspend_path(path: &ast::Path) -> bool {
+    is_path(path, "suspend")
+}
 
-    !path.global && path.segments == await.segments
+fn is_path(path: &ast::Path, name: &str) -> bool {
+    !path.global && path.segments == AstBuilder::new()
+        .path().id(name)
+        .build().segments
 }

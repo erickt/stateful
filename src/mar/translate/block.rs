@@ -130,6 +130,32 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let ast_builder = ast_builder.span(rvalue.span);
                 let next_state = self.state_expr(terminator.span, target);
 
+                match self.mar.state_machine_kind {
+                    StateMachineKind::Generator => {
+                        let tuple = ast_builder.expr().tuple()
+                            .expr().build(rvalue.clone())
+                            .expr().build(next_state)
+                            .build();
+
+                        vec![
+                            ast_builder.stmt().semi().return_expr()
+                                .build(tuple)
+                        ]
+                    }
+                    StateMachineKind::Async => {
+                        let tuple = ast_builder.expr().tuple()
+                            .expr().build(rvalue.clone())
+                            .expr().build(next_state)
+                            .build();
+
+                        vec![
+                            ast_builder.stmt().semi().return_expr().ok()
+                                .build(tuple)
+                        ]
+                    }
+                }
+
+                /*
                 let tuple = ast_builder.expr().tuple()
                     .expr().build(rvalue.clone())
                     .expr().build(next_state)
@@ -140,6 +166,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .return_expr()
                         .build(tuple)
                 ]
+                */
             }
         }
     }
