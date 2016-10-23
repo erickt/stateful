@@ -70,7 +70,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     arms)
             }
             ExprKind::Loop(ref body, label) => {
-                self.expr_loop(destination, extent, block, None, body, label)
+                let block = self.expr_loop(extent, block, None, body, label);
+
+                // `loop { ... }` has a type of `()`.
+                self.assign_lvalue_unit(expr.span, block, destination);
+
+                block
             }
             ExprKind::While(ref cond_expr, ref body, label) => {
                 let (block, cond_expr) = self.expr_temp(
@@ -79,7 +84,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     cond_expr,
                     "while_cond");
 
-                self.expr_loop(destination, extent, block, Some(&cond_expr), body, label)
+                let block = self.expr_loop(extent, block, Some(&cond_expr), body, label);
+
+                // `while $expr { ... }` has a type of `()`.
+                self.assign_lvalue_unit(expr.span, block, destination);
+
+                block
             }
             ExprKind::ForLoop(..) |
             ExprKind::IfLet(..)   |
@@ -229,7 +239,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn expr_loop(&mut self,
-                 destination: Lvalue,
                  extent: CodeExtent,
                  block: BasicBlock,
                  condition: Option<&P<ast::Expr>>,
@@ -291,8 +300,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     target: loop_block,
                     end_scope: true,
                 });
-
-            this.assign_lvalue_unit(body.span, exit_block, destination);
 
             // final point is exit_block
             exit_block
