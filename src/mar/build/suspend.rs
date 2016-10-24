@@ -113,23 +113,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 suspend!(::futures::Async::NotReady);
                             }
                             ::std::result::Result::Ok(::futures::Async::Ready(ok)) => {
-                                moved!(ok);
                                 await_result = ::std::option::Option::Some(
-                                    ::std::result::Result::Ok(ok));
+                                    ::std::result::Result::Ok(moved!(ok)));
 
                                 break;
                             }
                             ::std::result::Result::Err(err) => {
-                                moved!(err);
                                 await_result = ::std::option::Option::Some(
-                                    ::std::result::Result::Err(err));
+                                    ::std::result::Result::Err(moved!(err)));
 
                                 break;
                             }
                         }
                     }
 
-                    await_result.unwrap()
+                    moved!(await_result).unwrap()
                 }
             );
 
