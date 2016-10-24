@@ -353,6 +353,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_err(span, "cannot break outside of a loop");
         }
 
+        // `break` or `continue` has a type of `()`.
+        self.assign_lvalue_unit(span, block, destination);
+
         let loop_scope = self.find_loop_scope(span, label);
         let exit_block = exit_selector(&loop_scope);
         self.exit_scope(span, loop_scope.extent, block, exit_block);
@@ -360,12 +363,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Even though we've exited `block`, there could be code following the break/continue. To
         // keep rust happy, we'll create a new block that has an edge to `block`, even though
         // control will never actually flow into this block.
-        let block = self.start_new_block(span, Some("AfterBreakOrContinue"));
-
-        // `break` or `continue` has a type of `()`.
-        self.assign_lvalue_unit(span, block, destination);
-
-        block
+        self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
 
     fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> Var {
