@@ -109,7 +109,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // yet have the ability to distinguish between valid and invalid lvalues, nor a
                 // way to skip generating a temporary lvalue when it's unnecessary, we're just not
                 // going to expand lvalue for the moment.
-                let (mut block, _temp_var, rvalue) = self.expr_temp(
+                let (mut block, temp_var, rvalue) = self.expr_temp(
                     extent,
                     block,
                     rvalue,
@@ -121,6 +121,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 };
 
                 block = self.expr(lvalue, extent, block, &rvalue);
+
+                // We've assigned the rvalue, so mark the temporary moved.
+                self.schedule_move(expr.span, temp_var);
 
                 block
             }
@@ -204,16 +207,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                cond_expr: &P<ast::Expr>,
                then_expr: &P<ast::Block>,
                else_expr: &Option<P<ast::Expr>>) -> BasicBlock {
-        let (block, _temp_var, cond_expr) = self.expr_temp(
+        let (block, temp_var, cond_expr) = self.expr_temp(
             extent,
             block,
             cond_expr,
             "if_cond");
 
-        //self.schedule_move(cond_expr.span, temp_var);
-
         let mut then_block = self.start_new_block(span, Some("Then"));
         let mut else_block = self.start_new_block(span, Some("Else"));
+
+        self.schedule_move(cond_expr.span, temp_var);
 
         self.terminate(span, block, TerminatorKind::If {
             cond: cond_expr,
