@@ -13,10 +13,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 extent: CodeExtent,
                 block: BasicBlock,
                 expr: &P<ast::Expr>) -> BasicBlock {
-        let expr = self.expand_moved(expr);
-
         // There's no reason for us to transform expressions if they don't contain any transitions.
-        if !self.contains_transition(&expr) {
+        if !self.contains_transition(expr) {
             return self.into(destination, extent, block, expr);
         }
 
@@ -285,6 +283,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         //                         |                          |
         //                         +--------------------------+
 
+        // `loop { ... }` has a type of `()`.
+        self.assign_lvalue_unit(span, block, destination);
+
         let loop_block = self.start_new_block(body.span, Some("Loop"));
         let exit_block = self.start_new_block(body.span, Some("LoopExit"));
 
@@ -334,8 +335,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             exit_block
         });
 
-        // `loop { ... }` has a type of `()`.
-        self.assign_lvalue_unit(span, block, destination);
+        let live_decls = self.find_live_decls();
+        self.cfg.block_data_mut(exit_block).decls = live_decls.clone();
 
         block
     }

@@ -10,11 +10,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         _extent: CodeExtent,
                         block: BasicBlock,
                         expr: P<ast::Expr>) -> BasicBlock {
-        let next_block = self.start_new_block(expr.span, Some("AfterSuspend"));
-
         // We don't yet support receiving values into the coroutine yet, so just store a `()` in
         // the destination.
-        self.assign_lvalue_unit(expr.span, next_block, destination);
+        self.assign_lvalue_unit(expr.span, block, destination);
+
+        let next_block = self.start_new_block(expr.span, Some("AfterSuspend"));
 
         self.terminate(expr.span, block, TerminatorKind::Suspend {
             rvalue: expr,
@@ -22,14 +22,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
 
         next_block
-    }
-
-    pub fn expr_suspend_unit(&mut self,
-                             extent: CodeExtent,
-                             block: BasicBlock,
-                             expr: P<ast::Expr>) -> BasicBlock {
-        let lvalue = self.declare_temp_lvalue(expr.span, "suspend");
-        self.expr_suspend(lvalue, extent, block, expr)
     }
 
     /// Compile `yield_!($expr)` into:
@@ -110,27 +102,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 &future_expr,
                 "temp_future");
 
+            // FIXME: we don't properly handle conditional initialization in loops yet
             let expr = quote_expr!(this.cx,
                 {
-                    let result;
+                    let mut await_result = ::std::option::Option::None;
 
-                    let thing2 = loop {
-                        let thing1 = match ::futures::Future::poll(&mut $future_expr) {
+                    loop {
+                        match ::futures::Future::poll(&mut $future_expr) {
                             ::std::result::Result::Ok(::futures::Async::NotReady) => {
                                 suspend!(::futures::Async::NotReady);
                             }
                             ::std::result::Result::Ok(::futures::Async::Ready(ok)) => {
-                                result = ::std::result::Result::Ok(moved!(ok));
+                                moved!(ok);
+                                await_result = ::std::option::Option::Some(
+                                    ::std::result::Result::Ok(ok));
+
                                 break;
                             }
                             ::std::result::Result::Err(err) => {
-                                result = ::std::result::Result::Err(moved!(err));
+                                moved!(err);
+                                await_result = ::std::option::Option::Some(
+                                    ::std::result::Result::Err(err));
+
                                 break;
                             }
-                        };
-                    };
+                        }
+                    }
 
-                    moved!(result)
+                    await_result.unwrap()
                 }
             );
 
@@ -171,7 +170,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                        extent: CodeExtent,
                        block: BasicBlock,
                        future_expr: P<ast::Expr>) -> BasicBlock {
-        let future_expr = self.expand_moved(&future_expr);
         let span = future_expr.span;
         let builder = AstBuilder::new().span(span);
 

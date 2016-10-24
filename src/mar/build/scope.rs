@@ -128,9 +128,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let initialized_decls = iter.next().unwrap();
 
         if iter.any(|decls| decls != initialized_decls) {
-            self.cx.span_warn(
+            self.cx.span_err(
                 span,
-                "some variables not conditionally initialized?");
+                &format!("some variables not conditionally initialized? {:#?}",
+                         conditional_scopes.initialized_decls));
         }
 
         // The conditionally initialized variables should be initialized.
@@ -504,6 +505,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn find_decl(&self, lvalue: ast::Ident) -> Option<Var> {
         for scope in self.scopes.iter().rev() {
+            debug!("find_decl: {:?} scope={:?}", lvalue, scope); 
+        }
+
+        for scope in self.scopes.iter().rev() {
+            // Check if the lvalue is a conditionally initialized value.
+            if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
+                for var in conditional_scope.initialized_decls.last().unwrap() {
+                    if lvalue == self.var_decls[*var].ident {
+                        return Some(*var);
+                    }
+                }
+            }
+
             // Check if we are shadowing another variable.
             for var in scope.drops.iter().rev() {
                 if lvalue == self.var_decls[*var].ident {
@@ -669,17 +683,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
-            for var in self.add_decls_from_pat(pat) {
+            for var in self.get_decls_from_pat(pat, None) {
                 let ident = self.var_decls[var].ident;
 
                 self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(var));
                 self.scopes.last_mut().unwrap().forward_decls.remove(&ident);
             }
         }
-    }
-
-    pub fn add_decls_from_pat(&mut self, pat: &P<ast::Pat>) -> Vec<Var> {
-        self.get_decls_from_pat(pat, None)
     }
 
     pub fn get_decls_from_pat(&mut self,
@@ -730,6 +740,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         };
 
         visit::Visitor::visit_pat(&mut visitor, pat);
+
+        debug!("get_decls_from_pat: {:?} => {:?}", pat, visitor.new_vars);
 
         visitor.new_vars
     }

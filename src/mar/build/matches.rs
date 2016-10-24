@@ -44,6 +44,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.next_conditional_scope();
 
                 let arm_block = this.in_scope(extent, span, block, |this| {
+                    println!("QQQQQQQQQQQQQQQQQQQQ");
                     this.add_decls_from_pats(target.block, arm.pats.iter());
                     this.expr(destination.clone(), extent, target.block, &arm.body)
                 });
@@ -101,7 +102,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     {
         // Add a unique number to the name.
         let name = format!("{}{}", name.to_ident(), self.var_decls.len());
-        self.declare_binding(span, ast::Mutability::Immutable, name, None)
+        self.declare_binding(span, ast::Mutability::Mutable, name, None)
     }
 
     /// Create a new temporary lvalue that has a unique name.

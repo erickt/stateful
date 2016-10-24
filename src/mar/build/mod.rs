@@ -222,7 +222,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         if !uninitialized_vars.is_empty() {
-            self.cx.span_warn(
+            self.cx.span_bug(
                 self.fn_span,
                 &format!("uninitialized variables: {:?}", uninitialized_vars));
         }
