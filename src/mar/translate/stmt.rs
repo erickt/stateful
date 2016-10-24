@@ -21,8 +21,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     );
                 }
 
+                let stmt_builder = match var_decl.mutability {
+                    ast::Mutability::Mutable => {
+                        ast_builder.stmt().let_().mut_id(var_decl.ident)
+                    }
+                    ast::Mutability::Immutable => {
+                        ast_builder.stmt().let_().id(var_decl.ident)
+                    }
+                };
+
                 stmts.push(
-                    ast_builder.stmt().let_id(var_decl.ident)
+                    stmt_builder
                         .build_option_ty(var_decl.ty.clone())
                         .build()
                 );
