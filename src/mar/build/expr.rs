@@ -314,8 +314,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             // execute the body, branching back to the test
-            let lvalue = this.declare_temp_lvalue(body.span, "temp_loop");
-            let body_block_end = this.into(lvalue, extent, body_block, body);
+            let body_block_end = this.in_scope(extent, body.span, body_block, |this| {
+                let lvalue = this.declare_temp_lvalue(body.span, "temp_loop");
+                this.into(lvalue, extent, body_block, body)
+            });
 
             this.terminate(
                 body.span,
