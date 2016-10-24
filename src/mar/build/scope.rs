@@ -184,6 +184,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn next_conditional_scope(&mut self) {
+        println!("==========\nnext conditional scope\n=========");
+
         let scope_id = self.scopes.last().unwrap().id;
         let conditional_scope = self.conditional_scopes.get_mut(&scope_id).unwrap();
         conditional_scope.initialized_decls.push(HashSet::new());
@@ -569,16 +571,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
-            //debug!("find_live_decls: scope={:?}", scope);
+            debug!("find_live_decls: scope={:?}", scope);
+            debug!("find_live_decls: live decls1: {:?}", decls);
 
             if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
+                debug!(
+                    "find_live_decls: conditional_scope={:?}",
+                    conditional_scope.initialized_decls.last().unwrap());
+
                 for var in conditional_scope.initialized_decls.last().unwrap() {
                     let ident = self.var_decls[*var].ident;
 
                     if visited_decls.insert(ident) {
-                        if scope.forward_decls.contains_key(&ident) {
-                            decls.push(LiveDecl::Forward(*var));
-                        } else if scope.moved_decls.contains(var) {
+                        if scope.moved_decls.contains(var) {
                             decls.push(LiveDecl::Moved(*var));
                         } else {
                             decls.push(LiveDecl::Active(*var));
@@ -586,6 +591,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
+
+            debug!("find_live_decls: live decls2: {:?}", decls);
 
             for var in scope.drops.iter().rev() {
                 let ident = self.var_decls[*var].ident;
@@ -600,10 +607,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
+
+            debug!("find_live_decls: live decls3: {:?}", decls);
         }
 
         decls.reverse();
-        //debug!("find_live_decls: live decls: {:?}", decls);
+
+        debug!("find_live_decls: live decls: {:?}", decls);
+
         decls
     }
 

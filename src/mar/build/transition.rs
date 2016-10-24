@@ -1,10 +1,7 @@
-use aster::AstBuilder;
 use mar::build::Builder;
+use mar::build::mac::{parse_mac, is_path};
 use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::ext::base::ExtCtxt;
-use syntax::ext::tt::transcribe::new_tt_reader;
-use syntax::parse::parser::Parser;
-use syntax::parse::token::Token;
 use syntax::ptr::P;
 use syntax::visit;
 
@@ -130,26 +127,15 @@ pub fn parse_mac_transition(cx: &ExtCtxt, mac: &ast::Mac) -> Option<Transition> 
     }
 }
 
-fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
-    let rdr = new_tt_reader(
-        &cx.parse_sess().span_diagnostic,
-        None,
-        None,
-        mac.node.tts.clone());
-
-    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
-    let expr = panictry!(parser.parse_expr());
-    panictry!(parser.expect(&Token::Eof));
-
-    expr
-}
-
 fn is_transition_path(path: &ast::Path) -> bool {
     if path.global {
         return false;
     }
 
-    is_yield_path(path) || is_await_path(path) || is_suspend_path(path)
+    is_yield_path(path) ||
+        is_await_path(path) ||
+        is_suspend_path(path) ||
+        is_moved_path(path)
 }
 
 fn is_yield_path(path: &ast::Path) -> bool {
@@ -164,8 +150,6 @@ fn is_suspend_path(path: &ast::Path) -> bool {
     is_path(path, "suspend")
 }
 
-fn is_path(path: &ast::Path, name: &str) -> bool {
-    !path.global && path.segments == AstBuilder::new()
-        .path().id(name)
-        .build().segments
+fn is_moved_path(path: &ast::Path) -> bool {
+    is_path(path, "moved")
 }

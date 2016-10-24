@@ -25,13 +25,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.into(destination, extent, block, ast_block)
             }
             ExprKind::Continue(label) => {
-                self.break_or_continue(expr.span,
+                self.break_or_continue(destination,
+                                       expr.span,
                                        label.map(|label| label.node),
                                        block,
                                        |loop_scope| loop_scope.continue_block)
             }
             ExprKind::Break(label) => {
-                self.break_or_continue(expr.span,
+                self.break_or_continue(destination,
+                                       expr.span,
                                        label.map(|label| label.node),
                                        block,
                                        |loop_scope| loop_scope.break_block)
@@ -64,26 +66,30 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     arms)
             }
             ExprKind::Loop(ref body, label) => {
-                let block = self.expr_loop(extent, block, None, body, label);
-
-                // `loop { ... }` has a type of `()`.
-                self.assign_lvalue_unit(expr.span, block, destination);
-
-                block
+                self.expr_loop(
+                    destination,
+                    extent,
+                    block,
+                    expr.span,
+                    None,
+                    body,
+                    label)
             }
             ExprKind::While(ref cond_expr, ref body, label) => {
                 let (block, _temp_var, cond_expr) = self.expr_temp(
                     extent,
                     block,
                     cond_expr,
-                    "while_cond");
+                    "temp_while_cond");
 
-                let block = self.expr_loop(extent, block, Some(&cond_expr), body, label);
-
-                // `while $expr { ... }` has a type of `()`.
-                self.assign_lvalue_unit(expr.span, block, destination);
-
-                block
+                self.expr_loop(
+                    destination,
+                    extent,
+                    block,
+                    expr.span,
+                    Some(&cond_expr),
+                    body,
+                    label)
             }
             ExprKind::ForLoop(..) |
             ExprKind::IfLet(..)   |
@@ -107,7 +113,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     extent,
                     block,
                     rvalue,
-                    "rvalue");
+                    "temp_rvalue");
 
                 let lvalue = Lvalue::Var {
                     span: lvalue.span,
@@ -220,6 +226,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             then_block = this.into(destination.clone(), extent, then_block, then_expr);
 
             this.next_conditional_scope();
+
             else_block = match *else_expr {
                 Some(ref else_expr) => this.into(destination, extent, else_block, else_expr),
                 None => {
@@ -254,8 +261,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn expr_loop(&mut self,
+                 destination: Lvalue,
                  extent: CodeExtent,
                  block: BasicBlock,
+                 span: Span,
                  condition: Option<&P<ast::Expr>>,
                  body: &P<ast::Block>,
                  label: Option<ast::SpannedIdent>) -> BasicBlock {
@@ -285,7 +294,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 end_scope: false,
             });
 
-        self.in_loop_scope(extent, label, loop_block, exit_block, |this| {
+        let block = self.in_loop_scope(extent, label, loop_block, exit_block, |this| {
             // conduct the test, if necessary
             let body_block;
             if let Some(cond_expr) = condition {
@@ -305,7 +314,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             // execute the body, branching back to the test
-            let lvalue = this.declare_temp_lvalue(body.span, "_loop_result_temp");
+            let lvalue = this.declare_temp_lvalue(body.span, "temp_loop");
             let body_block_end = this.into(lvalue, extent, body_block, body);
 
             this.terminate(
@@ -318,10 +327,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             // final point is exit_block
             exit_block
-        })
+        });
+
+        // `loop { ... }` has a type of `()`.
+        self.assign_lvalue_unit(span, block, destination);
+
+        block
     }
 
     fn break_or_continue<F>(&mut self,
+                            destination: Lvalue,
                             span: Span,
                             label: Option<ast::Ident>,
                             block: BasicBlock,
@@ -340,7 +355,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Even though we've exited `block`, there could be code following the break/continue. To
         // keep rust happy, we'll create a new block that has an edge to `block`, even though
         // control will never actually flow into this block.
-        self.start_new_block(span, Some("AfterBreakOrContinue"))
+        let block = self.start_new_block(span, Some("AfterBreakOrContinue"));
+
+        // `break` or `continue` has a type of `()`.
+        self.assign_lvalue_unit(span, block, destination);
+
+        block
     }
 
     fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> Var {

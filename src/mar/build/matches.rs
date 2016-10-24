@@ -14,12 +14,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       discriminant: P<ast::Expr>,
                       arms: &[ast::Arm])
                       -> BasicBlock {
-        let (block, _temp_var, discriminant) = self.expr_temp(
-            extent,
-            block,
-            &discriminant,
-            "temp_match_cond");
-
         let targets = arms.iter()
             .map(|arm| {
                 Arm {
@@ -30,10 +24,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
+        let (block, temp_var, discriminant) = self.expr_temp(
+            extent,
+            block,
+            &discriminant,
+            "temp_match_cond");
+
+        self.schedule_move(span, temp_var);
+
+        self.terminate(span, block, TerminatorKind::Match {
+            discr: discriminant,
+            targets: targets.clone(),
+        });
+
         let mut arm_blocks = vec![];
 
         self.in_conditional_scope(span, extent, |this| {
-            for (arm, target) in arms.iter().zip(targets.iter()) {
+            for (arm, target) in arms.iter().zip(targets) {
                 this.next_conditional_scope();
 
                 let arm_block = this.in_scope(extent, span, block, |this| {
@@ -41,9 +48,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     this.expr(destination.clone(), extent, target.block, &arm.body)
                 });
 
+                println!("HEY: {:?}", this.find_live_decls());
+
                 arm_blocks.push(arm_block);
             }
         });
+
+        println!("aaaaaaaaaaaaaaaaa");
 
         let join_block = self.start_new_block(span, Some("MatchJoin"));
 
@@ -53,11 +64,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 arm_block,
                 TerminatorKind::Goto { target: join_block, end_scope: true });
         }
-
-        self.terminate(span, block, TerminatorKind::Match {
-            discr: discriminant.clone(),
-            targets: targets,
-        });
 
         join_block
     }

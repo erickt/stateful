@@ -114,28 +114,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 {
                     let result;
 
-                    //loop {
-                        let thing2 = match ::futures::Future::poll(&mut $future_expr) {
-                            /*
+                    let thing2 = loop {
+                        let thing1 = match ::futures::Future::poll(&mut $future_expr) {
                             ::std::result::Result::Ok(::futures::Async::NotReady) => {
-                                let thing = suspend!(::futures::Async::NotReady);
+                                suspend!(::futures::Async::NotReady);
                             }
-                            */
                             ::std::result::Result::Ok(::futures::Async::Ready(ok)) => {
-                                result = ::std::result::Result::Ok(ok);
-                                //break;
+                                result = ::std::result::Result::Ok(moved!(ok));
+                                break;
                             }
-
-                            /*
                             ::std::result::Result::Err(err) => {
                                 result = ::std::result::Result::Err(moved!(err));
                                 break;
                             }
-                            */
                         };
-                    //}
+                    };
 
-                    result
+                    moved!(result)
                 }
             );
 

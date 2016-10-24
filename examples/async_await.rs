@@ -49,8 +49,6 @@ fn long_running_future(timer: Timer,
     a
 }
 
-
-
 fn main() {
     // Create a worker thread pool with four threads
     let pool = CpuPool::new(4);

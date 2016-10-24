@@ -253,7 +253,7 @@ impl Terminator {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Arm {
     pub pats: Vec<P<ast::Pat>>,
     pub guard: Option<P<ast::Expr>>,
