@@ -96,7 +96,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       block: BasicBlock,
                       future_expr: P<ast::Expr>) -> BasicBlock {
         self.in_scope(extent, future_expr.span, block, |this| {
-            let (block, _temp_var, future_expr) = this.expr_temp(
+            let (block, _temp_local, future_expr) = this.expr_temp(
                 extent,
                 block,
                 &future_expr,

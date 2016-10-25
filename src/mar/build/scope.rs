@@ -35,16 +35,16 @@ pub struct Scope {
     extent: CodeExtent,
 
     /// Declarations created in this scope.
-    decls: HashSet<Var>,
+    decls: HashSet<Local>,
 
     /// Uninitialized declarations in this scope
-    forward_decls: HashMap<ast::Ident, Var>,
+    forward_decls: HashMap<ast::Ident, Local>,
 
     /// Declarations that are initialized, and may be in this scope or a parent scope.
-    initialized_decls: HashSet<Var>,
+    initialized_decls: HashSet<Local>,
 
-    drops: Vec<Var>,
-    moved_decls: HashSet<Var>,
+    drops: Vec<Local>,
+    moved_decls: HashSet<Local>,
 }
 
 impl fmt::Debug for Scope {
@@ -73,7 +73,7 @@ pub struct LoopScope {
 }
 
 pub struct ConditionalScope {
-    initialized_decls: Vec<HashSet<Var>>,
+    initialized_decls: Vec<HashSet<Local>>,
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -159,7 +159,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                     for scope in scopes {
                         for var in &scope.initialized_decls {
-                            let ident = self.var_decls[*var].ident;
+                            let ident = self.local_decls[*var].ident;
                             current_scope.forward_decls.remove(&ident);
 
                             if !current_scope.decls.contains(var) {
@@ -287,7 +287,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
 
             for var in &scope.initialized_decls {
-                let ident = self.var_decls[*var].ident;
+                let ident = self.local_decls[*var].ident;
                 current_scope.forward_decls.remove(&ident);
 
                 if !current_scope.decls.contains(var) {
@@ -303,7 +303,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ScopeKind::Normal => {
                     debug!("pop_scope: {:?} scope={:?}", block, current_scope);
                     for var in &scope.initialized_decls {
-                        let ident = self.var_decls[*var].ident;
+                        let ident = self.local_decls[*var].ident;
                         current_scope.forward_decls.remove(&ident);
 
                         if !current_scope.decls.contains(var) {
@@ -410,7 +410,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     /// Walk up the scopes to discover if this variable has been initialized.
-    fn is_initialized(&mut self, var: Var) -> bool {
+    fn is_initialized(&mut self, var: Local) -> bool {
         for scope in self.scopes.iter_mut().rev() {
             debug!("is_initialized: scope={:?}", scope.id);
 
@@ -431,13 +431,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.cx.span_bug(self.var_decls[var].span,
+        self.cx.span_bug(self.local_decls[var].span,
                          &format!("var {:?} not in any scope?", var));
     }
 
     /// Mark a variable initialized.
-    fn initialize_decl(&mut self, var: Var) {
-        let ident = self.var_decls[var].ident;
+    fn initialize_decl(&mut self, var: Local) {
+        let ident = self.local_decls[var].ident;
         debug!("initialize_decl: scope={:?} var={:?} ident={:?}", self.scopes.last().unwrap().id, var, ident);
         
         for scope in self.scopes.iter_mut().rev() {
@@ -491,7 +491,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
         */
 
-        self.cx.span_bug(self.var_decls[var].span,
+        self.cx.span_bug(self.local_decls[var].span,
                          &format!("var {:?} not in scope to initialize", var));
     }
 
@@ -503,7 +503,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.assign_lvalue(block, lvalue, rvalue)
     }
 
-    pub fn find_decl(&self, lvalue: ast::Ident) -> Option<Var> {
+    pub fn find_decl(&self, lvalue: ast::Ident) -> Option<Local> {
         for scope in self.scopes.iter().rev() {
             debug!("find_decl: {:?} scope={:?}", lvalue, scope); 
         }
@@ -512,7 +512,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // Check if the lvalue is a conditionally initialized value.
             if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
                 for var in conditional_scope.initialized_decls.last().unwrap() {
-                    if lvalue == self.var_decls[*var].ident {
+                    if lvalue == self.local_decls[*var].ident {
                         return Some(*var);
                     }
                 }
@@ -520,7 +520,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             // Check if we are shadowing another variable.
             for var in scope.drops.iter().rev() {
-                if lvalue == self.var_decls[*var].ident {
+                if lvalue == self.local_decls[*var].ident {
                     return Some(*var);
                 }
             }
@@ -533,7 +533,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         None
     }
 
-    pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<Var> {
+    pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<Local> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
             if let Some(var) = scope.forward_decls.get(&lvalue) {
@@ -594,7 +594,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     conditional_scope.initialized_decls.last().unwrap());
 
                 for var in conditional_scope.initialized_decls.last().unwrap() {
-                    let ident = self.var_decls[*var].ident;
+                    let ident = self.local_decls[*var].ident;
 
                     if visited_decls.insert(ident) {
                         if scope.moved_decls.contains(var) {
@@ -609,7 +609,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             debug!("find_live_decls: live decls2: {:?}", decls);
 
             for var in scope.drops.iter().rev() {
-                let ident = self.var_decls[*var].ident;
+                let ident = self.local_decls[*var].ident;
 
                 if visited_decls.insert(ident) {
                     if scope.forward_decls.contains_key(&ident) {
@@ -634,7 +634,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
-    pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, var: Var) {
+    pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, var: Local) {
         // FIXME: Make sure we aren't double dropping a variable.
         for scope in self.scopes.iter_mut().rev() {
             for drop in &scope.drops {
@@ -647,7 +647,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         if let Some(scope) = self.scopes.last_mut() {
-            let ident = self.var_decls[var].ident;
+            let ident = self.local_decls[var].ident;
 
             scope.decls.insert(var);
             scope.forward_decls.insert(ident, var);
@@ -665,8 +665,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          &format!("extent {:?} not in scope to drop {:?}", extent, var));
     }
 
-    pub fn schedule_move(&mut self, span: Span, var: Var) {
-        let ident = self.var_decls[var].ident;
+    pub fn schedule_move(&mut self, span: Span, var: Local) {
+        let ident = self.local_decls[var].ident;
 
         for scope in self.scopes.iter_mut().rev() {
             // Make sure the decl isn't a forward declaration.
@@ -684,7 +684,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     {
         for pat in pats {
             for var in self.get_decls_from_pat(pat, None) {
-                let ident = self.var_decls[var].ident;
+                let ident = self.local_decls[var].ident;
 
                 self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(var));
                 self.scopes.last_mut().unwrap().forward_decls.remove(&ident);
@@ -694,10 +694,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn get_decls_from_pat(&mut self,
                               pat: &ast::Pat,
-                              ty: Option<P<ast::Ty>>) -> Vec<Var> {
+                              ty: Option<P<ast::Ty>>) -> Vec<Local> {
         struct Visitor<'a, 'b: 'a, 'c: 'b> {
             builder: &'a mut Builder<'b, 'c>,
-            new_vars: Vec<Var>,
+            new_vars: Vec<Local>,
             ty: Option<P<ast::Ty>>,
         }
 
@@ -746,10 +746,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         visitor.new_vars
     }
 
-    pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Var> {
+    pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {
         struct Visitor<'a, 'b: 'a> {
             builder: &'a Builder<'a, 'b>,
-            var_decls: Vec<Var>,
+            local_decls: Vec<Local>,
         }
 
         impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
@@ -759,7 +759,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 if let ast::ExprKind::Path(None, ref path) = expr.node {
                     if let Some(decl) = self.builder.get_decl_from_path(path) {
                         debug!("get_decls_from_expr: decl `{:?}", decl);
-                        self.var_decls.push(decl);
+                        self.local_decls.push(decl);
                     }
                 }
 
@@ -771,15 +771,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let mut visitor = Visitor {
             builder: self,
-            var_decls: Vec::new(),
+            local_decls: Vec::new(),
         };
 
         visit::Visitor::visit_expr(&mut visitor, expr);
 
-        visitor.var_decls
+        visitor.local_decls
     }
 
-    pub fn get_decl_from_path(&self, path: &ast::Path) -> Option<Var> {
+    pub fn get_decl_from_path(&self, path: &ast::Path) -> Option<Local> {
         if !path.global && path.segments.len() == 1 {
             let segment = &path.segments[0];
 
@@ -793,7 +793,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 }
 
-fn drop_decl(cfg: &mut CFG, block: BasicBlock, scope: &Scope, var: Var) {
+fn drop_decl(cfg: &mut CFG, block: BasicBlock, scope: &Scope, var: Local) {
     debug!("drop_decl: scope={:?} var={:?}", scope.id, var);
     let moved = scope.moved_decls.contains(&var);
     cfg.push_drop(block, var, moved);

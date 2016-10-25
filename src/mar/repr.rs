@@ -58,7 +58,7 @@ pub struct Mar {
     pub abi: abi::Abi,
     pub generics: ast::Generics,
 
-    pub var_decls: IndexVec<Var, VarDecl>,
+    pub local_decls: IndexVec<Local, LocalDecl>,
 
     /// List of extents. References to extents use a newtyped index type `CodeExtent` that indexes
     /// into this vector.
@@ -83,8 +83,8 @@ impl Mar {
         &self.extents[extent]
     }
 
-    pub fn var_decl_data(&self, decl: Var) -> &VarDecl {
-        &self.var_decls[decl]
+    pub fn local_decl_data(&self, local: Local) -> &LocalDecl {
+        &self.local_decls[local]
     }
 }
 
@@ -105,29 +105,29 @@ impl IndexMut<BasicBlock> for Mar {
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
-newtype_index!(Var, "decl");
+newtype_index!(Local, "decl");
 
-pub const RETURN_POINTER: Var = Var(0);
+pub const RETURN_POINTER: Local = Local(0);
 
 #[derive(Debug, PartialEq)]
-pub struct VarDecl {
+pub struct LocalDecl {
     pub mutability: ast::Mutability,
     pub ident: ast::Ident,
     pub ty: Option<P<ast::Ty>>,
-    pub shadowed_decl: Option<Var>,
+    pub shadowed_decl: Option<Local>,
     pub span: Span,
 }
 
 #[derive(Debug)]
 pub struct DeclaredDecl {
-    pub decl: Var,
+    pub decl: Local,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
-    Forward(Var),
-    Active(Var),
-    Moved(Var),
+    Forward(Local),
+    Active(Local),
+    Moved(Local),
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -264,9 +264,9 @@ pub struct Arm {
 
 #[derive(Clone, Debug)]
 pub enum Lvalue {
-    Var {
+    Local {
         span: Span,
-        decl: Var,
+        decl: Local,
     },
     Temp {
         span: Span,
@@ -285,16 +285,16 @@ impl Lvalue {
         }
     }
 
-    pub fn decl(&self) -> Option<Var> {
+    pub fn decl(&self) -> Option<Local> {
         match *self {
-            Lvalue::Var { decl, .. } => Some(decl),
+            Lvalue::Local { decl, .. } => Some(decl),
             Lvalue::Temp { .. } | Lvalue::ReturnPointer { .. } => None,
         }
     }
 
     pub fn span(&self) -> Span {
         match *self {
-            Lvalue::Var { span, .. }
+            Lvalue::Local { span, .. }
             | Lvalue::Temp { span, .. }
             | Lvalue::ReturnPointer { span, .. } => span,
         }
@@ -308,14 +308,14 @@ impl Lvalue {
 pub enum Statement {
     Expr(ast::Stmt),
     Declare {
-        var: Var,
+        local: Local,
     },
     Assign {
         lvalue: Lvalue,
         rvalue: P<ast::Expr>,
     },
     Drop {
-        lvalue: Var,
+        lvalue: Local,
         moved: bool,
     },
 }
@@ -323,7 +323,7 @@ pub enum Statement {
 #[derive(Clone, Copy, Debug)]
 pub struct ShadowedDecl {
     pub lvalue: ast::Ident,
-    pub decl: Var,
+    pub decl: Local,
 }
 
 ///////////////////////////////////////////////////////////////////////////

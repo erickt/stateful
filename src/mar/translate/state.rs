@@ -27,20 +27,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     }
 
-    fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(Var, ast::Ident)> {
+    fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(Local, ast::Ident)> {
         let mut decls = vec![];
 
         for live_decl in self.mar[block].decls() {
             // Only add active decls to the state.
-            let var = match *live_decl {
-                LiveDecl::Active(var) => {
-                    decls.push((var, self.mar.var_decls[var].ident));
-                    var
+            let local = match *live_decl {
+                LiveDecl::Active(local) => {
+                    decls.push((local, self.mar.local_decls[local].ident));
+                    local
                 }
-                LiveDecl::Forward(var) | LiveDecl::Moved(var) => var,
+                LiveDecl::Forward(local) | LiveDecl::Moved(local) => local,
             };
 
-            self.get_shadowed_decls(&mut decls, var);
+            self.get_shadowed_decls(&mut decls, local);
         }
 
         //debug!("decls: {:?} {:?}", block, decls);
@@ -48,9 +48,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         decls
     }
 
-    fn get_shadowed_decls(&self, decls: &mut Vec<(Var, ast::Ident)>, var: Var) {
-        if let Some(decl) = self.mar.var_decls[var].shadowed_decl {
-            debug!("get_shadowed_decl: {:?} {:?}", decl, self.mar.var_decls[decl]);
+    fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
+        if let Some(decl) = self.mar.local_decls[local].shadowed_decl {
+            debug!("get_shadowed_decl: {:?} {:?}", decl, self.mar.local_decls[decl]);
 
             decls.push((decl, self.shadowed_ident(decl)));
 
@@ -188,7 +188,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .build(state_path);
 
             for &(decl, ident) in &incoming_decls {
-                let decl_data = self.mar.var_decl_data(decl);
+                let decl_data = self.mar.local_decl_data(decl);
 
                 struct_pat_builder = match decl_data.mutability {
                     Mutability::Immutable => struct_pat_builder.id(ident),

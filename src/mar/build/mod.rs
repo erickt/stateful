@@ -36,7 +36,7 @@ pub struct Builder<'a, 'b: 'a> {
 
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
-    var_decls: IndexVec<Var, VarDecl>,
+    local_decls: IndexVec<Local, LocalDecl>,
 
     /// cached block with the RETURN terminator
     cached_return_block: Option<BasicBlock>,
@@ -88,6 +88,48 @@ pub struct ScopeAuxiliary {
 #[derive(Debug)]
 pub struct Error;
 
+///////////////////////////////////////////////////////////////////////////
+/// The `BlockAnd` "monad" packages up the new basic block along with a
+/// produced value (sometimes just unit, of course). The `unpack!`
+/// macro (and methods below) makes working with `BlockAnd` much more
+/// convenient.
+
+#[must_use] // if you don't use one of these results, you're leaving a dangling edge
+pub struct BlockAnd<T>(BasicBlock, T);
+
+trait BlockAndExtension {
+    fn and<T>(self, v: T) -> BlockAnd<T>;
+    fn unit(self) -> BlockAnd<()>;
+}
+
+impl BlockAndExtension for BasicBlock {
+    fn and<T>(self, v: T) -> BlockAnd<T> {
+        BlockAnd(self, v)
+    }
+
+    fn unit(self) -> BlockAnd<()> {
+        BlockAnd(self, ())
+    }
+}
+
+/// Update a block pointer and return the value.
+/// Use it like `let x = unpack!(block = self.foo(block, foo))`.
+macro_rules! unpack {
+    ($x:ident = $c:expr) => {
+        {
+            let BlockAnd(b, v) = $c;
+            $x = b;
+            v
+        }
+    };
+
+    ($c:expr) => {
+        {
+            let BlockAnd(b, ()) = $c;
+            b
+        }
+    };
+}
 
 ///////////////////////////////////////////////////////////////////////////
 // construct() -- the main entry point for building SMIR for a function
@@ -175,7 +217,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             scope_auxiliary: IndexVec::new(),
             loop_scopes: vec![],
             conditional_scopes: HashMap::new(),
-            var_decls: IndexVec::new(),
+            local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
         };
@@ -215,7 +257,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Now take the difference between the initialized vars and the total set of variables.
         let mut uninitialized_vars = vec![];
-        for var in self.var_decls.indices() {
+        for var in self.local_decls.indices() {
             if !initialized_vars.contains(&var) {
                 uninitialized_vars.push(var);
             }
@@ -236,7 +278,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             abi: abi,
             generics: generics.clone(),
             basic_blocks: self.cfg.basic_blocks,
-            var_decls: self.var_decls,
+            local_decls: self.local_decls,
             extents: self.extents,
         }
     }
@@ -253,7 +295,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             block,
             arguments.iter().map(|arg| &arg.pat));
 
-        let destination = Lvalue::Var {
+        let destination = Lvalue::Local {
             span: ast_block.span,
             decl: RETURN_POINTER,
         };

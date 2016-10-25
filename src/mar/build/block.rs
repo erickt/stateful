@@ -70,10 +70,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_bug(span, "No decls found?")
         } else if decls.len() == 1 {
             let decl = decls[0];
-            self.var_decls[decl].ty = local.ty.clone();
+            self.local_decls[decl].ty = local.ty.clone();
 
             if let Some(ref init) = local.init {
-                let destination = Lvalue::Var {
+                let destination = Lvalue::Local {
                     span: span,
                     decl: decl,
                 };

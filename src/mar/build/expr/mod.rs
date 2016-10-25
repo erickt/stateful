@@ -74,7 +74,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     label)
             }
             ExprKind::While(ref cond_expr, ref body, label) => {
-                let (block, _temp_var, cond_expr) = self.expr_temp(
+                let (block, _temp_local, cond_expr) = self.expr_temp(
                     extent,
                     block,
                     cond_expr,
@@ -107,13 +107,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // yet have the ability to distinguish between valid and invalid lvalues, nor a
                 // way to skip generating a temporary lvalue when it's unnecessary, we're just not
                 // going to expand lvalue for the moment.
-                let (mut block, temp_var, rvalue) = self.expr_temp(
+                let (mut block, temp_local, rvalue) = self.expr_temp(
                     extent,
                     block,
                     rvalue,
                     "temp_rvalue");
 
-                let lvalue = Lvalue::Var {
+                let lvalue = Lvalue::Local {
                     span: lvalue.span,
                     decl: self.find_lvalue(lvalue),
                 };
@@ -121,7 +121,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block = self.expr(lvalue, extent, block, &rvalue);
 
                 // We've assigned the rvalue, so mark the temporary moved.
-                self.schedule_move(expr.span, temp_var);
+                self.schedule_move(expr.span, temp_local);
 
                 block
             }
@@ -143,22 +143,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         extent: CodeExtent,
                         block: BasicBlock,
                         expr: &P<ast::Expr>,
-                        name: T) -> (BasicBlock, Var, P<ast::Expr>)
+                        name: T) -> (BasicBlock, Local, P<ast::Expr>)
         where T: ToIdent,
     {
-        let temp_var = self.declare_temp(expr.span, name);
+        let temp_local = self.declare_temp(expr.span, name);
 
-        let temp_lvalue = Lvalue::Var {
+        let temp_lvalue = Lvalue::Local {
             span: expr.span,
-            decl: temp_var,
+            decl: temp_local,
         };
 
         let block = self.expr(temp_lvalue, extent, block, expr);
 
         let temp_expr = AstBuilder::new().span(expr.span).expr()
-            .id(self.var_decls[temp_var].ident);
+            .id(self.local_decls[temp_local].ident);
 
-        (block, temp_var, temp_expr)
+        (block, temp_local, temp_expr)
     }
 
     /// Compile `return $expr` into:
@@ -178,7 +178,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 span: Span,
                 returned_expr: &Option<P<ast::Expr>>) -> BasicBlock {
         // Assign the return pointer.
-        let return_pointer = self.var_decls[RETURN_POINTER].ident;
+        let return_pointer = self.local_decls[RETURN_POINTER].ident;
 
         let expr = if let Some(ref returned_expr) = *returned_expr {
             quote_expr!(self.cx, $return_pointer = $returned_expr)
@@ -205,7 +205,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                cond_expr: &P<ast::Expr>,
                then_expr: &P<ast::Block>,
                else_expr: &Option<P<ast::Expr>>) -> BasicBlock {
-        let (block, temp_var, cond_expr) = self.expr_temp(
+        let (block, temp_local, cond_expr) = self.expr_temp(
             extent,
             block,
             cond_expr,
@@ -214,7 +214,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut then_block = self.start_new_block(span, Some("Then"));
         let mut else_block = self.start_new_block(span, Some("Else"));
 
-        self.schedule_move(cond_expr.span, temp_var);
+        self.schedule_move(cond_expr.span, temp_local);
 
         self.terminate(span, block, TerminatorKind::If {
             cond: cond_expr,
@@ -367,7 +367,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
 
-    fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> Var {
+    fn find_lvalue(&mut self, expr: &P<ast::Expr>) -> Local {
         match expr.node {
             ExprKind::Path(None, ref path) => {
                 match self.get_decl_from_path(path) {

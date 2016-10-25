@@ -6,33 +6,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
-            Statement::Declare { var } => {
-                let var_decl = self.mar.var_decl_data(var);
-                let ast_builder = self.ast_builder.span(var_decl.span);
+            Statement::Declare { local } => {
+                let local_decl = self.mar.local_decl_data(local);
+                let ast_builder = self.ast_builder.span(local_decl.span);
 
                 let mut stmts = vec![];
 
-                if let Some(shadowed_decl) = var_decl.shadowed_decl {
+                if let Some(shadowed_decl) = local_decl.shadowed_decl {
                     let shadowed_ident = self.shadowed_ident(shadowed_decl);
 
                     stmts.push(
                         ast_builder.stmt().let_id(shadowed_ident)
-                        .expr().id(var_decl.ident)
+                        .expr().id(local_decl.ident)
                     );
                 }
 
-                let stmt_builder = match var_decl.mutability {
+                let stmt_builder = match local_decl.mutability {
                     ast::Mutability::Mutable => {
-                        ast_builder.stmt().let_().mut_id(var_decl.ident)
+                        ast_builder.stmt().let_().mut_id(local_decl.ident)
                     }
                     ast::Mutability::Immutable => {
-                        ast_builder.stmt().let_().id(var_decl.ident)
+                        ast_builder.stmt().let_().id(local_decl.ident)
                     }
                 };
 
                 stmts.push(
                     stmt_builder
-                        .build_option_ty(var_decl.ty.clone())
+                        .build_option_ty(local_decl.ty.clone())
                         .build()
                 );
 
@@ -40,8 +40,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             Statement::Assign { ref lvalue, ref rvalue } => {
                 match *lvalue {
-                    Lvalue::Var { span, decl, .. } => {
-                        let id = self.mar.var_decl_data(decl).ident;
+                    Lvalue::Local { span, decl, .. } => {
+                        let id = self.mar.local_decl_data(decl).ident;
 
                         vec![
                             self.ast_builder.span(span).stmt().semi()
@@ -71,7 +71,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
             Statement::Drop { lvalue, moved } => {
-                let decl = self.mar.var_decl_data(lvalue);
+                let decl = self.mar.local_decl_data(lvalue);
                 let ast_builder = self.ast_builder.span(decl.span);
 
                 // We need an explicit drop here to make sure we drop variables as they go out of

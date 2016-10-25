@@ -24,13 +24,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
-        let (block, temp_var, discriminant) = self.expr_temp(
+        let (block, temp_local, discriminant) = self.expr_temp(
             extent,
             block,
             &discriminant,
             "temp_match_cond");
 
-        self.schedule_move(span, temp_var);
+        self.schedule_move(span, temp_local);
 
         self.terminate(span, block, TerminatorKind::Match {
             discr: discriminant,
@@ -73,7 +73,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                               span: Span,
                               mutability: ast::Mutability,
                               name: T,
-                              var_ty: Option<P<ast::Ty>>) -> Var
+                              var_ty: Option<P<ast::Ty>>) -> Local
         where T: ToIdent,
     {
         let name = name.to_ident();
@@ -81,7 +81,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                name, var_ty, span);
 
         let shadowed_decl = self.find_decl(name);
-        let var = self.var_decls.push(VarDecl {
+        let local = self.local_decls.push(LocalDecl {
             mutability: mutability,
             ident: name,
             ty: var_ty,
@@ -89,19 +89,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             span: span,
         });
         let extent = self.extent_of_innermost_scope();
-        self.schedule_drop(span, extent, var);
+        self.schedule_drop(span, extent, local);
 
-        debug!("declare_binding: var={:?}", var);
+        debug!("declare_binding: local={:?}", local);
 
-        var
+        local
     }
 
     /// Create a new temporary variable that has a unique name.
-    pub fn declare_temp<T>(&mut self, span: Span, name: T) -> Var
+    pub fn declare_temp<T>(&mut self, span: Span, name: T) -> Local
         where T: ToIdent,
     {
         // Add a unique number to the name.
-        let name = format!("{}{}", name.to_ident(), self.var_decls.len());
+        let name = format!("{}{}", name.to_ident(), self.local_decls.len());
         self.declare_binding(span, ast::Mutability::Mutable, name, None)
     }
 
@@ -110,7 +110,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where T: ToIdent,
     {
         let temp_decl = self.declare_temp(span, name);
-        Lvalue::Var {
+        Lvalue::Local {
             span: span,
             decl: temp_decl,
         }
