@@ -195,13 +195,13 @@ pub enum TerminatorKind {
 
     /// jump to branch 0 if this lvalue evaluates to true
     If {
-        cond: P<ast::Expr>,
+        cond: Operand,
         targets: (BasicBlock, BasicBlock),
     },
 
     /// lvalue evaluates to some enum; jump depending on the branch
     Match {
-        discr: P<ast::Expr>,
+        discr: Operand,
         targets: Vec<Arm>,
     },
 
@@ -262,43 +262,43 @@ pub struct Arm {
 
 ///////////////////////////////////////////////////////////////////////////
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum Lvalue {
-    Local {
-        span: Span,
-        decl: Local,
-    },
-    Temp {
-        span: Span,
-        name: Option<&'static str>,
-    },
-    ReturnPointer {
-        span: Span,
-    },
+    Local(Local),
 }
 
-impl Lvalue {
-    pub fn is_temp(&self) -> bool {
-        match *self {
-            Lvalue::Temp { .. } => true,
-            _ => false,
-        }
-    }
+///////////////////////////////////////////////////////////////////////////
+// Operands
 
-    pub fn decl(&self) -> Option<Local> {
-        match *self {
-            Lvalue::Local { decl, .. } => Some(decl),
-            Lvalue::Temp { .. } | Lvalue::ReturnPointer { .. } => None,
-        }
-    }
+/// These are values that can appear inside an rvalue (or an index
+/// lvalue). They are intentionally limited to prevent rvalues from
+/// being nested in one another.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Operand {
+    Consume(Lvalue),
+    Constant(Constant),
+}
 
-    pub fn span(&self) -> Span {
-        match *self {
-            Lvalue::Local { span, .. }
-            | Lvalue::Temp { span, .. }
-            | Lvalue::ReturnPointer { span, .. } => span,
-        }
-    }
+///////////////////////////////////////////////////////////////////////////
+/// Rvalues
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Rvalue {
+    /// x (either a move or copy, depending on type of x)
+    Use(Operand),
+}
+
+///////////////////////////////////////////////////////////////////////////
+/// Constants
+///
+/// Two constants are equal if they are the same constant. Note that
+/// this does not necessarily mean that they are "==" in Rust -- in
+/// particular one must be wary of `NaN`!
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Constant {
+    pub span: Span,
+    pub literal: P<ast::Lit>,
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -307,9 +307,7 @@ impl Lvalue {
 #[derive(Debug)]
 pub enum Statement {
     Expr(ast::Stmt),
-    Declare {
-        local: Local,
-    },
+    Declare(Local),
     Assign {
         lvalue: Lvalue,
         rvalue: P<ast::Expr>,
@@ -334,6 +332,8 @@ newtype_index!(CodeExtent, "extent");
 #[derive(Debug)]
 pub enum CodeExtentData {
     Misc(ast::NodeId),
+
+    ParameterScope { fn_id: ast::NodeId, body_id: ast::NodeId },
 
     // extent of code following a `let id = expr;` binding in a block
     Remainder(BlockRemainder),

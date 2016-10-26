@@ -1,4 +1,3 @@
-use aster::AstBuilder;
 use mar::build::CFG;
 use mar::repr::*;
 use syntax::ast;
@@ -33,9 +32,7 @@ impl CFG {
     }
 
     pub fn push_declare_decl(&mut self, block: BasicBlock, local: Local) {
-        self.push(block, Statement::Declare {
-            local: local,
-        });
+        self.push(block, Statement::Declare(local));
     }
 
     pub fn push_assign(&mut self,
@@ -60,21 +57,5 @@ impl CFG {
             span: span,
             kind: kind,
         });
-    }
-
-    pub fn temp_lvalue(&mut self, span: Span, name: Option<&'static str>) -> Lvalue {
-        Lvalue::Temp {
-            span: span,
-            name: name,
-        }
-    }
-
-    pub fn temp_lvalue_and_expr(&mut self,
-                                span: Span,
-                                name: &'static str) -> (Lvalue, P<ast::Expr>) {
-        let lvalue = self.temp_lvalue(span, Some(name));
-        let expr = AstBuilder::new().span(span).expr().id(name);
-
-        (lvalue, expr)
     }
 }

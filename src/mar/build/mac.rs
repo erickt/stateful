@@ -1,5 +1,5 @@
 use aster::AstBuilder;
-use mar::build::{Builder, transition};
+use mar::build::{BlockAnd, Builder, transition};
 use mar::repr::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
@@ -11,24 +11,17 @@ use syntax::ptr::P;
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr_mac(&mut self,
                     destination: Lvalue,
-                    extent: CodeExtent,
                     block: BasicBlock,
-                    mac: &ast::Mac) -> Option<BasicBlock> {
-        match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
-            (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
-                Some(self.expr_yield(destination, extent, block, expr))
-            }
-            (StateMachineKind::Async, Some(transition::Transition::Await(expr))) => {
-                Some(self.expr_await(destination, extent, block, expr))
-            }
-            (_, Some(transition::Transition::Suspend(expr))) => {
-                Some(self.expr_suspend(destination, extent, block, expr))
+                    mac: &ast::Mac) -> Option<BlockAnd<()>> {
+        match transition::parse_mac_transition(self.cx, mac) {
+            Some(transition::Transition::Suspend(expr)) => {
+                Some(self.expr_suspend(destination, block, expr))
             }
             _ => {
                 if is_path(&mac.node.path, "moved") {
                     let expr = parse_mac(self.cx, mac);
 
-                    Some(self.expr(destination, extent, block, &expr))
+                    Some(self.into(destination, block, &expr))
                 } else {
                     None
                 }

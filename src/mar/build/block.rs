@@ -1,4 +1,4 @@
-use mar::build::Builder;
+use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use syntax::ast::{self, StmtKind};
 use syntax::codemap::Span;
@@ -7,38 +7,33 @@ use syntax::ptr::P;
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn ast_block(&mut self,
                      destination: Lvalue,
-                     extent: CodeExtent,
                      mut block: BasicBlock,
-                     ast_block: &ast::Block) -> BasicBlock {
-        self.in_scope(extent, ast_block.span, block, |this| {
+                     ast_block: &ast::Block) -> BlockAnd<()> {
+        self.in_scope(ast_block.span, block, |this| {
             let (stmts, expr) = split_stmts(&ast_block.stmts[..]);
 
             for stmt in stmts {
-                block = this.stmt(extent, block, stmt);
+                block = unpack!(this.stmt(block, stmt));
             }
 
             if let Some(expr) = expr {
-                this.expr(destination, extent, block, &expr)
+                this.into(destination, block, &expr)
             } else {
                 this.assign_lvalue_unit(ast_block.span, block, destination);
-                block
+                block.unit()
             }
         })
     }
 
     pub fn stmt(&mut self,
-                extent: CodeExtent,
                 block: BasicBlock,
-                stmt: &ast::Stmt) -> BasicBlock {
+                stmt: &ast::Stmt) -> BlockAnd<()> {
         match stmt.node {
             StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
-                let destination = self.declare_temp_lvalue(stmt.span, "temp_stmt_expr");
-                debug!("stmt: destination={:?} expr={:?}", destination, expr);
-
-                self.expr(destination, extent, block, expr)
+                self.stmt_expr(block, expr)
             }
             StmtKind::Local(ref local) => {
-                self.local(extent, block, stmt.span, local)
+                self.local(block, stmt.span, local)
             }
             StmtKind::Item(..) => {
                 self.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
@@ -47,12 +42,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let (ref mac, _, _) = **mac;
                 let destination = self.declare_temp_lvalue(stmt.span, "temp_stmt_mac");
 
-                match self.expr_mac(destination.clone(), extent, block, mac) {
+                match self.expr_mac(destination.clone(), block, mac) {
                     Some(block) => block,
                     None => {
                         self.assign_lvalue_unit(stmt.span, block, destination);
                         self.cfg.push(block, Statement::Expr(stmt.clone()));
-                        block
+                        block.unit()
                     }
                 }
             }
@@ -60,10 +55,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn local(&mut self,
-                 extent: CodeExtent,
                  mut block: BasicBlock,
                  span: Span,
-                 local: &P<ast::Local>) -> BasicBlock {
+                 local: &P<ast::Local>) -> BlockAnd<()> {
         let decls = self.get_decls_from_pat(&local.pat, local.ty.clone());
 
         if decls.is_empty() {
@@ -73,15 +67,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.local_decls[decl].ty = local.ty.clone();
 
             if let Some(ref init) = local.init {
-                let destination = Lvalue::Local {
-                    span: span,
-                    decl: decl,
-                };
-
-                block = self.expr(destination, extent, block, init);
+                block = unpack!(self.into(Lvalue::Local(decl), block, init));
             }
 
-            block
+            block.unit()
         } else {
             self.cx.span_bug(span, "Cannot handle multiple decls at the moment?")
         }

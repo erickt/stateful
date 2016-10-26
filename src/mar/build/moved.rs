@@ -18,7 +18,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let expr = expander.fold_expr(expr.clone());
 
         for moved_ident in expander.moved_idents {
-            if let Some(decl) = self.find_decl(moved_ident) {
+            if let Some(decl) = self.find_local(moved_ident) {
                 self.schedule_move(expr.span, decl);
             } else {
                 self.cx.span_bug(

@@ -14,7 +14,7 @@ tracks where a `break` and `continue` should go to.
 */
 
 use aster::AstBuilder;
-use mar::build::{Builder, CFG, ScopeAuxiliary, ScopeId};
+use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
 use std::ascii::AsciiExt;
@@ -80,31 +80,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Start a loop scope, which tracks where `continue` and `break`
     /// should branch to. See module comment for more details.
     pub fn in_loop_scope<F>(&mut self,
-                            extent: CodeExtent,
                             label: Option<ast::SpannedIdent>,
                             loop_block: BasicBlock,
                             break_block: BasicBlock,
-                            f: F) -> BasicBlock
-        where F: FnOnce(&mut Builder) -> BasicBlock
+                            f: F)
+        where F: FnOnce(&mut Builder)
     {
+        let extent = self.extent_of_innermost_scope();
         let loop_scope = LoopScope {
-            extent: extent,
+            extent: extent.clone(),
             label: label,
             continue_block: loop_block,
             break_block: break_block,
         };
         self.loop_scopes.push(loop_scope);
-        let block = f(self);
-        self.loop_scopes.pop();
-        block
+        f(self);
+        let loop_scope = self.loop_scopes.pop().unwrap();
+        assert!(loop_scope.extent == extent);
     }
 
     /// Start a loop scope, which tracks where `continue` and `break`
     /// should branch to. See module comment for more details.
-    pub fn in_conditional_scope<F, T>(&mut self,
-                                      span: Span,
-                                      _extent: CodeExtent,
-                                      f: F) -> T
+    pub fn in_conditional_scope<F, T>(&mut self, span: Span, f: F) -> T
         where F: FnOnce(&mut Builder) -> T
     {
         let scope_id = self.scopes.last().unwrap().id;
@@ -194,16 +191,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Convenience wrapper that pushes a scope and then executes `f`
     /// to build its contents, popping the scope afterwards.
-    pub fn in_scope<F>(&mut self,
-                       extent: CodeExtent,
-                       span: Span,
-                       mut block: BasicBlock,
-                       f: F) -> BasicBlock
-        where F: FnOnce(&mut Builder) -> BasicBlock
+    pub fn in_scope<F, R>(&mut self,
+                          span: Span,
+                          mut block: BasicBlock,
+                          f: F) -> BlockAnd<R>
+        where F: FnOnce(&mut Builder) -> BlockAnd<R>
     {
+        let extent = self.start_new_extent();
+        debug!("in_scope(extent={:?}, block={:?}", extent, block);
+
         self.push_scope(extent, block);
-        block = f(self);
+        let rv = unpack!(block = f(self));
         self.pop_scope(extent, block);
+        debug!("in_scope: exiting extent={:?} block={:?}", extent, block);
 
         // At this point, we can't tell that variables are not being accessed. So we'll create a
         // new block to make sure variables are properly not referenced.
@@ -216,7 +216,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 end_scope: true,
             });
 
-        end_scope_block
+        end_scope_block.and(rv)
     }
 
     /// Push a scope onto the stack. You can then build code in this
@@ -393,17 +393,30 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes.last().map(|scope| scope.extent).unwrap()
     }
 
+    /// Returns the extent of the scope which should be exited by a
+    /// return.
+    pub fn extent_of_return_scope(&self) -> CodeExtent {
+        // The outermost scope (`scopes[0]`) will be the `CallSiteScope`.
+        // We want `scopes[1]`, which is the `ParameterScope`.
+        assert!(self.scopes.len() >= 2);
+        assert!(match self.extents[self.scopes[1].extent] {
+            CodeExtentData::ParameterScope { .. } => true,
+            _ => false,
+        });
+        self.scopes[1].extent
+    }
+
     pub fn assign_lvalue(&mut self,
                          block: BasicBlock,
                          lvalue: Lvalue,
                          rvalue: P<ast::Expr>) {
         debug!("assign_lvalue: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
-        if let Some(lvalue_decl) = lvalue.decl() {
-            if !self.is_initialized(lvalue_decl) {
-                self.initialize_decl(lvalue_decl);
-                self.cfg.push_declare_decl(block, lvalue_decl);
-            }
+        let Lvalue::Local(local) = lvalue;
+
+        if !self.is_initialized(local) {
+            self.initialize_decl(local);
+            self.cfg.push_declare_decl(block, local);
         }
 
         self.cfg.push_assign(block, lvalue, rvalue);
@@ -503,16 +516,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.assign_lvalue(block, lvalue, rvalue)
     }
 
-    pub fn find_decl(&self, lvalue: ast::Ident) -> Option<Local> {
+    pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {
         for scope in self.scopes.iter().rev() {
-            debug!("find_decl: {:?} scope={:?}", lvalue, scope); 
+            debug!("find_local: {:?} scope={:?}", ident, scope); 
         }
 
         for scope in self.scopes.iter().rev() {
             // Check if the lvalue is a conditionally initialized value.
             if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
                 for var in conditional_scope.initialized_decls.last().unwrap() {
-                    if lvalue == self.local_decls[*var].ident {
+                    if ident == self.local_decls[*var].ident {
                         return Some(*var);
                     }
                 }
@@ -520,12 +533,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             // Check if we are shadowing another variable.
             for var in scope.drops.iter().rev() {
-                if lvalue == self.local_decls[*var].ident {
+                if ident == self.local_decls[*var].ident {
                     return Some(*var);
                 }
             }
 
-            if let Some(var) = scope.forward_decls.get(&lvalue) {
+            if let Some(var) = scope.forward_decls.get(&ident) {
                 return Some(*var);
             }
         }
@@ -634,7 +647,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
-    pub fn schedule_drop(&mut self, span: Span, extent: CodeExtent, var: Local) {
+    pub fn schedule_drop(&mut self, span: Span, var: Local) {
         // FIXME: Make sure we aren't double dropping a variable.
         for scope in self.scopes.iter_mut().rev() {
             for drop in &scope.drops {
@@ -655,14 +668,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_bug(span, "no scopes?");
         }
 
-        for scope in self.scopes.iter_mut().rev() {
-            if scope.extent == extent {
-                scope.drops.push(var);
-                return;
-            }
-        }
-        self.cx.span_bug(span,
-                         &format!("extent {:?} not in scope to drop {:?}", extent, var));
+        let scope = self.scopes.last_mut().unwrap();
+        scope.drops.push(var);
     }
 
     pub fn schedule_move(&mut self, span: Span, var: Local) {
@@ -749,7 +756,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {
         struct Visitor<'a, 'b: 'a> {
             builder: &'a Builder<'a, 'b>,
-            local_decls: Vec<Local>,
+            locals: Vec<Local>,
         }
 
         impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
@@ -757,9 +764,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 debug!("get_decls_from_expr: {:?}", expr.node);
 
                 if let ast::ExprKind::Path(None, ref path) = expr.node {
-                    if let Some(decl) = self.builder.get_decl_from_path(path) {
-                        debug!("get_decls_from_expr: decl `{:?}", decl);
-                        self.local_decls.push(decl);
+                    if let Some(local) = self.builder.get_local_from_path(path) {
+                        debug!("get_decls_from_expr: decl `{:?}", local);
+                        self.locals.push(local);
                     }
                 }
 
@@ -771,21 +778,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let mut visitor = Visitor {
             builder: self,
-            local_decls: Vec::new(),
+            locals: Vec::new(),
         };
 
         visit::Visitor::visit_expr(&mut visitor, expr);
 
-        visitor.local_decls
+        visitor.locals
     }
 
-    pub fn get_decl_from_path(&self, path: &ast::Path) -> Option<Local> {
+    pub fn get_local_from_path(&self, path: &ast::Path) -> Option<Local> {
         if !path.global && path.segments.len() == 1 {
             let segment = &path.segments[0];
 
             if segment.parameters.is_empty() {
-                debug!("get_decls_from_path: {:?}", segment.identifier);
-                return self.find_decl(segment.identifier);
+                debug!("get_local_from_path: {:?}", segment.identifier);
+                return self.find_local(segment.identifier);
             }
         }
 

@@ -1,4 +1,4 @@
-//use aster::ident::ToIdent;
+use aster::AstBuilder;
 use mar::build::simplify::simplify_item;
 use mar::build::scope::ConditionalScope;
 use mar::indexed_vec::{Idx, IndexVec};
@@ -137,7 +137,7 @@ macro_rules! unpack {
 pub fn construct(cx: &ExtCtxt,
                  item: P<ast::Item>,
                  state_machine_kind: StateMachineKind) -> Result<Mar, Error> {
-    let item = simplify_item(cx, item);
+    let item = simplify_item(cx, item, state_machine_kind);
 
     let (fn_decl, unsafety, abi, generics, ast_block) = match item.node {
         ItemKind::Fn(fn_decl, unsafety, _, abi, generics, block) => {
@@ -166,9 +166,9 @@ pub fn construct(cx: &ExtCtxt,
             None,
         );
 
-        block = builder.in_scope(extent, item.span, block, |this| {
-            this.args_and_body(extent, block, &fn_decl.inputs, ast_block)
-        });
+        unpack!(block = builder.in_scope(item.span, block, |this| {
+            this.args_and_body(block, &fn_decl.inputs, ast_block)
+        }));
 
         let return_block = builder.return_block();
 
@@ -284,10 +284,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn args_and_body(&mut self,
-                     extent: CodeExtent,
                      block: BasicBlock,
                      arguments: &[ast::Arg],
-                     ast_block: P<ast::Block>) -> BasicBlock {
+                     ast_block: P<ast::Block>) -> BlockAnd<()> {
         //self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
 
         // Register the arguments as declarations.
@@ -295,12 +294,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             block,
             arguments.iter().map(|arg| &arg.pat));
 
-        let destination = Lvalue::Local {
-            span: ast_block.span,
-            decl: RETURN_POINTER,
-        };
+        let destination = Lvalue::Local(RETURN_POINTER);
 
-        self.ast_block(destination, extent, block, &ast_block)
+        self.ast_block(destination, block, &ast_block)
     }
 
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
@@ -336,6 +332,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let rb = self.start_new_block(span, Some("End"));
                 self.cached_return_block = Some(rb);
                 rb
+            }
+        }
+    }
+
+    pub fn lvalue_to_expr(&self, lvalue: &Lvalue) -> P<ast::Expr> {
+        match *lvalue {
+            Lvalue::Local(ref local) => {
+                let local_decl = &self.local_decls[*local];
+                AstBuilder::new().span(local_decl.span).expr().id(local_decl.ident)
+            }
+        }
+    }
+
+    pub fn rvalue_to_expr(&self, rvalue: &Rvalue) -> P<ast::Expr> {
+        match *rvalue {
+            Rvalue::Use(ref operand) => self.operand_to_expr(operand),
+        }
+    }
+
+    pub fn operand_to_expr(&self, operand: &Operand) -> P<ast::Expr> {
+        match *operand {
+            Operand::Consume(ref rvalue) => {
+                self.lvalue_to_expr(rvalue)
+            }
+            Operand::Constant(ref constant) => {
+                AstBuilder::new().span(constant.span).expr()
+                    .build_lit(constant.literal.clone())
             }
         }
     }

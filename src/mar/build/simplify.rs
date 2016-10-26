@@ -1,5 +1,6 @@
 use aster::AstBuilder;
 use mar::build::transition::{self, ContainsTransition, Transition};
+use mar::repr::*;
 use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::codemap::{respan, Span};
 use syntax::ext::base::ExtCtxt;
@@ -10,8 +11,10 @@ use syntax::parse::token::Token;
 use syntax::ptr::P;
 use syntax::util::small_vector::SmallVector;
 
-pub fn simplify_item(cx: &ExtCtxt, item: P<ast::Item>) -> ast::Item {
-    let mut expander = Expander::new(cx);
+pub fn simplify_item(cx: &ExtCtxt,
+                     item: P<ast::Item>,
+                     state_machine_kind: StateMachineKind) -> ast::Item {
+    let mut expander = Expander::new(cx, state_machine_kind);
     let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
 
     let expanded = expander.fold_item_simple(item.unwrap());
@@ -44,13 +47,15 @@ impl Folder for Assigner {
 
 struct Expander<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
+    state_machine_kind: StateMachineKind,
     loop_depth: usize,
 }
 
 impl<'a, 'b> Expander<'a, 'b> {
-    fn new(cx: &'a ExtCtxt<'b>) -> Self {
+    fn new(cx: &'a ExtCtxt<'b>, state_machine_kind: StateMachineKind) -> Self {
         Expander {
             cx: cx,
+            state_machine_kind: state_machine_kind,
             loop_depth: 0,
         }
     }
@@ -75,6 +80,29 @@ impl<'a, 'b> Expander<'a, 'b> {
             attrs: fold::fold_attrs(attrs.into(), self).into(),
         })
     }
+
+    pub fn expr_mac(&mut self, mac: &ast::Mac) -> Option<P<ast::Expr>> {
+        match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
+            (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
+                let expr = self.fold_sub_expr(expr);
+                Some(desugar_yield(self.cx, expr))
+            }
+            (StateMachineKind::Async, Some(transition::Transition::Await(expr))) => {
+                let expr = self.fold_sub_expr(expr);
+                Some(desugar_await(self.cx, expr))
+            }
+            _ => {
+                if is_try_path(&mac.node.path) {
+                    let expr = parse_mac_try(self.cx, mac);
+                    let expr = self.fold_sub_expr(expr);
+                    Some(desugar_try(expr))
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
 }
 
 impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
@@ -113,9 +141,8 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
                 self.construct_expr(node, expr.id, expr.span, expr.attrs)
             }
             ExprKind::Mac(mac) => {
-                if is_try_path(&mac.node.path) {
-                    let expr = desugar_try(self.cx, &mac);
-                    self.fold_expr(expr)
+                if let Some(expr) = self.expr_mac(&mac) {
+                    expr
                 } else {
                     self.construct_expr(ExprKind::Mac(mac), expr.id, expr.span, expr.attrs)
                 }
@@ -128,22 +155,24 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
 
     fn fold_stmt(&mut self, stmt: ast::Stmt) -> SmallVector<ast::Stmt> {
         match stmt.node {
-            StmtKind::Mac(ref mac) if is_try_path(&mac.0.node.path) => {
-                let expr = self.fold_expr(desugar_try(self.cx, &mac.0));
+            StmtKind::Mac(ref mac) => {
+                if let Some(expr) = self.expr_mac(&mac.0) {
+                    let stmt = match mac.1 {
+                        ast::MacStmtStyle::Semicolon => {
+                            AstBuilder::new().stmt().semi().build(expr)
+                        }
+                        ast::MacStmtStyle::Braces | ast::MacStmtStyle::NoBraces => {
+                            AstBuilder::new().stmt().expr().build(expr)
+                        }
+                    };
 
-                let stmt = match mac.1 {
-                    ast::MacStmtStyle::Semicolon => {
-                        AstBuilder::new().stmt().semi().build(expr)
-                    }
-                    ast::MacStmtStyle::Braces | ast::MacStmtStyle::NoBraces => {
-                        AstBuilder::new().stmt().expr().build(expr)
-                    }
-                };
-
-                SmallVector::one(stmt)
+                    return SmallVector::one(stmt);
+                }
             }
-            _ => fold::noop_fold_stmt(stmt, self),
+            _ => {}
         }
+
+        fold::noop_fold_stmt(stmt, self)
     }
 
     fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
@@ -372,7 +401,85 @@ fn parse_mac_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
 ///         return ::std::result::Result::Err(::std::convert::From::from(err)),
 /// }
 /// ```
-fn desugar_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
-    let expr = parse_mac_try(cx, mac);
+fn desugar_try(expr: P<ast::Expr>) -> P<ast::Expr> {
     AstBuilder::new().span(expr.span).expr().try().build(expr)
+}
+
+/// Compile `yield_!($expr)` into:
+///
+/// ```
+/// 'before: {
+///     ...
+///     let () = suspend!(Some($expr));
+///     goto!('after);
+/// }
+///
+/// 'after: {
+///     ...
+/// }
+/// ```
+fn desugar_yield(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Expr> {
+    quote_expr!(cx, suspend!(Some($expr)))
+}
+
+/// Compile `$result = await!($expr)` into:
+///
+/// ```
+/// 'before: {
+///     ...
+///     let future = $expr;
+///     goto!('await_loop);
+/// }
+///
+/// let result;
+///
+/// loop {
+///     match future.poll() {
+///         Ok(Async::NotReady) => {
+///             let () = suspend!(Ok(Async::NotReady));
+///             goto!('await_loop);
+///         }
+///         Ok(Async::Ready(result)) => {
+///             $result = Ok(result);
+///             goto!('await_exit);
+///         }
+///         Err(err) => {
+///             $result = Err(err);
+///             goto!('await_exit);
+///         }
+///     }
+/// }
+///
+/// 'await_exit: {
+///     ...
+/// }
+/// ```
+pub fn desugar_await(cx: &ExtCtxt, future_expr: P<ast::Expr>) -> P<ast::Expr> {
+    quote_expr!(cx,
+        {
+            let mut await_result = ::std::option::Option::None;
+
+            loop {
+                match ::futures::Future::poll(&mut $future_expr) {
+                    ::std::result::Result::Ok(::futures::Async::NotReady) => {
+                        suspend!(::futures::Async::NotReady);
+                    }
+                    ::std::result::Result::Ok(::futures::Async::Ready(ok)) => {
+                        await_result = ::std::option::Option::Some(
+                            ::std::result::Result::Ok(moved!(ok)));
+
+                        break;
+                    }
+                    ::std::result::Result::Err(err) => {
+                        await_result = ::std::option::Option::Some(
+                            ::std::result::Result::Err(moved!(err)));
+
+                        break;
+                    }
+                }
+            }
+
+            moved!(await_result).unwrap()
+        }
+    )
 }

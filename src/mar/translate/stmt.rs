@@ -6,7 +6,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
-            Statement::Declare { local } => {
+            Statement::Declare(local) => {
                 let local_decl = self.mar.local_decl_data(local);
                 let ast_builder = self.ast_builder.span(local_decl.span);
 
@@ -40,31 +40,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             Statement::Assign { ref lvalue, ref rvalue } => {
                 match *lvalue {
-                    Lvalue::Local { span, decl, .. } => {
-                        let id = self.mar.local_decl_data(decl).ident;
+                    Lvalue::Local(local) => {
+                        let local_decl = self.mar.local_decl_data(local);
 
                         vec![
-                            self.ast_builder.span(span).stmt().semi()
-                                .assign().id(id)
-                                .build(rvalue.clone())
-                        ]
-                    }
-                    Lvalue::Temp { span, name } => {
-                        if let Some(name) = name {
-                            vec![
-                                self.ast_builder.span(span).stmt().let_id(name)
-                                    .expr().build(rvalue.clone())
-                            ]
-                        } else {
-                            vec![
-                                self.ast_builder.span(span).stmt().semi()
-                                    .build(rvalue.clone())
-                            ]
-                        }
-                    }
-                    Lvalue::ReturnPointer { span } => {
-                        vec![
-                            self.ast_builder.span(span).stmt().expr()
+                            self.ast_builder.span(local_decl.span).stmt().semi()
+                                .assign().id(local_decl.ident)
                                 .build(rvalue.clone())
                         ]
                     }

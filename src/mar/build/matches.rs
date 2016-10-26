@@ -1,5 +1,5 @@
 use aster::ident::ToIdent;
-use mar::build::Builder;
+use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -8,12 +8,13 @@ use syntax::ptr::P;
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr_match(&mut self,
                       destination: Lvalue,
-                      extent: CodeExtent,
                       span: Span,
-                      block: BasicBlock,
+                      mut block: BasicBlock,
                       discriminant: P<ast::Expr>,
                       arms: &[ast::Arm])
-                      -> BasicBlock {
+                      -> BlockAnd<()> {
+        let operand = unpack!(block = self.as_operand(block, &discriminant));
+
         let targets = arms.iter()
             .map(|arm| {
                 Arm {
@@ -24,38 +25,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
-        let (block, temp_local, discriminant) = self.expr_temp(
-            extent,
-            block,
-            &discriminant,
-            "temp_match_cond");
-
-        self.schedule_move(span, temp_local);
-
         self.terminate(span, block, TerminatorKind::Match {
-            discr: discriminant,
+            discr: operand,
             targets: targets.clone(),
         });
 
         let mut arm_blocks = vec![];
 
-        self.in_conditional_scope(span, extent, |this| {
+        self.in_conditional_scope(span, |this| {
             for (arm, target) in arms.iter().zip(targets) {
                 this.next_conditional_scope();
 
-                let arm_block = this.in_scope(extent, span, block, |this| {
-                    println!("QQQQQQQQQQQQQQQQQQQQ");
+                let arm_block = this.in_scope(span, block, |this| {
                     this.add_decls_from_pats(target.block, arm.pats.iter());
-                    this.expr(destination.clone(), extent, target.block, &arm.body)
+                    this.into(destination.clone(), target.block, &arm.body)
                 });
 
-                println!("HEY: {:?}", this.find_live_decls());
-
-                arm_blocks.push(arm_block);
+                arm_blocks.push(unpack!(arm_block));
             }
         });
-
-        println!("aaaaaaaaaaaaaaaaa");
 
         let join_block = self.start_new_block(span, Some("MatchJoin"));
 
@@ -66,7 +54,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 TerminatorKind::Goto { target: join_block, end_scope: true });
         }
 
-        join_block
+        join_block.unit()
     }
 
     pub fn declare_binding<T>(&mut self,
@@ -80,7 +68,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("declare_binding(name={:?}, var_ty={:?}, span={:?})",
                name, var_ty, span);
 
-        let shadowed_decl = self.find_decl(name);
+        let shadowed_decl = self.find_local(name);
         let local = self.local_decls.push(LocalDecl {
             mutability: mutability,
             ident: name,
@@ -88,8 +76,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             shadowed_decl: shadowed_decl,
             span: span,
         });
-        let extent = self.extent_of_innermost_scope();
-        self.schedule_drop(span, extent, local);
+        self.schedule_drop(span, local);
 
         debug!("declare_binding: local={:?}", local);
 
@@ -110,9 +97,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where T: ToIdent,
     {
         let temp_decl = self.declare_temp(span, name);
-        Lvalue::Local {
-            span: span,
-            decl: temp_decl,
-        }
+        Lvalue::Local(temp_decl)
     }
 }
