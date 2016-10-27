@@ -1,4 +1,4 @@
-use aster::AstBuilder;
+use mar::build::expr::category::{Category, RvalueFunc};
 use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
@@ -7,10 +7,8 @@ use syntax::ptr::P;
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn as_rvalue(&mut self,
                      mut block: BasicBlock,
-                     expr: &P<ast::Expr>) -> BlockAnd<P<ast::Expr>> {
+                     expr: &P<ast::Expr>) -> BlockAnd<Rvalue> {
         debug!("expr_as_rvalue(block={:?}, expr={:?})", block, expr);
-
-        let expr_span = expr.span;
 
         match expr.node {
             /*
@@ -189,7 +187,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Assign(..) |
             ExprKind::AssignOp(..) => {
                 block = unpack!(self.stmt_expr(block, expr));
-                block.and(AstBuilder::new().span(expr_span).expr().unit())
+                block.and(self.unit_rvalue())
             }
             /*
             ExprKind::Literal { .. } |
@@ -219,8 +217,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block.and(Rvalue::Use(operand))
             }
             */
-            _ =>
-                panic!("not supported yet: {:?}", expr)
+            _ => {
+                // these do not have corresponding `Rvalue` variants,
+                // so make an operand and then return that
+                debug_assert!(match Category::of(&expr.node) {
+                    Some(Category::Rvalue(RvalueFunc::AsRvalue)) => false,
+                    _ => true,
+                });
+                let operand = unpack!(block = self.as_operand(block, expr));
+                block.and(Rvalue::Use(operand))
+            }
         }
     }
 }

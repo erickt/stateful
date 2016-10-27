@@ -1,3 +1,4 @@
+use aster::AstBuilder;
 use mar::indexed_vec::{Idx, IndexVec};
 use std::fmt;
 use std::ops::{Index, IndexMut};
@@ -267,6 +268,17 @@ pub enum Lvalue {
     Local(Local),
 }
 
+impl Lvalue {
+    pub fn to_expr(&self, local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
+        match *self {
+            Lvalue::Local(ref local) => {
+                let local_decl = &local_decls[*local];
+                AstBuilder::new().span(local_decl.span).expr().id(local_decl.ident)
+            }
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // Operands
 
@@ -279,6 +291,15 @@ pub enum Operand {
     Constant(Constant),
 }
 
+impl Operand {
+    pub fn to_expr(&self, local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
+        match *self {
+            Operand::Consume(ref lvalue) => lvalue.to_expr(local_decls),
+            Operand::Constant(ref constant) => constant.to_expr(),
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 /// Rvalues
 
@@ -286,6 +307,35 @@ pub enum Operand {
 pub enum Rvalue {
     /// x (either a move or copy, depending on type of x)
     Use(Operand),
+
+    /// Create an aggregate value, like a tuple or struct.  This is
+    /// only needed because we want to distinguish `dest = Foo { x:
+    /// ..., y: ... }` from `dest.x = ...; dest.y = ...;` in the case
+    /// that `Foo` has a destructor. These rvalues can be optimized
+    /// away after type-checking and before lowering.
+    Aggregate(AggregateKind, Vec<Operand>),
+}
+
+impl Rvalue {
+    pub fn to_expr(&self, local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
+        match *self {
+            Rvalue::Use(ref lvalue) => lvalue.to_expr(local_decls),
+            Rvalue::Aggregate(ref kind, ref items) => {
+                match *kind {
+                    AggregateKind::Tuple => {
+                        AstBuilder::new().expr().tuple()
+                            .with_exprs(items.iter().map(|item| item.to_expr(local_decls)))
+                            .build()
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AggregateKind {
+    Tuple,
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -301,6 +351,14 @@ pub struct Constant {
     pub literal: P<ast::Lit>,
 }
 
+
+impl Constant {
+    pub fn to_expr(&self) -> P<ast::Expr> {
+        AstBuilder::new().span(self.span).expr()
+            .build_lit(self.literal.clone())
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // Statements
 
@@ -309,8 +367,20 @@ pub enum Statement {
     Expr(ast::Stmt),
     Declare(Local),
     Assign {
+        span: Span,
         lvalue: Lvalue,
-        rvalue: P<ast::Expr>,
+        rvalue: Rvalue,
+    },
+    Call {
+        span: Span,
+        fun: Operand,
+        args: Vec<Operand>,
+    },
+    MethodCall {
+        span: Span,
+        ident: ast::SpannedIdent,
+        tys: Vec<P<ast::Ty>>,
+        args: Vec<Operand>,
     },
     Drop {
         lvalue: Local,

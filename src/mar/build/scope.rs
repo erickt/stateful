@@ -13,7 +13,6 @@ In addition to the normal scope stack, we track a loop scope stack that contains
 tracks where a `break` and `continue` should go to.
 */
 
-use aster::AstBuilder;
 use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
@@ -330,7 +329,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// resolving `break` and `continue`.
     pub fn find_loop_scope(&mut self,
                            span: Span,
-                           label: Option<ast::Ident>) -> LoopScope {
+                           label: Option<ast::SpannedIdent>) -> LoopScope {
         let loop_scope =
             match label {
                 None => {
@@ -345,7 +344,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                     .rev()
                                     .find(|loop_scope| {
                                         match loop_scope.label {
-                                            Some(l) => l.node == label,
+                                            Some(l) => l == label,
                                             None => false,
                                         }
                                     })
@@ -408,8 +407,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn assign_lvalue(&mut self,
                          block: BasicBlock,
+                         span: Span,
                          lvalue: Lvalue,
-                         rvalue: P<ast::Expr>) {
+                         rvalue: Rvalue) {
         debug!("assign_lvalue: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
         let Lvalue::Local(local) = lvalue;
@@ -419,7 +419,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cfg.push_declare_decl(block, local);
         }
 
-        self.cfg.push_assign(block, lvalue, rvalue);
+        self.cfg.push_assign(block, span, lvalue, rvalue);
     }
 
     /// Walk up the scopes to discover if this variable has been initialized.
@@ -512,8 +512,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                               span: Span,
                               block: BasicBlock,
                               lvalue: Lvalue) {
-        let rvalue = AstBuilder::new().span(span).expr().unit();
-        self.assign_lvalue(block, lvalue, rvalue)
+        let rvalue = self.unit_rvalue();
+        self.assign_lvalue(block, span, lvalue, rvalue)
     }
 
     pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {

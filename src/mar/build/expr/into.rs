@@ -1,8 +1,5 @@
-use aster::AstBuilder;
-use aster::ident::ToIdent;
 use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::build::expr::category::{Category, RvalueFunc};
-use mar::build::scope::LoopScope;
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
 use syntax::codemap::Span;
@@ -67,41 +64,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             ExprKind::Call(ref fun, ref args) => {
                 let fun = unpack!(block = self.as_operand(block, fun));
-                let fun = self.operand_to_expr(&fun);
+                let args = args.into_iter()
+                    .map(|arg| unpack!(block = self.as_operand(block, arg)))
+                    .collect::<Vec<_>>();
 
-                let call_expr = {
-                    let args = args.into_iter()
-                        .map(|arg| {
-                            let arg = unpack!(block = self.as_operand(block, arg));
-                            self.operand_to_expr(&arg)
-                        });
-
-                    AstBuilder::new().span(expr_span).expr()
-                        .call().build(fun)
-                        .with_args(args)
-                        .build()
-                };
-
-                self.cfg.push_assign(block, destination, call_expr);
+                self.cfg.push_call(block, expr_span, fun, args);
                 block.unit()
             }
-            ExprKind::MethodCall(ref name, ref tys, ref args) => {
-                let method_call_expr = {
-                    let mut args = args.into_iter()
-                        .map(|arg| {
-                            let arg = unpack!(block = self.as_operand(block, arg));
-                            self.operand_to_expr(&arg)
-                        });
+            ExprKind::MethodCall(ref ident, ref tys, ref args) => {
+                let args = args.into_iter()
+                    .map(|arg| unpack!(block = self.as_operand(block, arg)))
+                    .collect::<Vec<_>>();
 
-                    AstBuilder::new().expr()
-                        .span(name.span).method_call(name.node)
-                        .span(expr_span).build(args.next().unwrap())
-                        .with_tys(tys.clone())
-                        .with_args(args)
-                        .build()
-                };
+                self.cfg.push_method_call(
+                    block,
+                    expr_span,
+                    *ident,
+                    tys.clone(),
+                    args);
 
-                self.cfg.push_assign(block, destination, method_call_expr);
                 block.unit()
             }
 
@@ -138,7 +119,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 });
 
                 let rvalue = unpack!(block = self.as_rvalue(block, expr));
-                self.cfg.push_assign(block, destination, rvalue);
+                self.cfg.push_assign(block, expr_span, destination, rvalue);
                 block.unit()
             }
 
@@ -284,31 +265,5 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.cfg.block_data_mut(exit_block).decls = live_decls.clone();
 
         exit_block.unit()
-    }
-
-    fn break_or_continue<F>(&mut self,
-                            destination: Lvalue,
-                            span: Span,
-                            label: Option<ast::Ident>,
-                            block: BasicBlock,
-                            exit_selector: F)
-                            -> BasicBlock
-        where F: FnOnce(&LoopScope) -> BasicBlock
-    {
-        if !self.is_in_loop() {
-            self.cx.span_err(span, "cannot break outside of a loop");
-        }
-
-        // `break` or `continue` has a type of `()`.
-        self.assign_lvalue_unit(span, block, destination);
-
-        let loop_scope = self.find_loop_scope(span, label);
-        let exit_block = exit_selector(&loop_scope);
-        self.exit_scope(span, loop_scope.extent, block, exit_block);
-
-        // Even though we've exited `block`, there could be code following the break/continue. To
-        // keep rust happy, we'll create a new block that has an edge to `block`, even though
-        // control will never actually flow into this block.
-        self.start_new_block(span, Some("AfterBreakOrContinue"))
     }
 }

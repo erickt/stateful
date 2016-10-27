@@ -1,4 +1,4 @@
-use mar::build::{BlockAnd, BlockAndExtension, Builder};
+use mar::build::{BlockAnd, Builder};
 use mar::repr::*;
 use syntax::ast;
 use syntax::ptr::P;

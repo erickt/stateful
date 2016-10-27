@@ -2,7 +2,6 @@ use mar::repr::*;
 use mar::translate::Builder;
 use syntax::ast;
 use syntax::codemap::Span;
-use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
@@ -28,6 +27,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.goto(terminator.span, target)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
+                let cond = cond.to_expr(&self.mar.local_decls);
+
                 let then_block = ast_builder
                     .span(self.block_span(then_block))
                     .block()
@@ -42,12 +43,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 vec![
                     ast_builder.stmt().expr().if_()
-                        .build(self.operand_to_expr(cond))
+                        .build(cond)
                         .build_then(then_block)
                         .build_else(else_block),
                 ]
             }
             TerminatorKind::Match { ref discr, ref targets } => {
+                let discr = discr.to_expr(&self.mar.local_decls);
+
                 let arms = targets.iter()
                     .map(|target| {
                         let ast_builder = ast_builder.span(self.block_span(target.block));
@@ -65,7 +68,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 vec![
                     ast_builder.stmt().expr().match_()
-                        .build(self.operand_to_expr(discr))
+                        .build(discr)
                         .with_arms(arms)
                         .build()
                 ]
@@ -184,33 +187,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ast_builder.stmt().semi().build(next_expr),
             ast_builder.stmt().semi().continue_(),
         ]
-    }
-
-    fn lvalue_to_expr(&self, lvalue: &Lvalue) -> P<ast::Expr> {
-        match *lvalue {
-            Lvalue::Local(ref local) => {
-                let local_decl = &self.mar.local_decl_data(*local);
-                self.ast_builder.span(local_decl.span).expr().id(local_decl.ident)
-            }
-        }
-    }
-
-    fn rvalue_to_expr(&self, rvalue: &Rvalue) -> P<ast::Expr> {
-        match *rvalue {
-            Rvalue::Use(ref operand) => self.operand_to_expr(operand),
-        }
-    }
-
-    fn operand_to_expr(&self, operand: &Operand) -> P<ast::Expr> {
-        match *operand {
-            Operand::Consume(ref rvalue) => {
-                self.lvalue_to_expr(rvalue)
-            }
-            Operand::Constant(ref constant) => {
-                self.ast_builder.span(constant.span).expr()
-                    .build_lit(constant.literal.clone())
-            }
-        }
     }
 
     pub fn block_span(&self, block: BasicBlock) -> Span {

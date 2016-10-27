@@ -1,7 +1,7 @@
 use mar::build::expr::category::Category;
 use mar::build::{BlockAndExtension, Builder, BlockAnd};
 use mar::repr::*;
-use syntax::ast::{self, ExprKind};
+use syntax::ast;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {

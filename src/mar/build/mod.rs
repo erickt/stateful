@@ -1,4 +1,3 @@
-use aster::AstBuilder;
 use mar::build::simplify::simplify_item;
 use mar::build::scope::ConditionalScope;
 use mar::indexed_vec::{Idx, IndexVec};
@@ -335,33 +334,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
     }
-
-    pub fn lvalue_to_expr(&self, lvalue: &Lvalue) -> P<ast::Expr> {
-        match *lvalue {
-            Lvalue::Local(ref local) => {
-                let local_decl = &self.local_decls[*local];
-                AstBuilder::new().span(local_decl.span).expr().id(local_decl.ident)
-            }
-        }
-    }
-
-    pub fn rvalue_to_expr(&self, rvalue: &Rvalue) -> P<ast::Expr> {
-        match *rvalue {
-            Rvalue::Use(ref operand) => self.operand_to_expr(operand),
-        }
-    }
-
-    pub fn operand_to_expr(&self, operand: &Operand) -> P<ast::Expr> {
-        match *operand {
-            Operand::Consume(ref rvalue) => {
-                self.lvalue_to_expr(rvalue)
-            }
-            Operand::Constant(ref constant) => {
-                AstBuilder::new().span(constant.span).expr()
-                    .build_lit(constant.literal.clone())
-            }
-        }
-    }
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -374,8 +346,9 @@ mod expr;
 mod into;
 mod mac;
 mod matches;
+mod misc;
 mod moved;
 mod scope;
-mod transition;
 mod simplify;
 mod suspend;
+mod transition;

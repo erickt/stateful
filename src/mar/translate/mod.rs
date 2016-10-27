@@ -31,7 +31,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         builder.state_enum_default_and_arms();
 
     let state_machine_impl;
-    let state_machine_impl_future;
+    let state_machine_impl_driver;
 
     match mar.state_machine_kind {
         StateMachineKind::Generator => {
@@ -49,7 +49,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
                 }
             ).unwrap();
 
-            state_machine_impl_future = quote_item!(cx,
+            state_machine_impl_driver = quote_item!(cx,
                 impl<S, F, Item> ::std::iter::Iterator for StateMachine<S, F>
                     where S: ::std::default::Default,
                           F: Fn(S) -> (::std::option::Option<Item>, S)
@@ -80,7 +80,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
                 }
             ).unwrap();
 
-            state_machine_impl_future = quote_item!(cx,
+            state_machine_impl_driver = quote_item!(cx,
                 impl<S, F, Item, Error> ::futures::Future for StateMachine<S, F>
                     where S: ::std::default::Default,
                           F: Fn(S) -> ::std::result::Result<(::futures::Async<Item>, S), Error>,
@@ -132,7 +132,7 @@ pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
         }
 
         $state_machine_impl
-        $state_machine_impl_future
+        $state_machine_impl_driver
         $state_enum
         $state_default
         $state_machine_closure

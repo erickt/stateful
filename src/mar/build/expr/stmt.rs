@@ -1,5 +1,3 @@
-use aster::AstBuilder;
-use aster::ident::ToIdent;
 use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::build::scope::LoopScope;
 use mar::repr::*;
@@ -11,27 +9,38 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt_expr(&mut self,
                      mut block: BasicBlock,
                      expr: &P<ast::Expr>) -> BlockAnd<()> {
+        let this = self;
         let expr_span = expr.span;
 
         match expr.node {
+            ExprKind::Continue(label) => {
+                this.break_or_continue(expr_span, label, block,
+                                       |loop_scope| loop_scope.continue_block)
+            }
+            ExprKind::Break(label) => {
+                this.break_or_continue(expr_span, label, block, |loop_scope| {
+                    loop_scope.break_block
+                })
+            }
             ExprKind::Assign(ref lhs, ref rhs) => {
                 // Note: we evaluate assignments right-to-left. This
                 // is better for borrowck interaction with overloaded
                 // operators like x[j] = x[i].
 
-                let rhs = unpack!(block = self.as_rvalue(block, rhs));
-                let lhs = unpack!(block = self.as_lvalue(block, lhs));
-                self.cfg.push_assign(block, lhs, rhs);
+                let rhs = unpack!(block = this.as_rvalue(block, rhs));
+                let lhs = unpack!(block = this.as_lvalue(block, lhs));
+
+                this.cfg.push_assign(block, expr_span, lhs, rhs);
 
                 block.unit()
             }
             ExprKind::Ret(ref returned_expr) => {
-                self.expr_ret(block, expr.span, returned_expr)
+                this.expr_ret(block, expr.span, returned_expr)
             }
             _ => {
-                let temp = self.declare_temp(expr_span, "temp_stmt_expr");
-                unpack!(block = self.into(Lvalue::Local(temp), block, expr));
-                self.schedule_drop(expr_span, temp);
+                let temp = this.declare_temp(expr_span, "temp_stmt_expr");
+                unpack!(block = this.into(Lvalue::Local(temp), block, expr));
+                this.schedule_drop(expr_span, temp);
                 block.unit()
             }
         }
@@ -72,28 +81,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn break_or_continue<F>(&mut self,
-                            destination: Lvalue,
                             span: Span,
-                            label: Option<ast::Ident>,
+                            label: Option<ast::SpannedIdent>,
                             block: BasicBlock,
                             exit_selector: F)
-                            -> BasicBlock
+                            -> BlockAnd<()>
         where F: FnOnce(&LoopScope) -> BasicBlock
     {
         if !self.is_in_loop() {
             self.cx.span_err(span, "cannot break outside of a loop");
         }
 
-        // `break` or `continue` has a type of `()`.
-        self.assign_lvalue_unit(span, block, destination);
+        let (exit_block, extent) = {
+            let loop_scope = self.find_loop_scope(span, label);
+            (exit_selector(&loop_scope), loop_scope.extent)
+        };
 
-        let loop_scope = self.find_loop_scope(span, label);
-        let exit_block = exit_selector(&loop_scope);
-        self.exit_scope(span, loop_scope.extent, block, exit_block);
-
-        // Even though we've exited `block`, there could be code following the break/continue. To
-        // keep rust happy, we'll create a new block that has an edge to `block`, even though
-        // control will never actually flow into this block.
-        self.start_new_block(span, Some("AfterBreakOrContinue"))
+        self.exit_scope(span, extent, block, exit_block);
+        self.start_new_block(span, Some("AfterBreakOrContinue")).unit()
     }
 }

@@ -1,3 +1,4 @@
+use aster::AstBuilder;
 use mar::repr::*;
 use mar::translate::Builder;
 use syntax::ast;
@@ -38,18 +39,40 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
-            Statement::Assign { ref lvalue, ref rvalue } => {
-                match *lvalue {
-                    Lvalue::Local(local) => {
-                        let local_decl = self.mar.local_decl_data(local);
+            Statement::Assign { span, ref lvalue, ref rvalue } => {
+                let lvalue = lvalue.to_expr(&self.mar.local_decls);
+                let rvalue = rvalue.to_expr(&self.mar.local_decls);
 
-                        vec![
-                            self.ast_builder.span(local_decl.span).stmt().semi()
-                                .assign().id(local_decl.ident)
-                                .build(rvalue.clone())
-                        ]
-                    }
-                }
+                vec![
+                    self.ast_builder.span(span).stmt().semi()
+                        .assign().build(lvalue)
+                        .build(rvalue)
+                ]
+            }
+            Statement::Call { span, ref fun, ref args } => {
+                let fun = fun.to_expr(&self.mar.local_decls);
+                let args = args.iter()
+                    .map(|arg| arg.to_expr(&self.mar.local_decls));
+
+                vec![
+                    AstBuilder::new().span(span).stmt().semi()
+                        .call().build(fun)
+                        .with_args(args)
+                        .build()
+                ]
+            }
+            Statement::MethodCall { span, ident, ref tys, ref args } => {
+                let mut args = args.iter()
+                    .map(|arg| arg.to_expr(&self.mar.local_decls));
+
+                vec![
+                    AstBuilder::new().stmt().semi()
+                        .span(ident.span).method_call(ident.node)
+                        .span(span).build(args.next().unwrap())
+                        .with_tys(tys.clone())
+                        .with_args(args)
+                        .build()
+                ]
             }
             Statement::Drop { lvalue, moved } => {
                 let decl = self.mar.local_decl_data(lvalue);
