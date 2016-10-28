@@ -83,21 +83,4 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         local
     }
-
-    /// Create a new temporary variable that has a unique name.
-    pub fn declare_temp<T>(&mut self, span: Span, name: T) -> Local
-        where T: ToIdent,
-    {
-        // Add a unique number to the name.
-        let name = format!("{}{}", name.to_ident(), self.local_decls.len());
-        self.declare_binding(span, ast::Mutability::Mutable, name, None)
-    }
-
-    /// Create a new temporary lvalue that has a unique name.
-    pub fn declare_temp_lvalue<T>(&mut self, span: Span, name: T) -> Lvalue
-        where T: ToIdent,
-    {
-        let temp_decl = self.declare_temp(span, name);
-        Lvalue::Local(temp_decl)
-    }
 }

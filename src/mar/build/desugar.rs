@@ -68,19 +68,6 @@ impl<'a, 'b> Expander<'a, 'b> {
         expr.map(|expr| fold::noop_fold_expr(expr, self))
     }
 
-    fn construct_expr(&mut self,
-                      node: ast::ExprKind,
-                      id: ast::NodeId,
-                      span: Span,
-                      attrs: ast::ThinVec<ast::Attribute>) -> P<ast::Expr> {
-        P(ast::Expr {
-            node: node,
-            id: self.new_id(id),
-            span: self.new_span(span),
-            attrs: fold::fold_attrs(attrs.into(), self).into(),
-        })
-    }
-
     pub fn expr_mac(&mut self, mac: &ast::Mac) -> Option<P<ast::Expr>> {
         match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
             (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
@@ -111,46 +98,65 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
             return expr;
         }
 
-        let expr = expr.unwrap();
+        expr.map(|expr| {
+            match expr.node {
+                ExprKind::ForLoop(pat, expr, loop_block, label) => {
+                    let expr = desugar_for_loop(pat, expr, loop_block, label).unwrap();
+                    fold::noop_fold_expr(expr, self)
+                }
+                ExprKind::IfLet(pat, expr, then_block, else_block) => {
+                    let expr = desugar_if_let(pat, expr, then_block, else_block).unwrap();
+                    fold::noop_fold_expr(expr, self)
+                }
+                ExprKind::WhileLet(pat, expr, then_block, label) => {
+                    let expr = desugar_while_let(pat, expr, then_block, label).unwrap();
+                    fold::noop_fold_expr(expr, self)
+                }
+                ExprKind::While(cond, body, opt_ident) => {
+                    self.loop_depth += 1;
 
-        match expr.node {
-            ExprKind::ForLoop(pat, expr, loop_block, label) => {
-                self.fold_sub_expr(desugar_for_loop(pat, expr, loop_block, label))
-            }
-            ExprKind::IfLet(pat, expr, then_block, else_block) => {
-                self.fold_sub_expr(desugar_if_let(pat, expr, then_block, else_block))
-            }
-            ExprKind::WhileLet(pat, expr, then_block, label) => {
-                self.fold_sub_expr(desugar_while_let(pat, expr, then_block, label))
-            }
-            ExprKind::While(cond, body, opt_ident) => {
-                self.loop_depth += 1;
-                let node = ExprKind::While(self.fold_expr(cond),
-                                    self.fold_block(body),
-                                    opt_ident.map(|label| respan(self.new_span(label.span),
-                                                                self.fold_ident(label.node))));
-                self.loop_depth -= 1;
-                self.construct_expr(node, expr.id, expr.span, expr.attrs)
-            }
-            ExprKind::Loop(body, opt_ident) => {
-                self.loop_depth += 1;
-                let node = ExprKind::Loop(self.fold_block(body),
-                                    opt_ident.map(|label| respan(self.new_span(label.span),
-                                                                self.fold_ident(label.node))));
-                self.loop_depth -= 1;
-                self.construct_expr(node, expr.id, expr.span, expr.attrs)
-            }
-            ExprKind::Mac(mac) => {
-                if let Some(expr) = self.expr_mac(&mac) {
+                    let body = self.fold_block(body);
+                    let opt_ident = opt_ident.map(|label| {
+                        respan(self.new_span(label.span), self.fold_ident(label.node))
+                    });
+
+                    let node = ExprKind::While(self.fold_expr(cond),
+                                        self.fold_block(body),
+                                        opt_ident.map(|label| respan(self.new_span(label.span),
+                                                                    self.fold_ident(label.node))));
+                    let expr = ast::Expr { node: node, .. expr };
+
+                    self.loop_depth -= 1;
+
                     expr
-                } else {
-                    self.construct_expr(ExprKind::Mac(mac), expr.id, expr.span, expr.attrs)
+                }
+                ExprKind::Loop(body, opt_ident) => {
+                    self.loop_depth += 1;
+
+                    let body = self.fold_block(body);
+                    let opt_ident = opt_ident.map(|label| {
+                        respan(self.new_span(label.span), self.fold_ident(label.node))
+                    });
+                    let node = ExprKind::Loop(body, opt_ident);
+                    let expr = ast::Expr { node: node, .. expr };
+
+                    self.loop_depth -= 1;
+
+
+                    expr
+                }
+                ExprKind::Mac(mac) => {
+                    if let Some(expr) = self.expr_mac(&mac) {
+                        expr.unwrap()
+                    } else {
+                        ast::Expr { node: ExprKind::Mac(mac), .. expr }
+                    }
+                }
+                _ => {
+                    fold::noop_fold_expr(expr, self)
                 }
             }
-            _ => {
-                P(expr)
-            }
-        }
+        })
     }
 
     fn fold_stmt(&mut self, stmt: ast::Stmt) -> SmallVector<ast::Stmt> {

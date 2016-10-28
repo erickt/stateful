@@ -40,9 +40,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.expr_ret(block, expr.span, returned_expr)
             }
             _ => {
-                let temp = this.declare_temp(expr_span, "temp_stmt_expr");
-                unpack!(block = this.into(Lvalue::Local(temp), block, expr));
-                //this.schedule_drop(expr_span, temp);
+                let temp = this.temp(expr_span, "temp_stmt_expr");
+                unpack!(block = this.into(temp, block, expr));
                 block.unit()
             }
         }

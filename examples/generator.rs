@@ -9,12 +9,15 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 #[generator]
-fn gen() -> Box<Iterator<Item=usize>> {
-    yield_!(1);
+fn gen(cond: bool) -> Box<Iterator<Item=usize>> {
+    match cond {
+        true => yield_!(1),
+        false => yield_!(2),
+    }
 }
 
 fn main() {
-    for value in gen() {
+    for value in gen(false) {
         println!("{}", value);
     }
 }

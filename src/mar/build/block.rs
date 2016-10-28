@@ -40,14 +40,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             StmtKind::Mac(ref mac) => {
                 let (ref mac, _, _) = **mac;
-                let destination = self.declare_temp_lvalue(stmt.span, "temp_stmt_mac");
+                let temp = self.temp(stmt.span, "temp_stmt_mac");
 
-                match self.expr_mac(destination.clone(), block, mac) {
+                match self.expr_mac(temp.clone(), block, mac) {
                     Some(block) => block,
                     None => {
                         self.cfg.push(block, Statement::Expr(stmt.clone()));
 
-                        self.push_assign_unit(stmt.span, block, destination);
+                        self.push_assign_unit(stmt.span, block, temp);
                         block.unit()
                     }
                 }

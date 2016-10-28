@@ -61,7 +61,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Mac(ref mac) => {
                 match self.expr_mac(destination.clone(), block, mac) {
                     Some(block) => block,
-                    None => self.into(destination, block, expr.clone()),
+                    None => {
+                        let rvalue = unpack!(block = self.as_rvalue(block, expr));
+                        self.push_assign(block, expr_span, destination, rvalue);
+                        block.unit()
+                    }
                 }
             }
             ExprKind::Call(ref fun, ref args) => {
@@ -246,8 +250,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // execute the body, branching back to the test
             let body_block_end = unpack!(
                 this.in_scope(body.span, body_block, |this| {
-                    let lvalue = this.declare_temp_lvalue(body.span, "temp_loop");
-                    this.ast_block(lvalue, body_block, body)
+                    let temp = this.temp(body.span, "temp_loop");
+                    this.ast_block(temp, body_block, body)
                 })
             );
 
