@@ -19,7 +19,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             if let Some(expr) = expr {
                 this.into(destination, block, &expr)
             } else {
-                this.assign_lvalue_unit(ast_block.span, block, destination);
+                this.push_assign_unit(ast_block.span, block, destination);
                 block.unit()
             }
         })
@@ -45,8 +45,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 match self.expr_mac(destination.clone(), block, mac) {
                     Some(block) => block,
                     None => {
-                        self.assign_lvalue_unit(stmt.span, block, destination);
                         self.cfg.push(block, Statement::Expr(stmt.clone()));
+
+                        self.push_assign_unit(stmt.span, block, destination);
                         block.unit()
                     }
                 }

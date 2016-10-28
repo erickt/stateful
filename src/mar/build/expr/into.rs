@@ -10,6 +10,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      destination: Lvalue,
                      mut block: BasicBlock,
                      expr: &P<ast::Expr>) -> BlockAnd<()> {
+        debug!("into_expr(destination={:?}, block={:?}, expr={:?})", destination, block, expr);
+
         let expr_span = expr.span;
 
         match expr.node {
@@ -119,7 +121,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 });
 
                 let rvalue = unpack!(block = self.as_rvalue(block, expr));
-                self.cfg.push_assign(block, expr_span, destination, rvalue);
+                self.push_assign(block, expr_span, destination, rvalue);
                 block.unit()
             }
 
@@ -161,7 +163,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             } else {
                 // Body of the `if` expression without an `else` clause must return `()`, thus
                 // we implicitly generate a `else {}` if it is not specified.
-                this.assign_lvalue_unit(span, else_block, destination);
+                this.push_assign_unit(span, else_block, destination);
                 else_block
             };
         });
@@ -207,9 +209,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         //                         ^                          |
         //                         |                          |
         //                         +--------------------------+
-
-        // `loop { ... }` has a type of `()`.
-        self.assign_lvalue_unit(span, block, destination);
 
         let loop_block = self.start_new_block(body.span, Some("Loop"));
         let exit_block = self.start_new_block(body.span, Some("LoopExit"));
@@ -263,6 +262,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let live_decls = self.find_live_decls();
         self.cfg.block_data_mut(exit_block).decls = live_decls.clone();
+
+        // `loop { ... }` has a type of `()`.
+        self.push_assign_unit(span, block, destination);
 
         exit_block.unit()
     }

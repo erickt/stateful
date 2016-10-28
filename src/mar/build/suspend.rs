@@ -9,16 +9,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         destination: Lvalue,
                         block: BasicBlock,
                         expr: P<ast::Expr>) -> BlockAnd<()> {
-        // We don't yet support receiving values into the coroutine yet, so just store a `()` in
-        // the destination.
-        self.assign_lvalue_unit(expr.span, block, destination);
-
+        let expr_span = expr.span;
         let next_block = self.start_new_block(expr.span, Some("AfterSuspend"));
 
         self.terminate(expr.span, block, TerminatorKind::Suspend {
             rvalue: expr,
             target: next_block,
         });
+
+        // We don't yet support receiving values into the coroutine yet, so just store a `()` in
+        // the destination.
+        self.push_assign_unit(expr_span, next_block, destination);
 
         next_block.unit()
     }

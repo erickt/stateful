@@ -405,12 +405,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes[1].extent
     }
 
-    pub fn assign_lvalue(&mut self,
-                         block: BasicBlock,
-                         span: Span,
-                         lvalue: Lvalue,
-                         rvalue: Rvalue) {
-        debug!("assign_lvalue: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
+    pub fn push_assign(&mut self,
+                       block: BasicBlock,
+                       span: Span,
+                       lvalue: Lvalue,
+                       rvalue: Rvalue) {
+        debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
         let Lvalue::Local(local) = lvalue;
 
@@ -420,6 +420,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         self.cfg.push_assign(block, span, lvalue, rvalue);
+    }
+
+    pub fn push_assign_unit(&mut self,
+                            span: Span,
+                            block: BasicBlock,
+                            lvalue: Lvalue) {
+        let rvalue = self.unit_rvalue();
+        self.push_assign(block, span, lvalue, rvalue)
     }
 
     /// Walk up the scopes to discover if this variable has been initialized.
@@ -506,14 +514,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         self.cx.span_bug(self.local_decls[var].span,
                          &format!("var {:?} not in scope to initialize", var));
-    }
-
-    pub fn assign_lvalue_unit(&mut self,
-                              span: Span,
-                              block: BasicBlock,
-                              lvalue: Lvalue) {
-        let rvalue = self.unit_rvalue();
-        self.assign_lvalue(block, span, lvalue, rvalue)
     }
 
     pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {

@@ -10,9 +10,7 @@ use std::rc::Rc;
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    let x = 1;
-    1;
-    yield_!(x);
+    yield_!(1);
 }
 
 fn main() {

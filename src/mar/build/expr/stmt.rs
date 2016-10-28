@@ -9,6 +9,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt_expr(&mut self,
                      mut block: BasicBlock,
                      expr: &P<ast::Expr>) -> BlockAnd<()> {
+        debug!("stmt_expr(block={:?}, expr={:?})", block, expr);
+
         let this = self;
         let expr_span = expr.span;
 
@@ -30,7 +32,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let rhs = unpack!(block = this.as_rvalue(block, rhs));
                 let lhs = unpack!(block = this.as_lvalue(block, lhs));
 
-                this.cfg.push_assign(block, expr_span, lhs, rhs);
+                this.push_assign(block, expr_span, lhs, rhs);
 
                 block.unit()
             }
@@ -40,7 +42,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             _ => {
                 let temp = this.declare_temp(expr_span, "temp_stmt_expr");
                 unpack!(block = this.into(Lvalue::Local(temp), block, expr));
-                this.schedule_drop(expr_span, temp);
+                //this.schedule_drop(expr_span, temp);
                 block.unit()
             }
         }
@@ -65,7 +67,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 unpack!(self.into(Lvalue::Local(RETURN_POINTER), block, value))
             }
             None => {
-                self.assign_lvalue_unit(span, block, Lvalue::Local(RETURN_POINTER));
+                self.push_assign_unit(span, block, Lvalue::Local(RETURN_POINTER));
                 block
             }
         };

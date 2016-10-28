@@ -76,6 +76,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             shadowed_decl: shadowed_decl,
             span: span,
         });
+
         self.schedule_drop(span, local);
 
         debug!("declare_binding: local={:?}", local);
