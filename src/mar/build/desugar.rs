@@ -11,9 +11,9 @@ use syntax::parse::token::Token;
 use syntax::ptr::P;
 use syntax::util::small_vector::SmallVector;
 
-pub fn simplify_item(cx: &ExtCtxt,
-                     item: P<ast::Item>,
-                     state_machine_kind: StateMachineKind) -> ast::Item {
+pub fn desugar_item(cx: &ExtCtxt,
+                    item: P<ast::Item>,
+                    state_machine_kind: StateMachineKind) -> ast::Item {
     let mut expander = Expander::new(cx, state_machine_kind);
     let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
 

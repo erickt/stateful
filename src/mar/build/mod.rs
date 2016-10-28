@@ -1,4 +1,4 @@
-use mar::build::simplify::simplify_item;
+use mar::build::desugar::desugar_item;
 use mar::build::scope::ConditionalScope;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
@@ -136,7 +136,7 @@ macro_rules! unpack {
 pub fn construct(cx: &ExtCtxt,
                  item: P<ast::Item>,
                  state_machine_kind: StateMachineKind) -> Result<Mar, Error> {
-    let item = simplify_item(cx, item, state_machine_kind);
+    let item = desugar_item(cx, item, state_machine_kind);
 
     let (fn_decl, unsafety, abi, generics, ast_block) = match item.node {
         ItemKind::Fn(fn_decl, unsafety, _, abi, generics, block) => {
@@ -342,6 +342,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
 mod block;
 mod cfg;
+mod desugar;
 mod expr;
 mod into;
 mod mac;
@@ -349,6 +350,5 @@ mod matches;
 mod misc;
 mod moved;
 mod scope;
-mod simplify;
 mod suspend;
 mod transition;
