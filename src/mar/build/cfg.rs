@@ -24,32 +24,6 @@ impl CFG {
         self.block_data_mut(block).statements.push(statement);
     }
 
-    pub fn push_call(&mut self,
-                     block: BasicBlock,
-                     span: Span,
-                     fun: Operand,
-                     args: Vec<Operand>) {
-        self.push(block, Statement::Call {
-            span: span,
-            fun: fun,
-            args: args,
-        });
-    }
-
-    pub fn push_method_call(&mut self,
-                            block: BasicBlock,
-                            span: Span,
-                            ident: ast::SpannedIdent,
-                            tys: Vec<P<ast::Ty>>,
-                            args: Vec<Operand>) {
-        self.push(block, Statement::MethodCall {
-            span: span,
-            ident: ident,
-            tys: tys,
-            args: args,
-        });
-    }
-
     pub fn push_drop(&mut self, block: BasicBlock, lvalue: Local, moved: bool) {
         self.push(block, Statement::Drop {
             lvalue: lvalue,
@@ -57,7 +31,7 @@ impl CFG {
         });
     }
 
-    pub fn push_declare_decl(&mut self, block: BasicBlock, local: Local) {
+    pub fn push_declare(&mut self, block: BasicBlock, local: Local) {
         self.push(block, Statement::Declare(local));
     }
 
@@ -70,6 +44,36 @@ impl CFG {
             span: span,
             lvalue: lvalue,
             rvalue: rvalue,
+        });
+    }
+
+    pub fn push_call(&mut self,
+                     block: BasicBlock,
+                     span: Span,
+                     lvalue: Lvalue,
+                     fun: Operand,
+                     args: Vec<Operand>) {
+        self.push(block, Statement::Call {
+            span: span,
+            lvalue: lvalue,
+            fun: fun,
+            args: args,
+        });
+    }
+
+    pub fn push_method_call(&mut self,
+                            block: BasicBlock,
+                            span: Span,
+                            lvalue: Lvalue,
+                            ident: ast::SpannedIdent,
+                            tys: Vec<P<ast::Ty>>,
+                            args: Vec<Operand>) {
+        self.push(block, Statement::MethodCall {
+            span: span,
+            lvalue: lvalue,
+            ident: ident,
+            tys: tys,
+            args: args,
         });
     }
 

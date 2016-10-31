@@ -78,12 +78,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 success.and(slice.index(idx))
                 */
             }
-            ExprKind::Path(ref _qself, ref path) => {
+            ExprKind::Path(None, ref path) => {
                 if let Some(local) = self.get_local_from_path(&path) {
                     block.and(Lvalue::Local(local))
                 } else {
-                    self.as_temp(block, expr)
+                    block.and(Lvalue::Static(expr.clone()))
                 }
+            }
+            ExprKind::Path(..) => {
+                block.and(Lvalue::Static(expr.clone()))
             }
 
             ExprKind::Try(..) |

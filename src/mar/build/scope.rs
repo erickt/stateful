@@ -405,6 +405,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes[1].extent
     }
 
+    pub fn initialize(&mut self,
+                      block: BasicBlock,
+                      span: Span,
+                      lvalue: Lvalue) {
+        debug!("initialize: block={:?} lvalue={:?}", block, lvalue);
+
+        match lvalue {
+            Lvalue::Local(local) => {
+                if !self.is_initialized(local) {
+                    self.initialize_decl(local);
+                    self.cfg.push_declare(block, local);
+                }
+            }
+            Lvalue::Static(..) => {
+                self.cx.span_bug(span, "cannot initialize statics yet");
+            }
+        }
+    }
+
     pub fn push_assign(&mut self,
                        block: BasicBlock,
                        span: Span,
@@ -412,13 +431,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                        rvalue: Rvalue) {
         debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
-        let Lvalue::Local(local) = lvalue;
-
-        if !self.is_initialized(local) {
-            self.initialize_decl(local);
-            self.cfg.push_declare_decl(block, local);
-        }
-
+        self.initialize(block, span, lvalue.clone());
         self.cfg.push_assign(block, span, lvalue, rvalue);
     }
 
@@ -670,6 +683,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let scope = self.scopes.last_mut().unwrap();
         scope.drops.push(var);
+    }
+
+    pub fn move_lvalue(&mut self, span: Span, lvalue: Lvalue) {
+        match lvalue {
+            Lvalue::Local(local) => self.schedule_move(span, local),
+
+            // statics don't get moved
+            Lvalue::Static(_) => {}
+        }
     }
 
     pub fn schedule_move(&mut self, span: Span, var: Local) {

@@ -74,7 +74,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = self.as_operand(block, arg)))
                     .collect::<Vec<_>>();
 
-                self.cfg.push_call(block, expr_span, fun, args);
+                self.initialize(block, expr_span, destination.clone());
+                self.cfg.push_call(block, expr_span, destination, fun, args);
                 block.unit()
             }
             ExprKind::MethodCall(ref ident, ref tys, ref args) => {
@@ -82,9 +83,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = self.as_operand(block, arg)))
                     .collect::<Vec<_>>();
 
+                self.initialize(block, expr_span, destination.clone());
                 self.cfg.push_method_call(
                     block,
                     expr_span,
+                    destination,
                     *ident,
                     tys.clone(),
                     args);

@@ -266,6 +266,7 @@ pub struct Arm {
 #[derive(Clone, Debug, PartialEq)]
 pub enum Lvalue {
     Local(Local),
+    Static(P<ast::Expr>),
 }
 
 impl Lvalue {
@@ -274,6 +275,9 @@ impl Lvalue {
             Lvalue::Local(ref local) => {
                 let local_decl = &local_decls[*local];
                 AstBuilder::new().span(local_decl.span).expr().id(local_decl.ident)
+            }
+            Lvalue::Static(ref expr) => {
+                expr.clone()
             }
         }
     }
@@ -308,34 +312,41 @@ pub enum Rvalue {
     /// x (either a move or copy, depending on type of x)
     Use(Operand),
 
-    /// Create an aggregate value, like a tuple or struct.  This is
-    /// only needed because we want to distinguish `dest = Foo { x:
-    /// ..., y: ... }` from `dest.x = ...; dest.y = ...;` in the case
-    /// that `Foo` has a destructor. These rvalues can be optimized
-    /// away after type-checking and before lowering.
-    Aggregate(AggregateKind, Vec<Operand>),
+    Tuple(Vec<Operand>),
+    Struct(ast::Path, Vec<ast::Field>, Vec<Operand>, Option<Operand>),
 }
 
 impl Rvalue {
     pub fn to_expr(&self, local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
+        let builder = AstBuilder::new();
+
         match *self {
             Rvalue::Use(ref lvalue) => lvalue.to_expr(local_decls),
-            Rvalue::Aggregate(ref kind, ref items) => {
-                match *kind {
-                    AggregateKind::Tuple => {
-                        AstBuilder::new().expr().tuple()
-                            .with_exprs(items.iter().map(|item| item.to_expr(local_decls)))
-                            .build()
-                    }
+            Rvalue::Tuple(ref items) => {
+                builder.expr().tuple()
+                    .with_exprs(items.iter().map(|item| item.to_expr(local_decls)))
+                    .build()
+            }
+            Rvalue::Struct(ref path, ref fields, ref items, ref wth) => {
+                let fields = fields.iter()
+                    .zip(items)
+                    .map(|(field, item)| {
+                        let item = item.to_expr(local_decls);
+                        ast::Field { expr: item, .. field.clone() }
+                    });
+
+                let struct_builder = builder.expr().struct_path(path.clone())
+                    .with_fields(fields);
+
+                if let Some(ref wth) = *wth {
+                    let wth = wth.to_expr(local_decls);
+                    struct_builder.build_with().build(wth)
+                } else {
+                    struct_builder.build()
                 }
             }
         }
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum AggregateKind {
-    Tuple,
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -373,11 +384,13 @@ pub enum Statement {
     },
     Call {
         span: Span,
+        lvalue: Lvalue,
         fun: Operand,
         args: Vec<Operand>,
     },
     MethodCall {
         span: Span,
+        lvalue: Lvalue,
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
         args: Vec<Operand>,

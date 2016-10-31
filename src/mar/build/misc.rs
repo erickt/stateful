@@ -20,6 +20,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn unit_rvalue(&mut self) -> Rvalue {
-        Rvalue::Aggregate(AggregateKind::Tuple, vec![])
+        Rvalue::Tuple(vec![])
     }
 }

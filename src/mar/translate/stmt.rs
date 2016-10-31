@@ -1,4 +1,3 @@
-use aster::AstBuilder;
 use mar::repr::*;
 use mar::translate::Builder;
 use syntax::ast;
@@ -49,29 +48,41 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            Statement::Call { span, ref fun, ref args } => {
+            Statement::Call { span, ref lvalue, ref fun, ref args } => {
+                let lvalue = lvalue.to_expr(&self.mar.local_decls);
+
                 let fun = fun.to_expr(&self.mar.local_decls);
                 let args = args.iter()
                     .map(|arg| arg.to_expr(&self.mar.local_decls));
 
+                let rvalue = self.ast_builder.span(span).expr()
+                    .call().build(fun)
+                    .with_args(args)
+                    .build();
+
                 vec![
-                    AstBuilder::new().span(span).stmt().semi()
-                        .call().build(fun)
-                        .with_args(args)
-                        .build()
+                    self.ast_builder.span(span).stmt().semi()
+                        .assign().build(lvalue)
+                        .build(rvalue)
                 ]
             }
-            Statement::MethodCall { span, ident, ref tys, ref args } => {
+            Statement::MethodCall { span, ref lvalue, ident, ref tys, ref args } => {
+                let lvalue = lvalue.to_expr(&self.mar.local_decls);
+
                 let mut args = args.iter()
                     .map(|arg| arg.to_expr(&self.mar.local_decls));
 
+                let rvalue = self.ast_builder.expr()
+                    .span(ident.span).method_call(ident.node)
+                    .span(span).build(args.next().unwrap())
+                    .with_tys(tys.clone())
+                    .with_args(args)
+                    .build();
+
                 vec![
-                    AstBuilder::new().stmt().semi()
-                        .span(ident.span).method_call(ident.node)
-                        .span(span).build(args.next().unwrap())
-                        .with_tys(tys.clone())
-                        .with_args(args)
-                        .build()
+                    self.ast_builder.span(span).stmt().semi()
+                        .assign().build(lvalue)
+                        .build(rvalue)
                 ]
             }
             Statement::Drop { lvalue, moved } => {

@@ -2,7 +2,7 @@ use aster::AstBuilder;
 use mar::build::transition::{self, ContainsTransition, Transition};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind, StmtKind};
-use syntax::codemap::{respan, Span};
+use syntax::codemap::respan;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
 use syntax::fold::{self, Folder};

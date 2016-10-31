@@ -10,6 +10,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      expr: &P<ast::Expr>) -> BlockAnd<Rvalue> {
         debug!("expr_as_rvalue(block={:?}, expr={:?})", block, expr);
 
+        let this = self;
+
         match expr.node {
             /*
             ExprKind::Scope { extent, value } => {
@@ -184,39 +186,48 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block.and(Rvalue::Aggregate(adt, fields))
             }
             */
+            ExprKind::Struct(ref path, ref fields, ref wth) => {
+                // see (*) above
+
+                // first process the set of fields that were provided
+                // (evaluating them in order given by user)
+                let operands: Vec<_> =
+                    fields.iter()
+                          .map(|f| unpack!(block = this.as_operand(block, &f.expr)))
+                          .collect();
+
+                let wth = wth.as_ref().map(|wth| unpack!(block = this.as_operand(block, wth)));
+
+                block.and(Rvalue::Struct(path.clone(), fields.clone(), operands, wth))
+            }
+
             ExprKind::Assign(..) |
             ExprKind::AssignOp(..) => {
-                block = unpack!(self.stmt_expr(block, expr));
-                block.and(self.unit_rvalue())
+                block = unpack!(this.stmt_expr(block, expr));
+                block.and(this.unit_rvalue())
             }
-            /*
-            ExprKind::Literal { .. } |
-            ExprKind::Block { .. } |
-            ExprKind::Match { .. } |
-            ExprKind::If { .. } |
-            ExprKind::NeverToAny { .. } |
-            ExprKind::Loop { .. } |
-            ExprKind::LogicalOp { .. } |
-            ExprKind::Call { .. } |
-            ExprKind::Field { .. } |
-            ExprKind::Deref { .. } |
-            ExprKind::Index { .. } |
-            ExprKind::VarRef { .. } |
-            ExprKind::SelfRef |
-            ExprKind::Break { .. } |
-            ExprKind::Continue { .. } |
-            ExprKind::Return { .. } |
-            ExprKind::StaticRef { .. } => {
+            ExprKind::Lit(..) |
+            ExprKind::Block(..) |
+            ExprKind::Match(..) |
+            ExprKind::If(..) |
+            ExprKind::Loop(..) |
+            ExprKind::Call(..) |
+            ExprKind::Field(..) |
+            ExprKind::AddrOf(..) |
+            ExprKind::Index(..) |
+            ExprKind::Break(..) |
+            ExprKind::Continue(..) |
+            ExprKind::Ret(..) |
+            ExprKind::Path(..) => {
                 // these do not have corresponding `Rvalue` variants,
                 // so make an operand and then return that
-                debug_assert!(match Category::of(&expr.kind) {
+                debug_assert!(match Category::of(&expr.node) {
                     Some(Category::Rvalue(RvalueFunc::AsRvalue)) => false,
                     _ => true,
                 });
                 let operand = unpack!(block = this.as_operand(block, expr));
                 block.and(Rvalue::Use(operand))
             }
-            */
             _ => {
                 // these do not have corresponding `Rvalue` variants,
                 // so make an operand and then return that
@@ -224,7 +235,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Some(Category::Rvalue(RvalueFunc::AsRvalue)) => false,
                     _ => true,
                 });
-                let operand = unpack!(block = self.as_operand(block, expr));
+                let operand = unpack!(block = this.as_operand(block, expr));
                 block.and(Rvalue::Use(operand))
             }
         }
