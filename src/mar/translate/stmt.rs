@@ -8,7 +8,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
             Statement::Declare(local) => {
                 let local_decl = self.mar.local_decl_data(local);
-                let ast_builder = self.ast_builder.span(local_decl.span);
+                let ast_builder = self.ast_builder.span(local_decl.source_info.span);
 
                 let mut stmts = vec![];
 
@@ -87,7 +87,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             Statement::Drop { lvalue, moved } => {
                 let decl = self.mar.local_decl_data(lvalue);
-                let ast_builder = self.ast_builder.span(decl.span);
+                let ast_builder = self.ast_builder.span(decl.source_info.span);
 
                 // We need an explicit drop here to make sure we drop variables as they go out of
                 // a block scope. Otherwise, they won't be dropped until the next yield point,

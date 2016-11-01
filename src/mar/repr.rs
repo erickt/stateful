@@ -46,6 +46,10 @@ pub struct Mar {
     /// that indexes into this vector.
     pub basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
 
+    /// List of visibility (lexical) scopes; these are referenced by statements
+    /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
+    pub visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
+
     /*
     /// List of visibility (lexical) scopes; these are referenced by statements
     /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
@@ -103,6 +107,18 @@ impl IndexMut<BasicBlock> for Mar {
     }
 }
 
+/// Grouped information about the source code origin of a MIR entity.
+/// Intended to be inspected by diagnostics and debuginfo.
+/// Most passes can work with it as a whole, within a single function.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub struct SourceInfo {
+    /// Source span for the AST pertaining to this MIR entity.
+    pub span: Span,
+
+    /// The lexical visibility scope, i.e. which bindings can be seen.
+    pub scope: VisibilityScope
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
@@ -116,7 +132,14 @@ pub struct LocalDecl {
     pub ident: ast::Ident,
     pub ty: Option<P<ast::Ty>>,
     pub shadowed_decl: Option<Local>,
-    pub span: Span,
+
+    /// For user-declared variables, stores their source information.
+    ///
+    /// For temporaries, this is `None`.
+    ///
+    /// This is the primary way to differentiate between user-declared
+    /// variables and compiler-generated temporaries.
+    pub source_info: SourceInfo,
 }
 
 #[derive(Debug)]
@@ -359,7 +382,7 @@ impl ToExpr for Lvalue {
         match *self {
             Lvalue::Local(ref local) => {
                 let local_decl = &local_decls[*local];
-                AstBuilder::new().span(local_decl.span).expr().id(local_decl.ident)
+                AstBuilder::new().span(local_decl.source_info.span).expr().id(local_decl.ident)
             }
             Lvalue::Static(ref expr) => {
                 expr.clone()
@@ -381,6 +404,18 @@ impl<B> ToExpr for Projection<B> where B: ToExpr {
             }
         }
     }
+}
+
+///////////////////////////////////////////////////////////////////////////
+// Scopes
+
+newtype_index!(VisibilityScope, "scope");
+pub const ARGUMENT_VISIBILITY_SCOPE : VisibilityScope = VisibilityScope(0);
+
+#[derive(Clone, Debug)]
+pub struct VisibilityScopeData {
+    pub span: Span,
+    pub parent_scope: Option<VisibilityScope>,
 }
 
 ///////////////////////////////////////////////////////////////////////////

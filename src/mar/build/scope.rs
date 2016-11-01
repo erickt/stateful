@@ -16,10 +16,9 @@ tracks where a `break` and `continue` should go to.
 use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
-use std::ascii::AsciiExt;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use syntax::ast::{self, PatKind};
+use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 use syntax::visit;
@@ -320,6 +319,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     }
 
+    /// Creates a new visibility scope, nested in the current one.
+    pub fn new_visibility_scope(&mut self, span: Span) -> VisibilityScope {
+        let parent = self.visibility_scope;
+        let scope = VisibilityScope::new(self.visibility_scopes.len());
+        self.visibility_scopes.push(VisibilityScopeData {
+            span: span,
+            parent_scope: Some(parent),
+        });
+        scope
+    }
+
     /// Returns if we are currently in a loop.
     pub fn is_in_loop(&self) -> bool {
         !self.loop_scopes.is_empty()
@@ -468,7 +478,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.cx.span_bug(self.local_decls[var].span,
+        self.cx.span_bug(self.local_decls[var].source_info.span,
                          &format!("var {:?} not in any scope?", var));
     }
 
@@ -528,7 +538,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
         */
 
-        self.cx.span_bug(self.local_decls[var].span,
+        self.cx.span_bug(self.local_decls[var].source_info.span,
                          &format!("var {:?} not in scope to initialize", var));
     }
 
@@ -719,67 +729,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
-            for var in self.get_decls_from_pat(pat, None) {
+            for var in self.declare_bindings(pat, None) {
                 let ident = self.local_decls[var].ident;
 
                 self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(var));
                 self.scopes.last_mut().unwrap().forward_decls.remove(&ident);
             }
         }
-    }
-
-    pub fn get_decls_from_pat(&mut self,
-                              pat: &ast::Pat,
-                              ty: Option<P<ast::Ty>>) -> Vec<Local> {
-        struct Visitor<'a, 'b: 'a, 'c: 'b> {
-            builder: &'a mut Builder<'b, 'c>,
-            new_vars: Vec<Local>,
-            ty: Option<P<ast::Ty>>,
-        }
-
-        impl<'a, 'b: 'a, 'c: 'b> visit::Visitor for Visitor<'a, 'b, 'c> {
-            fn visit_pat(&mut self, pat: &ast::Pat) {
-                match pat.node {
-                    PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
-                        // Consider only lower case identities as a variable.
-                        let id_str = id.node.name.as_str();
-                        let first_char = id_str.chars().next().unwrap();
-
-                        if first_char == first_char.to_ascii_lowercase() {
-                            let var = self.builder.declare_binding(
-                                pat.span,
-                                mutability,
-                                id.node,
-                                self.ty.clone(),
-                            );
-                            self.new_vars.push(var);
-                        }
-                    }
-                    PatKind::Ident(..) => {
-                        self.builder.cx.span_bug(
-                            pat.span,
-                            &format!("Canot handle pat {:?}", pat))
-                    }
-                    _ => { }
-                }
-
-                visit::walk_pat(self, pat);
-            }
-
-            fn visit_mac(&mut self, _mac: &ast::Mac) { }
-        }
-
-        let mut visitor = Visitor {
-            builder: self,
-            new_vars: vec![],
-            ty: ty,
-        };
-
-        visit::Visitor::visit_pat(&mut visitor, pat);
-
-        debug!("get_decls_from_pat: {:?} => {:?}", pat, visitor.new_vars);
-
-        visitor.new_vars
     }
 
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {

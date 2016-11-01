@@ -9,9 +9,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn temp<T>(&mut self, span: Span, name: T) -> Lvalue
         where T: ToIdent,
     {
+        let source_info = SourceInfo {
+            span: span,
+            scope: self.visibility_scope,
+        };
+
         // Add a unique number to the name.
         let name = format!("{}{}", name.to_ident(), self.local_decls.len());
-        let local = self.declare_binding(span, ast::Mutability::Mutable, name, None);
+        let local = self.declare_binding(
+            source_info,
+            ast::Mutability::Mutable,
+            name,
+            None);
         let lvalue = Lvalue::Local(local);
 
         debug!("temp: created temp {:?}", lvalue);

@@ -33,6 +33,11 @@ pub struct Builder<'a, 'b: 'a> {
     loop_scopes: Vec<scope::LoopScope>,
     conditional_scopes: HashMap<ScopeId, ConditionalScope>,
 
+    /// the vector of all scopes that we have created thus far;
+    /// we track this for debuginfo later
+    visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
+    visibility_scope: VisibilityScope,
+
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
     local_decls: IndexVec<Local, LocalDecl>,
@@ -157,9 +162,14 @@ pub fn construct(cx: &ExtCtxt,
         // Create an initial scope for the function.
         builder.push_scope(extent, block);
 
+        let source_info = SourceInfo {
+            span: item.span,
+            scope: builder.visibility_scope,
+        };
+
         // Declare the return pointer.
         builder.declare_binding(
-            item.span,
+            source_info,
             ast::Mutability::Immutable,
             "return_",
             None,
@@ -214,6 +224,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             state_machine_kind: state_machine_kind,
             scopes: vec![],
             scope_auxiliary: IndexVec::new(),
+            visibility_scopes: IndexVec::new(),
+            visibility_scope: ARGUMENT_VISIBILITY_SCOPE,
             loop_scopes: vec![],
             conditional_scopes: HashMap::new(),
             local_decls: IndexVec::new(),
@@ -222,6 +234,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         };
 
         assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
+        assert_eq!(builder.new_visibility_scope(span), ARGUMENT_VISIBILITY_SCOPE);
+        builder.visibility_scopes[ARGUMENT_VISIBILITY_SCOPE].parent_scope = None;
 
         builder
     }
@@ -277,6 +291,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             abi: abi,
             generics: generics.clone(),
             basic_blocks: self.cfg.basic_blocks,
+            visibility_scopes: self.visibility_scopes,
             local_decls: self.local_decls,
             extents: self.extents,
         }
