@@ -15,7 +15,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Path(..) => {
                 // Path operands don't need a temporary.
                 let operand = unpack!(block = this.as_lvalue(block, expr));
-                this.move_lvalue(expr.span, operand.clone());
+                this.move_lvalue(expr.span, &operand);
+                block.and(Operand::Consume(operand))
+            }
+            ExprKind::AddrOf(..) => {
+                // `&x` operands don't need a temporary.
+                let operand = unpack!(block = this.as_lvalue(block, expr));
+                this.move_lvalue(expr.span, &operand);
                 block.and(Operand::Consume(operand))
             }
             _ => {
@@ -29,7 +35,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Category::Lvalue |
                     Category::Rvalue(..) => {
                         let operand = unpack!(block = this.as_temp(block, expr));
-                        this.move_lvalue(expr.span, operand.clone());
+                        this.move_lvalue(expr.span, &operand);
                         block.and(Operand::Consume(operand))
                     }
                 }

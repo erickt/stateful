@@ -418,6 +418,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     self.cfg.push_declare(block, local);
                 }
             }
+            Lvalue::Projection(..) => {
+                self.cx.span_warn(span, "what does it mean to initialize a projection?");
+            }
             Lvalue::Static(..) => {
                 self.cx.span_bug(span, "cannot initialize statics yet");
             }
@@ -685,9 +688,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         scope.drops.push(var);
     }
 
-    pub fn move_lvalue(&mut self, span: Span, lvalue: Lvalue) {
-        match lvalue {
-            Lvalue::Local(local) => self.schedule_move(span, local),
+    pub fn move_lvalue(&mut self, span: Span, lvalue: &Lvalue) {
+        match *lvalue {
+            Lvalue::Local(ref local) => self.schedule_move(span, *local),
+
+            Lvalue::Projection(ref projection) => {
+                self.move_lvalue(span, &projection.base);
+            }
 
             // statics don't get moved
             Lvalue::Static(_) => {}

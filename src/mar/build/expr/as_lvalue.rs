@@ -15,8 +15,12 @@ use syntax::ast::{self, ExprKind};
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn as_lvalue(&mut self, block: BasicBlock, expr: &P<ast::Expr>) -> BlockAnd<Lvalue> {
+    pub fn as_lvalue(&mut self,
+                     mut block: BasicBlock,
+                     expr: &P<ast::Expr>) -> BlockAnd<Lvalue> {
         debug!("expr_as_lvalue(block={:?}, expr={:?})", block, expr);
+
+        let this = self;
 
         match expr.node {
             /*
@@ -41,14 +45,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block.and(lvalue)
                 */
             }
-            ExprKind::AddrOf(ref _mutability, ref _arg) => {
-                panic!("not supported yet: {:?}", expr)
-
-                /*
+            ExprKind::Unary(ast::UnOp::Deref, ref arg) => {
                 let lvalue = unpack!(block = this.as_lvalue(block, arg));
                 let lvalue = lvalue.deref();
                 block.and(lvalue)
-                */
             }
             ExprKind::Index(ref _lhs, ref _index) => {
                 panic!("not supported yet: {:?}", expr)
@@ -79,7 +79,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 */
             }
             ExprKind::Path(None, ref path) => {
-                if let Some(local) = self.get_local_from_path(&path) {
+                if let Some(local) = this.get_local_from_path(&path) {
                     block.and(Lvalue::Local(local))
                 } else {
                     block.and(Lvalue::Static(expr.clone()))
@@ -102,6 +102,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Box(..) |
             ExprKind::Cast(..) |
             ExprKind::Repeat(..) |
+            ExprKind::AddrOf(..) |
             ExprKind::If(..) |
             ExprKind::IfLet(..) |
             ExprKind::Match(..) |
@@ -124,7 +125,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Some(Category::Lvalue) => false,
                     _ => true,
                 });
-                self.as_temp(block, expr)
+                this.as_temp(block, expr)
             }
 
             ExprKind::InPlace(..) |

@@ -5,33 +5,18 @@
 #![allow(non_shorthand_field_patterns)]
 #![allow(unused_imports)]
 
-use std::cell::RefCell;
-use std::rc::Rc;
-
-struct OnDrop {
-    counter: Rc<RefCell<usize>>,
-}
-
-impl Drop for OnDrop {
-    fn drop(&mut self) {
-        let mut counter = self.counter.borrow_mut();
-        *counter += 1;
-    }
-}
+use std::slice;
+use std::iter::Iterator;
 
 #[generator]
-fn gen() -> Box<Iterator<Item=usize>> {
-    let counter1 = Rc::new(RefCell::new(0));
-    let counter2 = counter1.clone();
-
-    let x = OnDrop { counter: moved!(counter1) };
-    yield_!(1);
-    let x = OnDrop { counter: moved!(counter2) };
-    yield_!(1);
+fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
+    let mut iter = moved!(items).into_iter();
+    let item = Iterator::next(&mut iter);
 }
 
 fn main() {
-    for value in gen() {
+    let items = &[1, 2, 3];
+    for value in gen(items) {
         println!("{}", value);
     }
 }

@@ -1,5 +1,5 @@
 use aster::AstBuilder;
-use mar::build::transition::{self, ContainsTransition, Transition};
+use mar::build::transition::{self, Transition};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::codemap::respan;
@@ -48,7 +48,6 @@ impl Folder for Assigner {
 struct Expander<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     state_machine_kind: StateMachineKind,
-    loop_depth: usize,
 }
 
 impl<'a, 'b> Expander<'a, 'b> {
@@ -56,12 +55,7 @@ impl<'a, 'b> Expander<'a, 'b> {
         Expander {
             cx: cx,
             state_machine_kind: state_machine_kind,
-            loop_depth: 0,
         }
-    }
-
-    fn is_in_loop(&self) -> bool {
-        self.loop_depth != 0
     }
 
     fn fold_sub_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
@@ -94,15 +88,20 @@ impl<'a, 'b> Expander<'a, 'b> {
 
 impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
     fn fold_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
-        if !expr.contains_transition(self.is_in_loop()) {
-            return expr;
-        }
-
         expr.map(|expr| {
             match expr.node {
                 ExprKind::ForLoop(pat, expr, loop_block, label) => {
-                    let expr = desugar_for_loop(pat, expr, loop_block, label).unwrap();
-                    fold::noop_fold_expr(expr, self)
+                    desugar_for_loop(
+                        self.fold_pat(pat),
+                        self.fold_expr(expr),
+                        self.fold_block(loop_block),
+                        label.map(|label| {
+                            respan(
+                                self.new_span(label.span),
+                                self.fold_ident(label.node)
+                            )
+                        })
+                    ).unwrap()
                 }
                 ExprKind::IfLet(pat, expr, then_block, else_block) => {
                     let expr = desugar_if_let(pat, expr, then_block, else_block).unwrap();
@@ -113,8 +112,6 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
                     fold::noop_fold_expr(expr, self)
                 }
                 ExprKind::While(cond, body, opt_ident) => {
-                    self.loop_depth += 1;
-
                     let body = self.fold_block(body);
                     let opt_ident = opt_ident.map(|label| {
                         respan(self.new_span(label.span), self.fold_ident(label.node))
@@ -124,26 +121,15 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
                                         self.fold_block(body),
                                         opt_ident.map(|label| respan(self.new_span(label.span),
                                                                     self.fold_ident(label.node))));
-                    let expr = ast::Expr { node: node, .. expr };
-
-                    self.loop_depth -= 1;
-
-                    expr
+                    ast::Expr { node: node, .. expr }
                 }
                 ExprKind::Loop(body, opt_ident) => {
-                    self.loop_depth += 1;
-
                     let body = self.fold_block(body);
                     let opt_ident = opt_ident.map(|label| {
                         respan(self.new_span(label.span), self.fold_ident(label.node))
                     });
                     let node = ExprKind::Loop(body, opt_ident);
-                    let expr = ast::Expr { node: node, .. expr };
-
-                    self.loop_depth -= 1;
-
-
-                    expr
+                    ast::Expr { node: node, .. expr }
                 }
                 ExprKind::Mac(mac) => {
                     if let Some(expr) = self.expr_mac(&mac) {
@@ -388,10 +374,13 @@ fn parse_mac_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
     let rdr = new_tt_reader(
         &cx.parse_sess().span_diagnostic,
         None,
-        None,
         mac.node.tts.clone());
 
-    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let mut parser = Parser::new(
+        cx.parse_sess(),
+        cx.cfg().clone(),
+        Box::new(rdr.clone()));
+
     let expr = panictry!(parser.parse_expr());
     panictry!(parser.expect(&Token::Eof));
 

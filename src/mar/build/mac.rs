@@ -34,10 +34,13 @@ pub fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
     let rdr = new_tt_reader(
         &cx.parse_sess().span_diagnostic,
         None,
-        None,
         mac.node.tts.clone());
 
-    let mut parser = Parser::new(cx.parse_sess(), cx.cfg(), Box::new(rdr.clone()));
+    let mut parser = Parser::new(
+        cx.parse_sess(),
+        cx.cfg().clone(),
+        Box::new(rdr.clone()));
+
     let expr = panictry!(parser.parse_expr());
     panictry!(parser.expect(&Token::Eof));
 

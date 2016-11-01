@@ -8,7 +8,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use syntax::ast::ExprKind;
+use syntax::ast::{self, ExprKind};
 
 #[derive(Debug, PartialEq)]
 pub enum Category {
@@ -47,7 +47,7 @@ impl Category {
 
             ExprKind::Field(..) |
             ExprKind::TupField(..) |
-            ExprKind::AddrOf(..) |
+            ExprKind::Unary(ast::UnOp::Deref, _) |
             ExprKind::Index(..) |
             ExprKind::Path(..) =>
                 Some(Category::Lvalue),
@@ -60,7 +60,8 @@ impl Category {
             ExprKind::MethodCall(..) |
             ExprKind::ForLoop(..) |
             ExprKind::While(..) |
-            ExprKind::WhileLet(..) =>
+            ExprKind::WhileLet(..) |
+            ExprKind::Mac(..) =>
                 Some(Category::Rvalue(RvalueFunc::Into)),
 
             ExprKind::Vec(..) |
@@ -73,10 +74,10 @@ impl Category {
             ExprKind::Box(..) |
             ExprKind::Cast(..) |
             ExprKind::Repeat(..) |
+            ExprKind::AddrOf(..) |
             ExprKind::Assign(..) |
             ExprKind::AssignOp(..) |
-            ExprKind::InlineAsm(..) |
-            ExprKind::Mac(..) =>
+            ExprKind::InlineAsm(..) =>
                 Some(Category::Rvalue(RvalueFunc::AsRvalue)),
 
             ExprKind::Lit(..) =>

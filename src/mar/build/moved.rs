@@ -41,12 +41,11 @@ impl<'a, 'b> ExpandMac<'a, 'b> {
         let rdr = new_tt_reader(
             &self.cx.parse_sess().span_diagnostic,
             None,
-            None,
             mac.node.tts.clone());
 
         let mut parser = Parser::new(
             self.cx.parse_sess(),
-            self.cx.cfg(),
+            self.cx.cfg().clone(),
             Box::new(rdr));
 
         let ident = panictry!(parser.parse_ident());

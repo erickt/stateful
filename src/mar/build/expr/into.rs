@@ -56,7 +56,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::ForLoop(..) |
             ExprKind::IfLet(..)   |
             ExprKind::WhileLet(..) => {
-                panic!("{:?} Should never reach this point - `preapare` should have desugared this.", expr);
+                panic!("{:?} Should never reach this point - `desugar` should have desugared this.", expr);
             }
             ExprKind::Mac(ref mac) => {
                 match self.expr_mac(destination.clone(), block, mac) {
@@ -271,7 +271,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.cfg.block_data_mut(exit_block).decls = live_decls.clone();
 
         // `loop { ... }` has a type of `()`.
-        self.push_assign_unit(span, block, destination);
+        self.push_assign_unit(span, exit_block, destination);
 
         exit_block.unit()
     }

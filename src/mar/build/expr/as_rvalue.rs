@@ -36,16 +36,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let value_operand = unpack!(block = this.as_operand(block, value));
                 block.and(Rvalue::Repeat(value_operand, count))
             }
-            ExprKind::Borrow { region, borrow_kind, arg } => {
+            */
+            ExprKind::AddrOf(mutability, ref arg) => {
                 let arg_lvalue = unpack!(block = this.as_lvalue(block, arg));
-                block.and(Rvalue::Ref(region, borrow_kind, arg_lvalue))
+                block.and(Rvalue::Ref(mutability, arg_lvalue))
             }
+            /*
             ExprKind::Binary { op, lhs, rhs } => {
                 let lhs = unpack!(block = this.as_operand(block, lhs));
                 let rhs = unpack!(block = this.as_operand(block, rhs));
                 this.build_binary_op(block, op, expr_span, expr.ty,
                                      lhs, rhs)
             }
+            */
+            /*
             ExprKind::Unary { op, arg } => {
                 let arg = unpack!(block = this.as_operand(block, arg));
                 // Check for -MIN on signed integers
@@ -134,15 +138,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 block.and(Rvalue::Aggregate(AggregateKind::Array, fields))
             }
-            ExprKind::Tuple { fields } => { // see (*) above
+            */
+            ExprKind::Tup(ref fields) => { // see (*) above
                 // first process the set of fields
                 let fields: Vec<_> =
                     fields.into_iter()
                           .map(|f| unpack!(block = this.as_operand(block, f)))
                           .collect();
 
-                block.and(Rvalue::Aggregate(AggregateKind::Tuple, fields))
+                block.and(Rvalue::Tuple(fields))
             }
+            /*
             ExprKind::Closure { closure_id, substs, upvars } => { // see (*) above
                 let upvars =
                     upvars.into_iter()
@@ -150,55 +156,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                           .collect();
                 block.and(Rvalue::Aggregate(AggregateKind::Closure(closure_id, substs), upvars))
             }
-            ExprKind::Adt {
-                adt_def, variant_index, substs, fields, base
-            } => { // see (*) above
-                let is_union = adt_def.is_union();
-                let active_field_index = if is_union { Some(fields[0].name.index()) } else { None };
-
-                // first process the set of fields that were provided
-                // (evaluating them in order given by user)
-                let fields_map: FnvHashMap<_, _> =
-                    fields.into_iter()
-                          .map(|f| (f.name, unpack!(block = this.as_operand(block, f.expr))))
-                          .collect();
-
-                let field_names = this.hir.all_fields(adt_def, variant_index);
-
-                let fields = if let Some(FruInfo { base, field_types }) = base {
-                    let base = unpack!(block = this.as_lvalue(block, base));
-
-                    // MIR does not natively support FRU, so for each
-                    // base-supplied field, generate an operand that
-                    // reads it from the base.
-                    field_names.into_iter()
-                        .zip(field_types.into_iter())
-                        .map(|(n, ty)| match fields_map.get(&n) {
-                            Some(v) => v.clone(),
-                            None => Operand::Consume(base.clone().field(n, ty))
-                        })
-                        .collect()
-                } else {
-                    field_names.iter().filter_map(|n| fields_map.get(n).cloned()).collect()
-                };
-
-                let adt = AggregateKind::Adt(adt_def, variant_index, substs, active_field_index);
-                block.and(Rvalue::Aggregate(adt, fields))
-            }
             */
-            ExprKind::Struct(ref path, ref fields, ref wth) => {
-                // see (*) above
-
-                // first process the set of fields that were provided
-                // (evaluating them in order given by user)
-                let operands: Vec<_> =
-                    fields.iter()
-                          .map(|f| unpack!(block = this.as_operand(block, &f.expr)))
-                          .collect();
+            ExprKind::Struct(ref path, ref fields, ref wth) => { // see (*) above
+                let operands: Vec<_> = fields.iter()
+                    .map(|f| unpack!(block = this.as_operand(block, &f.expr)))
+                    .collect();
 
                 let wth = wth.as_ref().map(|wth| unpack!(block = this.as_operand(block, wth)));
 
                 block.and(Rvalue::Struct(path.clone(), fields.clone(), operands, wth))
+            }
+            ExprKind::Range(ref from, ref to, ref limits) => {
+                let from = from.as_ref().map(|from| {
+                    unpack!(block = this.as_operand(block, from))
+                });
+
+                let to = to.as_ref().map(|to| {
+                    unpack!(block = this.as_operand(block, to))
+                });
+
+                block.and(Rvalue::Range(from, to, *limits))
             }
 
             ExprKind::Assign(..) |
@@ -213,7 +190,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Loop(..) |
             ExprKind::Call(..) |
             ExprKind::Field(..) |
-            ExprKind::AddrOf(..) |
+            ExprKind::Unary(..) |
             ExprKind::Index(..) |
             ExprKind::Break(..) |
             ExprKind::Continue(..) |
