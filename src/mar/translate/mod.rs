@@ -1,7 +1,7 @@
 use aster::AstBuilder;
 use mar::indexed_vec::Idx;
 use mar::repr::*;
-use syntax::ast::{self, FunctionRetTy};
+use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
@@ -9,15 +9,12 @@ use syntax::ptr::P;
 pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
     let ast_builder = AstBuilder::new().span(mar.span);
 
-    let return_ty = match mar.fn_decl.output {
-        FunctionRetTy::Default(span) => ast_builder.span(span).ty().unit(),
-        FunctionRetTy::Ty(ref ty) => ty.clone(),
-    };
+    let return_ty = mar.fn_decl.return_ty();
 
-    let item_builder = ast_builder.item().fn_(mar.ident)
-        .with_args(mar.fn_decl.inputs.iter().cloned())
+    let item_builder = ast_builder.item().fn_(mar.fn_decl.ident())
+        .with_args(mar.fn_decl.inputs().iter().cloned())
         .build_return(return_ty.clone())
-        .generics().with(mar.generics.clone())
+        .generics().with(mar.fn_decl.generics().clone())
         .build();
 
     let builder = Builder {

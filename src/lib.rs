@@ -21,7 +21,7 @@ use syntax::ext::base::{
 };
 use syntax::print::pprust;
 use mar::indexed_vec::Idx;
-use mar::repr::Mar;
+use mar::repr::{Mar, FunctionDecl};
 
 fn expand_state_machine(cx: &mut ExtCtxt,
                         _sp: Span,
@@ -40,13 +40,39 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
-    let mar = match mar::build::construct(cx, item.clone(), state_machine_kind) {
-        Ok(mar) => mar,
-        Err(mar::build::Error) => {
-            // We had an error, so just return the input item for a lack of a better option.
+    let fn_decl_ast_block = match item.node {
+        ast::ItemKind::Fn(ref fn_decl, ref unsafety, _, ref abi, ref generics, ref block) => {
+            let fn_decl = FunctionDecl::new(
+                item.ident,
+                fn_decl.clone(),
+                *unsafety,
+                *abi,
+                generics.clone(),
+            );
+            Some((fn_decl, block.clone()))
+        }
+
+        _ => None,
+    };
+
+    let (fn_decl, ast_block) = match fn_decl_ast_block {
+        Some(data) => data,
+        None => {
+            cx.span_err(
+                item.span,
+                &format!("`{}` may only be applied to functions", state_machine_kind));
+
             return Annotatable::Item(item);
         }
     };
+
+
+    let mar = mar::build::construct(
+        cx,
+        state_machine_kind,
+        item.span,
+        fn_decl,
+        ast_block);
 
     validate(cx, &mar);
 

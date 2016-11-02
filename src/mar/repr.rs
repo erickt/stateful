@@ -31,10 +31,74 @@ macro_rules! newtype_index {
     )
 }
 
+#[derive(Debug)]
+pub struct FunctionDecl {
+    ident: ast::Ident,
+    fn_decl: P<ast::FnDecl>,
+    unsafety: ast::Unsafety,
+    abi: abi::Abi,
+    generics: ast::Generics,
+}
+
+impl FunctionDecl {
+    pub fn new(ident: ast::Ident,
+               fn_decl: P<ast::FnDecl>,
+               unsafety: ast::Unsafety,
+               abi: abi::Abi,
+               generics: ast::Generics) -> Self {
+        FunctionDecl {
+            ident: ident,
+            fn_decl: fn_decl,
+            unsafety: unsafety,
+            abi: abi,
+            generics: generics,
+        }
+    }
+
+    pub fn ident(&self) -> ast::Ident {
+        self.ident
+    }
+
+    pub fn inputs(&self) -> &[ast::Arg] {
+        &self.fn_decl.inputs
+    }
+
+    pub fn unsafety(&self) -> ast::Unsafety {
+        self.unsafety
+    }
+
+    pub fn abi(&self) -> abi::Abi {
+        self.abi
+    }
+
+    pub fn generics(&self) -> &ast::Generics {
+        &self.generics
+    }
+
+    pub fn return_ty(&self) -> P<ast::Ty> {
+        match self.fn_decl.output {
+            ast::FunctionRetTy::Ty(ref ty) => ty.clone(),
+            ast::FunctionRetTy::Default(span) => {
+                let builder = AstBuilder::new();
+                builder.span(span).ty().unit()
+            }
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug)]
 pub enum StateMachineKind {
     Generator,
     Async,
+}
+
+impl fmt::Display for StateMachineKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            StateMachineKind::Generator => write!(f, "generator"),
+            StateMachineKind::Async => write!(f, "async"),
+        }
+    }
 }
 
 /// Lowered representation of a single function.
@@ -44,30 +108,54 @@ pub struct Mar {
 
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
     /// that indexes into this vector.
-    pub basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
+    basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
 
     /// List of visibility (lexical) scopes; these are referenced by statements
     /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
     pub visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
 
-    pub span: Span,
-    pub ident: ast::Ident,
-    pub fn_decl: P<ast::FnDecl>,
-    pub unsafety: ast::Unsafety,
-    pub abi: abi::Abi,
-    pub generics: ast::Generics,
-
+    /// Declarations of locals.
+    ///
+    /// The first local is the return value pointer, followed by `arg_count`
+    /// locals for the function arguments, followed by any user-declared
+    /// variables and temporaries.
     pub local_decls: IndexVec<Local, LocalDecl>,
 
-    /// List of extents. References to extents use a newtyped index type `CodeExtent` that indexes
-    /// into this vector.
-    pub extents: IndexVec<CodeExtent, CodeExtentData>,
+    /// A span representing this MIR, for error reporting
+    pub span: Span,
+
+    pub fn_decl: FunctionDecl,
 }
 
 /// Where execution begins
 pub const START_BLOCK: BasicBlock = BasicBlock(0);
 
 impl Mar {
+    pub fn new(
+        state_machine_kind: StateMachineKind,
+        basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
+        visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
+        local_decls: IndexVec<Local, LocalDecl>,
+        span: Span,
+        fn_decl: FunctionDecl) -> Self
+    {
+        // We need `arg_count` locals, and one for the return pointer
+        let arg_count = fn_decl.inputs().len();
+        assert!(local_decls.len() >= arg_count + 1,
+            "expected at least {} locals, got {}", arg_count + 1, local_decls.len());
+        // FIXME: The return pointer's type isn't calculated correctly yet.
+        // assert_eq!(local_decls[RETURN_POINTER].ty, Some(return_ty));
+
+        Mar {
+            state_machine_kind: state_machine_kind,
+            basic_blocks: basic_blocks,
+            visibility_scopes: visibility_scopes,
+            local_decls: local_decls,
+            span: span,
+            fn_decl: fn_decl,
+        }
+    }
+
     #[inline]
     pub fn basic_blocks(&self) -> &IndexVec<BasicBlock, BasicBlockData> {
         &self.basic_blocks
@@ -76,10 +164,6 @@ impl Mar {
     #[inline]
     pub fn basic_blocks_mut(&mut self) -> &mut IndexVec<BasicBlock, BasicBlockData> {
         &mut self.basic_blocks
-    }
-
-    pub fn code_extent_data(&self, extent: CodeExtent) -> &CodeExtentData {
-        &self.extents[extent]
     }
 
     pub fn local_decl_data(&self, local: Local) -> &LocalDecl {

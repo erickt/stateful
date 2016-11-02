@@ -1,11 +1,9 @@
-use mar::build::desugar::desugar_item;
 use mar::build::scope::ConditionalScope;
 use mar::indexed_vec::{Idx, IndexVec};
 use mar::repr::*;
 use std::collections::{HashMap, HashSet};
 use std::u32;
-use syntax::abi;
-use syntax::ast::{self, ItemKind};
+use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
@@ -139,22 +137,13 @@ macro_rules! unpack {
 // construct() -- the main entry point for building SMIR for a function
 
 pub fn construct(cx: &ExtCtxt,
-                 item: P<ast::Item>,
-                 state_machine_kind: StateMachineKind) -> Result<Mar, Error> {
-    let item = desugar_item(cx, item, state_machine_kind);
+                 state_machine_kind: StateMachineKind,
+                 span: Span,
+                 fn_decl: FunctionDecl,
+                 ast_block: P<ast::Block>) -> Mar {
+    let ast_block = desugar::desugar_block(cx, state_machine_kind, ast_block);
 
-    let (fn_decl, unsafety, abi, generics, ast_block) = match item.node {
-        ItemKind::Fn(fn_decl, unsafety, _, abi, generics, block) => {
-            (fn_decl, unsafety, abi, generics, block)
-        }
-
-        _ => {
-            cx.span_err(item.span, "`generator` may only be applied to functions");
-            return Err(Error);
-        }
-    };
-
-    let mut builder = Builder::new(cx, item.span, state_machine_kind);
+    let mut builder = Builder::new(cx, span, state_machine_kind);
     let extent = builder.start_new_extent();
 
     let mut block = START_BLOCK;
@@ -163,7 +152,7 @@ pub fn construct(cx: &ExtCtxt,
         builder.push_scope(extent, block);
 
         let source_info = SourceInfo {
-            span: item.span,
+            span: span,
             scope: builder.visibility_scope,
         };
 
@@ -175,8 +164,8 @@ pub fn construct(cx: &ExtCtxt,
             None,
         );
 
-        unpack!(block = builder.in_scope(item.span, block, |this| {
-            this.args_and_body(block, &fn_decl.inputs, ast_block)
+        unpack!(block = builder.in_scope(span, block, |this| {
+            this.args_and_body(block, fn_decl.inputs(), ast_block)
         }));
 
         let return_block = builder.return_block();
@@ -188,29 +177,25 @@ pub fn construct(cx: &ExtCtxt,
             let end_decls = &builder.cfg.basic_blocks[return_block].decls;
             if end_decls.first() != Some(&LiveDecl::Active(RETURN_POINTER)) {
                 cx.span_warn(
-                    item.span,
+                    span,
                     &format!("return pointer not initialized? {:?}", end_decls));
             }
         }
 
-        builder.terminate(item.span, block, TerminatorKind::Goto {
+        builder.terminate(span, block, TerminatorKind::Goto {
             target: return_block,
             end_scope: true,
         });
 
         // The return value shouldn't be dropped when we pop the scope.
-        builder.schedule_move(item.span, RETURN_POINTER);
+        builder.schedule_move(span, RETURN_POINTER);
 
         builder.pop_scope(extent, return_block);
 
-        builder.terminate(item.span, return_block, TerminatorKind::Return);
+        builder.terminate(span, return_block, TerminatorKind::Return);
     }
 
-    Ok(builder.finish(item.ident,
-                      fn_decl,
-                      unsafety,
-                      abi,
-                      generics))
+    builder.finish(fn_decl)
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -240,12 +225,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         builder
     }
 
-    fn finish(self,
-              ident: ast::Ident,
-              fn_decl: P<ast::FnDecl>,
-              unsafety: ast::Unsafety,
-              abi: abi::Abi,
-              generics: ast::Generics) -> Mar {
+    fn finish(self, fn_decl: FunctionDecl) -> Mar {
         for (index, block) in self.cfg.basic_blocks.iter().enumerate() {
             if block.terminator.is_none() {
                 self.cx.span_bug(
@@ -282,19 +262,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 &format!("uninitialized variables: {:?}", uninitialized_vars));
         }
 
-        Mar {
-            state_machine_kind: self.state_machine_kind,
-            span: self.fn_span,
-            ident: ident,
-            fn_decl: fn_decl.clone(),
-            unsafety: unsafety,
-            abi: abi,
-            generics: generics.clone(),
-            basic_blocks: self.cfg.basic_blocks,
-            visibility_scopes: self.visibility_scopes,
-            local_decls: self.local_decls,
-            extents: self.extents,
-        }
+        Mar::new(
+            self.state_machine_kind,
+            self.cfg.basic_blocks,
+            self.visibility_scopes,
+            self.local_decls,
+            self.fn_span,
+            fn_decl,
+        )
     }
 
     fn args_and_body(&mut self,

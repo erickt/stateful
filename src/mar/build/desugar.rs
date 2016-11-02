@@ -11,14 +11,14 @@ use syntax::parse::token::Token;
 use syntax::ptr::P;
 use syntax::util::small_vector::SmallVector;
 
-pub fn desugar_item(cx: &ExtCtxt,
-                    item: P<ast::Item>,
-                    state_machine_kind: StateMachineKind) -> ast::Item {
+pub fn desugar_block(cx: &ExtCtxt,
+                     state_machine_kind: StateMachineKind,
+                     block: P<ast::Block>) -> P<ast::Block> {
     let mut expander = Expander::new(cx, state_machine_kind);
     let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
 
-    let expanded = expander.fold_item_simple(item.unwrap());
-    assigner.fold_item_simple(expanded)
+    let expanded = expander.fold_block(block);
+    assigner.fold_block(expanded)
 }
 
 struct Assigner {
