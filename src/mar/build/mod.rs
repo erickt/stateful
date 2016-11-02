@@ -243,7 +243,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     LiveDecl::Active(var) | LiveDecl::Moved(var) => {
                         initialized_vars.insert(var);
                     }
-                    LiveDecl::Forward(_) => {}
                 }
             }
         }

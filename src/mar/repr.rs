@@ -227,7 +227,6 @@ pub struct DeclaredDecl {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
-    Forward(Local),
     Active(Local),
     Moved(Local),
 }

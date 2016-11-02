@@ -37,7 +37,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     decls.push((local, self.mar.local_decls[local].ident));
                     local
                 }
-                LiveDecl::Forward(local) | LiveDecl::Moved(local) => local,
+                LiveDecl::Moved(local) => local,
             };
 
             self.get_shadowed_decls(&mut decls, local);

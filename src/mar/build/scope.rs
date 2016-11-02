@@ -16,7 +16,7 @@ tracks where a `break` and `continue` should go to.
 use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fmt;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -36,9 +36,6 @@ pub struct Scope {
     /// Declarations created in this scope.
     decls: HashSet<Local>,
 
-    /// Uninitialized declarations in this scope
-    forward_decls: HashMap<ast::Ident, Local>,
-
     /// Declarations that are initialized, and may be in this scope or a parent scope.
     initialized_decls: HashSet<Local>,
 
@@ -48,10 +45,9 @@ pub struct Scope {
 
 impl fmt::Debug for Scope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Scope({:?}, decls={:?} forward={:?} init={:?}, drops={:?})",
+        write!(f, "Scope({:?}, decls={:?}, init={:?}, drops={:?})",
                self.id,
                self.decls,
-               self.forward_decls,
                self.initialized_decls,
                self.drops)
     }
@@ -125,53 +121,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         // The conditionally initialized variables should be initialized.
-        for var in initialized_decls {
-            self.initialize_decl(*var);
+        for local in initialized_decls {
+            self.initialize_decl(*local);
         }
 
         debug!("-------\n");
 
         result
-
-
-        /*
-        self.push_scope_kind(extent, ScopeKind::Conditional {
-            scopes: vec![],
-        });
-        let block = f(self);
-
-        {
-            let current_scope = self.scopes.last_mut().unwrap();
-
-            match current_scope.kind {
-                ScopeKind::Conditional { ref scopes } => {
-                    debug!("in_conditional_scope: {:?}", scopes);
-
-                    for scope in scopes {
-                        for var in &scope.initialized_decls {
-                            let ident = self.local_decls[*var].ident;
-                            current_scope.forward_decls.remove(&ident);
-
-                            if !current_scope.decls.contains(var) {
-                                current_scope.initialized_decls.insert(*var);
-                            }
-                        }
-                    }
-                }
-                ScopeKind::Normal => unreachable!(),
-            }
-        }
-
-        self.pop_scope(extent, block);
-
-        for scope in self.scopes.iter().rev() {
-            debug!("in_conditional_scope: scope={:?}", scope); 
-        }
-
-        debug!("in_conditional_scope: -------");
-
-        block
-        */
     }
 
     pub fn next_conditional_scope(&mut self) {
@@ -225,7 +181,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             _visibility_scope: vis_scope,
             extent: extent,
             decls: HashSet::new(),
-            forward_decls: HashMap::new(),
             initialized_decls: HashSet::new(),
             moved_decls: HashSet::new(),
             drops: vec![],
@@ -258,52 +213,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         debug!("\n--------");
-
-        /*
-        // Bubble up the initializations.
-        if let Some(current_scope) = self.scopes.last_mut() {
-            debug!("pop_scope: {:?} scope={:?}", block, current_scope);
-
-            match self.conditional_scopes.last() {
-                Some(conditional_scope) if => {
-                    if 
-                }
-            }
-
-
-            for var in &scope.initialized_decls {
-                let ident = self.local_decls[*var].ident;
-                current_scope.forward_decls.remove(&ident);
-
-                if !current_scope.decls.contains(var) {
-                    current_scope.initialized_decls.insert(*var);
-                }
-            }
-        }
-        */
-
-        /*
-        if let Some(current_scope) = self.scopes.last_mut() {
-            match current_scope.kind {
-                ScopeKind::Normal => {
-                    debug!("pop_scope: {:?} scope={:?}", block, current_scope);
-                    for var in &scope.initialized_decls {
-                        let ident = self.local_decls[*var].ident;
-                        current_scope.forward_decls.remove(&ident);
-
-                        if !current_scope.decls.contains(var) {
-                            current_scope.initialized_decls.insert(*var);
-                        }
-                    }
-                }
-                ScopeKind::Conditional { ref mut scopes } => {
-                    debug!("pop_scope: conditional: {:?}", scope);
-                    scopes.push(scope);
-                }
-            }
-        }
-        */
-
     }
 
     /// Creates a new visibility scope, nested in the current one.
@@ -484,7 +393,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             } else {
                 // Otherwise initialize it in this scope and keep moving up the stack.
                 scope.initialized_decls.insert(var);
-                scope.forward_decls.remove(&ident);
 
                 if scope.decls.contains(&var) {
                     debug!("initialize_decl: found scope at {:?}", scope.id);
@@ -492,38 +400,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
         }
-
-        /*
-        for scope in self.scopes.iter_mut().rev() {
-            scope.initialized_decls.insert(var);
-            scope.forward_decls.remove(&ident);
-
-            if scope.decls.contains(&var) {
-                //debug!("initialize_decl: found scope at {:?}", scope.id);
-                return;
-            }
-        }
-        */
-
-        /*
-        // Only initialize if it hasn't already been initialized.
-        for scope in self.scopes.iter_mut().rev() {
-            debug!("initialize_decl: scope={:?}", scope);
-
-            if let ScopeKind::Conditional { .. } = scope.kind {
-                debug!("initialize_decl: conditional, exiting early");
-                return true;
-            }
-
-            scope.initialized_decls.insert(var);
-            scope.forward_decls.remove(&ident);
-
-            if scope.decls.contains(&var) {
-                debug!("initialize_decl: found scope at {:?}", scope.id);
-                return true;
-            }
-        }
-        */
 
         self.cx.span_bug(self.local_decls[var].source_info.span,
                          &format!("var {:?} not in scope to initialize", var));
@@ -551,14 +427,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
 
+            /*
             if let Some(var) = scope.forward_decls.get(&ident) {
                 return Some(*var);
             }
+            */
         }
 
         None
     }
 
+    /*
     pub fn find_forward_decl(&self, lvalue: ast::Ident) -> Option<Local> {
         for scope in self.scopes.iter().rev() {
             // Check if we are shadowing another variable.
@@ -569,6 +448,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         None
     }
+    */
 
     pub fn terminate(&mut self,
                      span: Span,
@@ -576,6 +456,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      kind: TerminatorKind) {
         self.cfg.terminate(span, block, kind);
 
+        // FIXME: should we be pushing live decls to our successors?
         /*
         let live_decls = self.find_live_decls();
 
@@ -638,9 +519,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let ident = self.local_decls[*var].ident;
 
                 if visited_decls.insert(ident) {
-                    if scope.forward_decls.contains_key(&ident) {
-                        decls.push(LiveDecl::Forward(*var));
-                    } else if scope.moved_decls.contains(var) {
+                    if scope.moved_decls.contains(var) {
                         decls.push(LiveDecl::Moved(*var));
                     } else {
                         decls.push(LiveDecl::Active(*var));
@@ -660,29 +539,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
-    pub fn schedule_drop(&mut self, span: Span, var: Local) {
-        // FIXME: Make sure we aren't double dropping a variable.
+    pub fn schedule_drop(&mut self, span: Span, local: Local) {
+        // FIXME: Make sure we aren't double dropping a localiable.
         for scope in self.scopes.iter_mut().rev() {
             for drop in &scope.drops {
-                if var == *drop {
+                if local == *drop {
                     self.cx.span_bug(
                         span,
-                        &format!("variable already scheduled for drop: {:?}", var));
+                        &format!("variable already scheduled for drop: {:?}", local));
                 }
             }
         }
 
         if let Some(scope) = self.scopes.last_mut() {
-            let ident = self.local_decls[var].ident;
-
-            scope.decls.insert(var);
-            scope.forward_decls.insert(ident, var);
+            scope.decls.insert(local);
         } else {
             self.cx.span_bug(span, "no scopes?");
         }
 
         let scope = self.scopes.last_mut().unwrap();
-        scope.drops.push(var);
+        scope.drops.push(local);
     }
 
     pub fn move_lvalue(&mut self, span: Span, lvalue: &Lvalue) {
@@ -698,17 +574,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn schedule_move(&mut self, span: Span, var: Local) {
-        let ident = self.local_decls[var].ident;
+    pub fn schedule_move(&mut self, span: Span, local: Local) {
+        if !self.is_initialized(local) {
+            self.cx.span_bug(
+                span,
+                &format!("trying to move an uninitialized local {:?}?", local));
+        }
 
         for scope in self.scopes.iter_mut().rev() {
-            // Make sure the decl isn't a forward declaration.
-            if scope.forward_decls.contains_key(&ident) {
-                self.cx.span_warn(span,
-                                  &format!("trying to move an uninitialized var {:?}?", var));
-            }
+            scope.moved_decls.insert(local);
 
-            scope.moved_decls.insert(var);
+            if scope.decls.contains(&local) {
+                break;
+            }
         }
     }
 
@@ -716,11 +594,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
         for pat in pats {
-            for var in self.declare_bindings(pat, None) {
-                let ident = self.local_decls[var].ident;
-
-                self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(var));
-                self.scopes.last_mut().unwrap().forward_decls.remove(&ident);
+            for local in self.declare_bindings(pat, None) {
+                self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(local));
+                self.initialize_decl(local);
             }
         }
     }
