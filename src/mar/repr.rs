@@ -220,15 +220,46 @@ pub struct LocalDecl {
     pub source_info: SourceInfo,
 }
 
-#[derive(Debug)]
-pub struct DeclaredDecl {
-    pub decl: Local,
+#[derive(Clone, Debug)]
+pub struct DeclScope {
+    decls: Vec<LiveDecl>,
+}
+
+impl DeclScope {
+    pub fn new(decls: Vec<LiveDecl>) -> Self {
+        DeclScope {
+            decls: decls,
+        }
+    }
+
+    pub fn decls(&self) -> &[LiveDecl] {
+        &self.decls
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
     Active(Local),
     Moved(Local),
+}
+
+impl LiveDecl {
+    pub fn local(&self) -> Local {
+        match *self {
+            LiveDecl::Active(local) | LiveDecl::Moved(local) => local,
+        }
+    }
+
+    pub fn is_active(&self) -> bool {
+        match *self {
+            LiveDecl::Active(_) => true,
+            LiveDecl::Moved(_) => false,
+        }
+    }
+
+    pub fn is_moved(&self) -> bool {
+        !self.is_active()
+    }
 }
 
 ///////////////////////////////////////////////////////////////////////////
@@ -240,7 +271,7 @@ newtype_index!(BasicBlock, "bb");
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub decls: Vec<LiveDecl>,
+    pub decls: Vec<DeclScope>,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
@@ -248,7 +279,7 @@ pub struct BasicBlockData {
 impl BasicBlockData {
     pub fn new(span: Span,
                name: Option<&'static str>,
-               decls: Vec<LiveDecl>,
+               decls: Vec<DeclScope>,
                terminator: Option<Terminator>) -> Self {
         BasicBlockData {
             span: span,
@@ -263,7 +294,7 @@ impl BasicBlockData {
         self.name
     }
 
-    pub fn decls(&self) -> &[LiveDecl] {
+    pub fn decls(&self) -> &[DeclScope] {
         &self.decls
     }
 

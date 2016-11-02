@@ -483,8 +483,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// This function constructs a vector of all of the variables in scope, and returns if the
     /// variables are currently shadowed.
-    pub fn find_live_decls(&self) -> Vec<LiveDecl> {
-        let mut decls = vec![];
+    pub fn find_live_decls(&self) -> Vec<DeclScope> {
+        let mut decl_scopes = vec![];
         let mut visited_decls = HashSet::new();
 
         // We build up the list of declarations by walking up the scopes, and walking through each
@@ -492,8 +492,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
+            let mut decls = vec![];
+
             debug!("find_live_decls: scope={:?}", scope);
-            debug!("find_live_decls: live decls1: {:?}", decls);
+            debug!("find_live_decls: live decls1: {:?}", decl_scopes);
 
             if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
                 debug!(
@@ -528,13 +530,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             debug!("find_live_decls: live decls3: {:?}", decls);
+
+            decl_scopes.push(DeclScope::new(decls));
         }
 
-        decls.reverse();
+        decl_scopes.reverse();
 
-        debug!("find_live_decls: live decls: {:?}", decls);
+        debug!("find_live_decls: live decls: {:?}", decl_scopes);
 
-        decls
+        decl_scopes
     }
 
     /// Indicates that `lvalue` should be dropped on exit from
@@ -593,12 +597,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn add_decls_from_pats<'c, I>(&mut self, block: BasicBlock, pats: I)
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
-        for pat in pats {
-            for local in self.declare_bindings(pat, None) {
-                self.cfg.block_data_mut(block).decls.push(LiveDecl::Active(local));
-                self.initialize_decl(local);
-            }
+        let decls = pats
+            .flat_map(|pat| self.declare_bindings(pat, None))
+            .map(|local| LiveDecl::Active(local))
+            .collect::<Vec<_>>();
+
+        for decl in &decls {
+            // Make sure the local is initialized.
+            self.initialize_decl(decl.local());
         }
+
+        self.cfg.block_data_mut(block).decls.push(DeclScope::new(decls));
     }
 
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {

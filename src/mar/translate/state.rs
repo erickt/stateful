@@ -27,25 +27,29 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     }
 
-    fn get_incoming_decls(&self, block: BasicBlock) -> Vec<(Local, ast::Ident)> {
-        let mut decls = vec![];
+    fn get_incoming_decl_scopes(&self, block: BasicBlock) -> Vec<Vec<(Local, ast::Ident)>> {
+        let mut decl_scopes = vec![];
 
-        for live_decl in self.mar[block].decls() {
-            // Only add active decls to the state.
-            let local = match *live_decl {
-                LiveDecl::Active(local) => {
-                    decls.push((local, self.mar.local_decls[local].ident));
-                    local
-                }
-                LiveDecl::Moved(local) => local,
-            };
+        for decl_scope in self.mar[block].decls() {
+            let mut decls = vec![];
 
-            self.get_shadowed_decls(&mut decls, local);
+            for live_decl in decl_scope.decls() {
+                // Only add active decls to the state.
+                let local = match *live_decl {
+                    LiveDecl::Active(local) => {
+                        decls.push((local, self.mar.local_decls[local].ident));
+                        local
+                    }
+                    LiveDecl::Moved(local) => local,
+                };
+
+                self.get_shadowed_decls(&mut decls, local);
+            }
+
+            decl_scopes.push(decls);
         }
 
-        //debug!("decls: {:?} {:?}", block, decls);
-
-        decls
+        decl_scopes
     }
 
     fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
@@ -62,19 +66,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         let state_path = self.state_path(block);
-        let incoming_decls = self.get_incoming_decls(block);
+        let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
 
-        if incoming_decls.is_empty() {
+        if incoming_decl_scopes.is_empty() {
             ast_builder.expr().path()
                 .build(state_path)
         } else {
-            let id_exprs = incoming_decls.iter()
-                .map(|&(_, ident)| {
-                    (ident, ast_builder.expr().span(self.mar.span).id(ident))
+            let exprs = incoming_decl_scopes.iter()
+                .map(|scope| {
+                    ast_builder.expr().tuple()
+                        .with_exprs(
+                            scope.iter().map(|&(_, ident)| ast_builder.expr().id(ident))
+                        )
+                        .build()
                 });
 
-            ast_builder.expr().struct_path(state_path)
-                .with_id_exprs(id_exprs)
+            ast_builder.expr().call()
+                .build_path(state_path)
+                .with_args(exprs)
                 .build()
         }
     }
@@ -138,26 +147,40 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn state_variant(&self, block: BasicBlock) -> (ast::Variant, Vec<ast::Ident>) {
+        let span = self.block_span(block);
+        let ast_builder = self.ast_builder.span(span);
+
         let state_id = self.state_id(block);
-        let incoming_decls = self.get_incoming_decls(block);
-        let ty_param_ids = incoming_decls.iter()
-            .map(|&(decl, _)| {
-                self.ast_builder.id(format!("T{}", decl.index()))
+        let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
+
+        let ty_param_ids = incoming_decl_scopes.iter()
+            .flat_map(|scope| {
+                scope.iter().map(|&(decl, _)| {
+                    ast_builder.id(format!("T{}", decl.index()))
+                })
             })
             .collect::<Vec<_>>();
 
-        let variant = if incoming_decls.is_empty() {
-            self.ast_builder.variant(state_id).unit()
+        let variant = if incoming_decl_scopes.is_empty() {
+            ast_builder.variant(state_id).unit()
         } else {
-            let fields = incoming_decls.iter()
-                .zip(ty_param_ids.iter())
-                .map(|(&(_, ident), ty_param)| {
-                    self.ast_builder.struct_field(ident).ty().id(ty_param)
+            let mut tys = incoming_decl_scopes.iter()
+                .map(|scope| {
+                    ast_builder.ty().tuple()
+                        .with_tys(
+                            scope.iter().map(|&(decl, _)| {
+                                ast_builder.ty().id(format!("T{}", decl.index()))
+                            })
+                        )
+                        .build()
                 });
 
-            self.ast_builder.variant(state_id)
-                .struct_()
-                    .with_fields(fields)
+            let ty = tys.next().unwrap();
+
+            ast_builder.variant(state_id).tuple().ty().build(ty)
+                .with_fields(
+                    tys.map(|ty| ast_builder.tuple_field().ty().build(ty))
+                )
                 .build()
         };
 
@@ -178,25 +201,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn state_pat(&self, block: BasicBlock) -> P<ast::Pat> {
+        let span = self.block_span(block);
+        let ast_builder = self.ast_builder.span(span);
+
         let state_path = self.state_path(block);
-        let incoming_decls = self.get_incoming_decls(block);
+        let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
 
-        if incoming_decls.is_empty() {
-            self.ast_builder.pat().build_path(state_path)
+        if incoming_decl_scopes.is_empty() {
+            ast_builder.pat().build_path(state_path)
         } else {
-            let mut struct_pat_builder = self.ast_builder.pat().struct_()
-                .build(state_path);
+            let pats = incoming_decl_scopes.iter().map(|scope| {
+                ast_builder.pat().tuple()
+                    .with_pats(
+                        scope.iter().map(|&(decl, ident)| {
+                            let decl_data = self.mar.local_decl_data(decl);
 
-            for &(decl, ident) in &incoming_decls {
-                let decl_data = self.mar.local_decl_data(decl);
+                            match decl_data.mutability {
+                                Mutability::Immutable => ast_builder.pat().id(ident),
+                                Mutability::Mutable => ast_builder.pat().mut_id(ident),
+                            }
+                        })
+                        )
+                    .build()
+                });
 
-                struct_pat_builder = match decl_data.mutability {
-                    Mutability::Immutable => struct_pat_builder.id(ident),
-                    Mutability::Mutable => struct_pat_builder.mut_id(ident),
-                };
-            }
-
-            struct_pat_builder.build()
+            ast_builder.pat().enum_().build(state_path)
+                .with_pats(pats)
+                .build()
         }
     }
 }

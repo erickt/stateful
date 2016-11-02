@@ -174,11 +174,31 @@ pub fn construct(cx: &ExtCtxt,
         // FIXME: The return pointer really shouldn't be considered active here, but I'm not sure
         // how to fix that yet.
         {
-            let end_decls = &builder.cfg.basic_blocks[return_block].decls;
-            if end_decls.first() != Some(&LiveDecl::Active(RETURN_POINTER)) {
+            let end_decl_scopes = &builder.cfg.basic_blocks[return_block].decls;
+            if end_decl_scopes.len() != 1 {
                 cx.span_warn(
                     span,
-                    &format!("return pointer not initialized? {:?}", end_decls));
+                    &format!("end block has multiple scopes? {:#?}", end_decl_scopes));
+            }
+
+            let end_decls = end_decl_scopes.last().unwrap().decls();
+            if end_decls.len() != 1 {
+                cx.span_warn(
+                    span,
+                    &format!("end block has multiple decls? {:#?}", end_decls));
+            }
+
+            let return_decl = end_decls.last().unwrap();
+            if return_decl.local() != RETURN_POINTER {
+                cx.span_warn(
+                    span,
+                    &format!("end block decl is not return pointer? {:#?}", return_decl));
+            }
+
+            if return_decl.is_moved() {
+                cx.span_warn(
+                    span,
+                    &format!("return pointer has been moved? {:?}", return_decl));
             }
         }
 
@@ -238,11 +258,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // First, gather up them all.
         let mut initialized_vars = HashSet::new();
         for block in self.cfg.basic_blocks.iter() {
-            for live_decl in &block.decls {
-                match *live_decl {
-                    LiveDecl::Active(var) | LiveDecl::Moved(var) => {
-                        initialized_vars.insert(var);
-                    }
+            for decl_scope in &block.decls {
+                for live_decl in decl_scope.decls() {
+                    initialized_vars.insert(live_decl.local());
                 }
             }
         }

@@ -267,8 +267,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 });
         });
 
+        // FIXME: is this needed?
+        /*
         let live_decls = self.find_live_decls();
         self.cfg.block_data_mut(exit_block).decls = live_decls.clone();
+        */
 
         // `loop { ... }` has a type of `()`.
         self.push_assign_unit(span, exit_block, destination);
