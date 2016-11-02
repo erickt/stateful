@@ -28,7 +28,8 @@ pub struct Scope {
     /// the scope-id within the scope_auxiliary
     id: ScopeId,
 
-    kind: ScopeKind,
+    /// The visibility scope this scope was created in.
+    _visibility_scope: VisibilityScope,
 
     extent: CodeExtent,
 
@@ -47,19 +48,13 @@ pub struct Scope {
 
 impl fmt::Debug for Scope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Scope({:?}, decls={:?} forward={:?} init={:?}, drops={:?}, kind={:?})",
+        write!(f, "Scope({:?}, decls={:?} forward={:?} init={:?}, drops={:?})",
                self.id,
                self.decls,
                self.forward_decls,
                self.initialized_decls,
-               self.drops,
-               self.kind)
+               self.drops)
     }
-}
-
-#[derive(Debug)]
-enum ScopeKind {
-    Normal,
 }
 
 #[derive(Clone)]
@@ -222,20 +217,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// calls must be paired; using `in_scope` as a convenience
     /// wrapper maybe preferable.
     pub fn push_scope(&mut self, extent: CodeExtent, _block: BasicBlock) {
-        self.push_scope_kind(extent, ScopeKind::Normal);
-    }
-
-    fn push_scope_kind(&mut self, extent: CodeExtent, kind: ScopeKind) {
+        debug!("push_scope({:?})", extent);
         let id = ScopeId::new(self.scope_auxiliary.len());
-
-        debug!("\n+++++++++");
-        debug!("push_scope_kind: ++++++ id={:?} kind={:?}", id, kind);
-
-        //if id.index() == 4 { panic!() }
-
+        let vis_scope = self.visibility_scope;
         self.scopes.push(Scope {
             id: id,
-            kind: kind,
+            _visibility_scope: vis_scope,
             extent: extent,
             decls: HashSet::new(),
             forward_decls: HashMap::new(),

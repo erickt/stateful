@@ -316,10 +316,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
 
-        /*
-        let decls = vec![];
-        */
-
         let block = self.cfg.start_new_block(span, name, decls.clone());
 
         debug!("start_new_block: id={:?} decls={:?}", block, decls); 

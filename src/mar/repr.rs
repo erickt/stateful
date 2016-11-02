@@ -50,12 +50,6 @@ pub struct Mar {
     /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
     pub visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
 
-    /*
-    /// List of visibility (lexical) scopes; these are referenced by statements
-    /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
-    pub visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
-    */
-
     pub span: Span,
     pub ident: ast::Ident,
     pub fn_decl: P<ast::FnDecl>,
