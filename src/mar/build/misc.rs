@@ -23,12 +23,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       name, shadowed_decl);
         }
 
+        let source_info = self.source_info(span);
         let temp = self.local_decls.push(LocalDecl {
             mutability: ast::Mutability::Mutable,
             ident: ident,
             ty: None,
             shadowed_decl: None,
-            source_info: self.source_info(span),
+            source_info: source_info,
         });
         let lvalue = Lvalue::Local(temp);
         debug!("temp: created temp {:?}", lvalue);

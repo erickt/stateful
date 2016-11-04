@@ -18,7 +18,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      destination: Lvalue,
                      mut block: BasicBlock,
                      ast_block: &ast::Block) -> BlockAnd<()> {
-        self.in_scope(ast_block.span, block, |this| {
+        let extent = self.start_new_extent();
+        self.in_scope(extent, ast_block.span, block, |this| {
             let (stmts, expr) = split_stmts(&ast_block.stmts[..]);
 
             // This convoluted structure is to avoid using recursion as we walk down a list
@@ -44,12 +45,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             for stmt in stmts {
                 match stmt.node {
                     StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
-                        unpack!(block = this.in_scope(stmt.span, block, |this| {
+                        let extent = this.start_new_extent();
+                        unpack!(block = this.in_scope(extent, stmt.span, block, |this| {
                             this.stmt_expr(block, expr)
                         }));
                     }
                     StmtKind::Mac(ref mac) => {
-                        unpack!(block = this.in_scope(stmt.span, block, |this| {
+                        let extent = this.start_new_extent();
+                        unpack!(block = this.in_scope(extent, stmt.span, block, |this| {
                             let (ref mac, _, _) = **mac;
                             let temp = this.temp(stmt.span, "temp_stmt_mac");
 
@@ -75,7 +78,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         // Evaluate the initializer, if present.
                         if let Some(ref init) = local.init {
-                            unpack!(block = this.in_scope(stmt.span, block, |this| {
+                            let init_scope = this.start_new_extent();
+                            unpack!(block = this.in_scope(init_scope, stmt.span, block, |this| {
                                 this.expr_into_pattern(block, &local.pat, init)
                             }));
                         }

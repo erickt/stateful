@@ -153,16 +153,10 @@ pub fn construct_fn(cx: &ExtCtxt,
     let mut block = START_BLOCK;
     unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
         // Declare the return pointer.
-        let source_info = builder.source_info(span);
-        builder.declare_binding(
-            source_info,
-            ast::Mutability::Immutable,
-            "return_pointer",
-            None,
-        );
+        builder.temp(span, "return_pointer");
 
         unpack!(block = builder.in_scope(arg_extent, span, block, |builder| {
-            builder.args_and_body(block, fn_decl.inputs(), ast_block)
+            builder.args_and_body(block, fn_decl.inputs(), arg_extent, ast_block)
         }));
         // Attribute epilogue to function's closing brace
         let fn_end = Span { lo: span.hi, ..span };
@@ -340,7 +334,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             unpack!(block = self.lvalue_into_pattern(block, &arg.pat, &lvalue));
 
             // Make sure we drop (parts of) the argument even when not matched on.
-            self.schedule_drop(arg.pat.span, arg.pat.id, &lvalue);
+            self.schedule_drop(arg.pat.span, argument_extent, &lvalue);
         }
 
         // Enter the argument pattern bindings visibility scope, if it exists.

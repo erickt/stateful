@@ -251,8 +251,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             // execute the body, branching back to the test
+            let extent = this.start_new_extent();
             let body_block_end = unpack!(
-                this.in_scope(body.span, body_block, |this| {
+                this.in_scope(extent, body.span, body_block, |this| {
                     let temp = this.temp(body.span, "temp_loop");
                     this.ast_block(temp, body_block, body)
                 })

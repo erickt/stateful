@@ -174,7 +174,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         span: pat.span,
                         scope: var_scope.unwrap()
                     };
-                    self.declare_binding(source_info, mutability, id.node, ty.clone());
+                    self.declare_binding(
+                        source_info,
+                        mutability,
+                        id.node,
+                        pat.id,
+                        ty.clone());
                 }
             }
             _ => {
@@ -255,11 +260,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("declare_binding(source_info={:?}, name={:?}, var_ty={:?})",
                source_info, name, var_ty);
 
+        let shadowed_decl = self.find_local(name);
         let var = self.local_decls.push(LocalDecl {
             mutability: mutability,
             ident: name,
             ty: var_ty,
-            shadowed_decl: self.find_local(name),
+            shadowed_decl: shadowed_decl,
             source_info: source_info,
         });
         let extent = self.extent_of_innermost_scope();
