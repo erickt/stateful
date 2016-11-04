@@ -19,7 +19,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // We don't yet support receiving values into the coroutine yet, so just store a `()` in
         // the destination.
-        self.push_assign_unit(expr_span, next_block, destination);
+        self.push_assign_unit(expr_span, next_block, &destination);
 
         next_block.unit()
     }

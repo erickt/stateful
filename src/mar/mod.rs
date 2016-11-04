@@ -1,3 +1,6 @@
+#[macro_use]
+mod macros;
+
 pub mod build;
 pub mod indexed_vec;
 pub mod repr;

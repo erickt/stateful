@@ -2,7 +2,7 @@ use mar::repr::*;
 use mar::indexed_vec::Idx;
 use mar::translate::Builder;
 use std::collections::HashSet;
-use syntax::ast::{self, Mutability};
+use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
 
@@ -27,7 +27,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     }
 
-    fn get_incoming_decl_scopes(&self, block: BasicBlock) -> Vec<Vec<(Local, ast::Ident)>> {
+    fn get_incoming_decl_scopes(
+        &self,
+        block: BasicBlock
+    ) -> Vec<(VisibilityScope, Vec<(Local, ast::Ident)>)> {
         let mut decl_scopes = vec![];
 
         for decl_scope in self.mar[block].decls() {
@@ -46,7 +49,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.get_shadowed_decls(&mut decls, local);
             }
 
-            decl_scopes.push(decls);
+            decl_scopes.push((decl_scope.scope(), decls));
         }
 
         decl_scopes
@@ -73,10 +76,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .build(state_path)
         } else {
             let exprs = incoming_decl_scopes.iter()
-                .map(|scope| {
+                .map(|&(_, ref decls)| {
                     ast_builder.expr().tuple()
                         .with_exprs(
-                            scope.iter().map(|&(_, ident)| ast_builder.expr().id(ident))
+                            decls.iter().map(|&(_, ident)| ast_builder.expr().id(ident))
                         )
                         .build()
                 });
@@ -154,8 +157,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
 
         let ty_param_ids = incoming_decl_scopes.iter()
-            .flat_map(|scope| {
-                scope.iter().map(|&(decl, _)| {
+            .flat_map(|&(_, ref decls)| {
+                decls.iter().map(|&(decl, _)| {
                     ast_builder.id(format!("T{}", decl.index()))
                 })
             })
@@ -165,10 +168,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ast_builder.variant(state_id).unit()
         } else {
             let mut tys = incoming_decl_scopes.iter()
-                .map(|scope| {
+                .map(|&(_, ref decls)| {
                     ast_builder.ty().tuple()
                         .with_tys(
-                            scope.iter().map(|&(decl, _)| {
+                            decls.iter().map(|&(decl, _)| {
                                 ast_builder.ty().id(format!("T{}", decl.index()))
                             })
                         )
@@ -210,6 +213,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         if incoming_decl_scopes.is_empty() {
             ast_builder.pat().build_path(state_path)
         } else {
+            let pats = incoming_decl_scopes.iter().map(|&(scope, _)| {
+                ast_builder.pat().id(format!("scope{}", scope.index()))
+            });
+
+
+            /*
             let pats = incoming_decl_scopes.iter().map(|scope| {
                 ast_builder.pat().tuple()
                     .with_pats(
@@ -224,6 +233,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         )
                     .build()
                 });
+                */
 
             ast_builder.pat().enum_().build(state_path)
                 .with_pats(pats)

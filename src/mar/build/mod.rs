@@ -38,6 +38,8 @@ pub struct Builder<'a, 'b: 'a> {
 
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
+    /// Maps node ids of variable bindings to the `Local`s created for them.
+    var_indices: HashMap<ast::NodeId, Local>,
     local_decls: IndexVec<Local, LocalDecl>,
 
     /// cached block with the RETURN terminator
@@ -134,22 +136,51 @@ macro_rules! unpack {
 }
 
 ///////////////////////////////////////////////////////////////////////////
-// construct() -- the main entry point for building SMIR for a function
+/// the main entry point for building MIR for a function
 
-pub fn construct(cx: &ExtCtxt,
-                 state_machine_kind: StateMachineKind,
-                 span: Span,
-                 fn_decl: FunctionDecl,
-                 ast_block: P<ast::Block>) -> Mar {
+pub fn construct_fn(cx: &ExtCtxt,
+                    state_machine_kind: StateMachineKind,
+                    span: Span,
+                    fn_decl: FunctionDecl,
+                    ast_block: P<ast::Block>) -> Mar {
     let ast_block = desugar::desugar_block(cx, state_machine_kind, ast_block);
 
     let mut builder = Builder::new(cx, span, state_machine_kind);
-    let extent = builder.start_new_extent();
+
+    let call_site_extent = builder.start_new_extent();
+    let arg_extent = builder.start_new_extent();
 
     let mut block = START_BLOCK;
-    {
+    unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
+        // Declare the return pointer.
+        let source_info = builder.source_info(span);
+        builder.declare_binding(
+            source_info,
+            ast::Mutability::Immutable,
+            "return_pointer",
+            None,
+        );
+
+        unpack!(block = builder.in_scope(arg_extent, span, block, |builder| {
+            builder.args_and_body(block, fn_decl.inputs(), ast_block)
+        }));
+        // Attribute epilogue to function's closing brace
+        let fn_end = Span { lo: span.hi, ..span };
+        let source_info = builder.source_info(fn_end);
+        let return_block = builder.return_block();
+        builder.cfg.terminate(block, source_info,
+                              TerminatorKind::Goto { target: return_block, end_scope: true });
+        builder.cfg.terminate(return_block, source_info,
+                              TerminatorKind::Return);
+        return_block.unit()
+    }));
+    assert_eq!(block, builder.return_block());
+
+/*
+
+        /*
         // Create an initial scope for the function.
-        builder.push_scope(extent, block);
+        builder.push_scope(extent, span, block);
 
         let source_info = SourceInfo {
             span: span,
@@ -163,6 +194,7 @@ pub fn construct(cx: &ExtCtxt,
             "return_",
             None,
         );
+        */
 
         unpack!(block = builder.in_scope(span, block, |this| {
             this.args_and_body(block, fn_decl.inputs(), ast_block)
@@ -214,6 +246,7 @@ pub fn construct(cx: &ExtCtxt,
 
         builder.terminate(span, return_block, TerminatorKind::Return);
     }
+    */
 
     builder.finish(fn_decl)
 }
@@ -233,6 +266,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             visibility_scope: ARGUMENT_VISIBILITY_SCOPE,
             loop_scopes: vec![],
             conditional_scopes: HashMap::new(),
+            var_indices: HashMap::new(),
             local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
@@ -274,7 +308,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         if !uninitialized_vars.is_empty() {
-            self.cx.span_warn(
+            self.cx.span_err(
                 self.fn_span,
                 &format!("uninitialized variables: {:?}", uninitialized_vars));
         }
@@ -290,19 +324,40 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn args_and_body(&mut self,
-                     block: BasicBlock,
+                     mut block: BasicBlock,
                      arguments: &[ast::Arg],
+                     argument_extent: CodeExtent,
                      ast_block: P<ast::Block>) -> BlockAnd<()> {
         //self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
 
+        let mut scope = None;
+        // Bind the argument patterns
+        for (index, arg) in arguments.iter().enumerate() {
+            // Function arguments always get the first Local indices after the return pointer
+            let lvalue = Lvalue::Local(Local::new(index + 1));
+
+            scope = self.declare_bindings(scope, ast_block.span, &arg.pat, &Some(arg.ty.clone()));
+            unpack!(block = self.lvalue_into_pattern(block, &arg.pat, &lvalue));
+
+            // Make sure we drop (parts of) the argument even when not matched on.
+            self.schedule_drop(arg.pat.span, arg.pat.id, &lvalue);
+        }
+
+        // Enter the argument pattern bindings visibility scope, if it exists.
+        if let Some(visibility_scope) = scope {
+            self.visibility_scope = visibility_scope;
+        }
+
+        /*
         // Register the arguments as declarations.
         self.add_decls_from_pats(
             block,
             arguments.iter().map(|arg| &arg.pat));
+        */
 
-        let destination = Lvalue::Local(RETURN_POINTER);
+        unpack!(block = self.ast_block(Lvalue::Local(RETURN_POINTER), block, &ast_block));
 
-        self.ast_block(destination, block, &ast_block)
+        block.unit()
     }
 
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {

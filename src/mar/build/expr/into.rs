@@ -28,7 +28,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     else_expr)
             }
             ExprKind::Match(ref discriminant, ref arms) => {
-                self.expr_match(
+                self.match_expr(
                     destination,
                     expr.span,
                     block,
@@ -63,7 +63,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Some(block) => block,
                     None => {
                         let rvalue = unpack!(block = self.as_rvalue(block, expr));
-                        self.push_assign(block, expr_span, destination, rvalue);
+                        self.push_assign(block, expr_span, &destination, rvalue);
                         block.unit()
                     }
                 }
@@ -128,7 +128,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 });
 
                 let rvalue = unpack!(block = self.as_rvalue(block, expr));
-                self.push_assign(block, expr_span, destination, rvalue);
+                self.push_assign(block, expr_span, &destination, rvalue);
                 block.unit()
             }
 
@@ -170,7 +170,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             } else {
                 // Body of the `if` expression without an `else` clause must return `()`, thus
                 // we implicitly generate a `else {}` if it is not specified.
-                this.push_assign_unit(span, else_block, destination);
+                this.push_assign_unit(span, else_block, &destination);
                 else_block
             };
         });
@@ -274,7 +274,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         */
 
         // `loop { ... }` has a type of `()`.
-        self.push_assign_unit(span, exit_block, destination);
+        self.push_assign_unit(span, exit_block, &destination);
 
         exit_block.unit()
     }

@@ -32,7 +32,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let rhs = unpack!(block = this.as_rvalue(block, rhs));
                 let lhs = unpack!(block = this.as_lvalue(block, lhs));
 
-                this.push_assign(block, expr_span, lhs, rhs);
+                this.push_assign(block, expr_span, &lhs, rhs);
 
                 block.unit()
             }
@@ -66,7 +66,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 unpack!(self.into(Lvalue::Local(RETURN_POINTER), block, value))
             }
             None => {
-                self.push_assign_unit(span, block, Lvalue::Local(RETURN_POINTER));
+                self.push_assign_unit(span, block, &Lvalue::Local(RETURN_POINTER));
                 block
             }
         };

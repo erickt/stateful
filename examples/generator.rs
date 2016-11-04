@@ -10,8 +10,10 @@ use std::iter::Iterator;
 
 #[generator]
 fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
+    /*
     let mut iter = moved!(items).into_iter();
     let item = Iterator::next(&mut iter);
+    */
 }
 
 fn main() {

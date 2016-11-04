@@ -222,14 +222,20 @@ pub struct LocalDecl {
 
 #[derive(Clone, Debug)]
 pub struct DeclScope {
+    scope: VisibilityScope,
     decls: Vec<LiveDecl>,
 }
 
 impl DeclScope {
-    pub fn new(decls: Vec<LiveDecl>) -> Self {
+    pub fn new(scope: VisibilityScope, decls: Vec<LiveDecl>) -> Self {
         DeclScope {
+            scope: scope,
             decls: decls,
         }
+    }
+
+    pub fn scope(&self) -> VisibilityScope {
+        self.scope
     }
 
     pub fn decls(&self) -> &[LiveDecl] {
@@ -313,7 +319,7 @@ impl BasicBlockData {
 
 #[derive(Debug)]
 pub struct Terminator {
-    pub span: Span,
+    pub source_info: SourceInfo,
     pub kind: TerminatorKind,
 }
 
@@ -333,7 +339,7 @@ pub enum TerminatorKind {
 
     /// lvalue evaluates to some enum; jump depending on the branch
     Match {
-        discr: Operand,
+        discr: Lvalue,
         targets: Vec<Arm>,
     },
 

@@ -67,7 +67,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     };
 
 
-    let mar = mar::build::construct(
+    let mar = mar::build::construct_fn(
         cx,
         state_machine_kind,
         item.span,

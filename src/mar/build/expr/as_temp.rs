@@ -37,7 +37,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             Category::Lvalue => {
                 let lvalue = unpack!(block = this.as_lvalue(block, expr));
                 let rvalue = Rvalue::Use(Operand::Consume(lvalue));
-                this.push_assign(block, expr_span, temp.clone(), rvalue);
+                this.push_assign(block, expr_span, &temp, rvalue);
             }
             _ => {
                 unpack!(block = this.into(temp.clone(), block, expr));

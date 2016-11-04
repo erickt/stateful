@@ -37,7 +37,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // the let-scopes at the end.
             //
             // First we build all the statements in the block.
+            let mut let_extent_stack = Vec::with_capacity(8);
             let outer_visibility_scope = this.visibility_scope;
+            //this.visibility_scope = this.new_visibility_scope(ast_block.span);
+
             for stmt in stmts {
                 match stmt.node {
                     StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {
@@ -55,13 +58,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 None => {
                                     this.cfg.push(block, Statement::Expr(stmt.clone()));
 
-                                    this.push_assign_unit(stmt.span, block, temp);
+                                    this.push_assign_unit(stmt.span, block, &temp);
                                     block.unit()
                                 }
                             }
                         }));
                     }
                     StmtKind::Local(ref local) => {
+                        // Enter the remainder scope, i.e. the bindings' destruction scope.
+                        let remainder_scope = this.start_new_extent();
+                        this.push_scope(remainder_scope, stmt.span, block);
+                        let_extent_stack.push(remainder_scope);
+
+                        // Declare the bindings, which may cause a visibility scope.
+                        let scope = this.declare_bindings(None, stmt.span, &local.pat, &local.ty);
+
+                        // Evaluate the initializer, if present.
+                        if let Some(ref init) = local.init {
+                            unpack!(block = this.in_scope(stmt.span, block, |this| {
+                                this.expr_into_pattern(block, &local.pat, init)
+                            }));
+                        }
+
+                        // Enter the visibility scope, after evaluating the initializer.
+                        if let Some(visibility_scope) = scope {
+                            this.visibility_scope = visibility_scope;
+                        }
+
+                        /*
                         let decls = this.declare_bindings(&local.pat, local.ty.clone());
 
                         if decls.is_empty() {
@@ -76,19 +100,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         } else {
                             this.cx.span_bug(stmt.span, "Cannot handle multiple decls at the moment?")
                         }
+                        */
                     }
                     StmtKind::Item(..) => {
                         this.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
                     }
                 }
             }
-
+            // Then, the block may have an optional trailing expression which is a "return" value
+            // of the block.
             if let Some(expr) = expr {
                 unpack!(block = this.into(destination, block, &expr));
             } else {
-                this.push_assign_unit(ast_block.span, block, destination);
+                this.push_assign_unit(ast_block.span, block, &destination);
             }
-
+            // Finally, we pop all the let scopes before exiting out from teh scope of the block
+            // itself.
+            for extent in let_extent_stack.into_iter().rev() {
+                unpack!(block = this.pop_scope(extent, block));
+            }
             // Restore the original visibility scope.
             this.visibility_scope = outer_visibility_scope;
             block.unit()

@@ -29,7 +29,7 @@ pub struct Scope {
     id: ScopeId,
 
     /// The visibility scope this scope was created in.
-    _visibility_scope: VisibilityScope,
+    visibility_scope: VisibilityScope,
 
     extent: CodeExtent,
 
@@ -45,8 +45,9 @@ pub struct Scope {
 
 impl fmt::Debug for Scope {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Scope({:?}, decls={:?}, init={:?}, drops={:?})",
+        write!(f, "Scope({:?}, vis_scope={:?}, decls={:?}, init={:?}, drops={:?})",
                self.id,
+               self.visibility_scope,
                self.decls,
                self.initialized_decls,
                self.drops)
@@ -141,19 +142,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Convenience wrapper that pushes a scope and then executes `f`
     /// to build its contents, popping the scope afterwards.
     pub fn in_scope<F, R>(&mut self,
+                          extent: CodeExtent,
                           span: Span,
                           mut block: BasicBlock,
                           f: F) -> BlockAnd<R>
         where F: FnOnce(&mut Builder) -> BlockAnd<R>
     {
-        let extent = self.start_new_extent();
         debug!("in_scope(extent={:?}, block={:?}", extent, block);
-
-        self.push_scope(extent, block);
+        self.push_scope(extent, span, block);
         let rv = unpack!(block = f(self));
-        self.pop_scope(extent, block);
+        unpack!(block = self.pop_scope(extent, block));
         debug!("in_scope: exiting extent={:?} block={:?}", extent, block);
 
+        /*
         // At this point, we can't tell that variables are not being accessed. So we'll create a
         // new block to make sure variables are properly not referenced.
         let end_scope_block = self.start_new_block(span, Some("EndScope"));
@@ -164,21 +165,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 target: end_scope_block,
                 end_scope: true,
             });
+        */
 
-        end_scope_block.and(rv)
+        block.and(rv)
     }
 
     /// Push a scope onto the stack. You can then build code in this
     /// scope and call `pop_scope` afterwards. Note that these two
     /// calls must be paired; using `in_scope` as a convenience
     /// wrapper maybe preferable.
-    pub fn push_scope(&mut self, extent: CodeExtent, _block: BasicBlock) {
+    pub fn push_scope(&mut self,
+                      extent: CodeExtent,
+                      _span: Span,
+                      _block: BasicBlock) {
         debug!("push_scope({:?})", extent);
+
+        //self.visibility_scope = self.new_visibility_scope(span);
+
         let id = ScopeId::new(self.scope_auxiliary.len());
         let vis_scope = self.visibility_scope;
         self.scopes.push(Scope {
             id: id,
-            _visibility_scope: vis_scope,
+            visibility_scope: vis_scope,
             extent: extent,
             decls: HashSet::new(),
             initialized_decls: HashSet::new(),
@@ -194,7 +202,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Pops a scope, which should have extent `extent`, adding any
     /// drops onto the end of `block` that are needed.  This must
     /// match 1-to-1 with `push_scope`.
-    pub fn pop_scope(&mut self, extent: CodeExtent, block: BasicBlock) {
+    pub fn pop_scope(&mut self,
+                     extent: CodeExtent,
+                     block: BasicBlock) -> BlockAnd<()> {
         let scope = self.scopes.pop().unwrap();
 
         assert_eq!(scope.extent, extent);
@@ -212,7 +222,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             debug!("in_scope: scope={:?}", scope); 
         }
 
+        /*
+        let vis_scope_data = &self.visibility_scopes[scope.visibility_scope];
+        self.visibility_scope = vis_scope_data.parent_scope.unwrap();
+        */
+
         debug!("\n--------");
+
+        block.unit()
     }
 
     /// Creates a new visibility scope, nested in the current one.
@@ -336,7 +353,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn push_assign(&mut self,
                        block: BasicBlock,
                        span: Span,
-                       lvalue: Lvalue,
+                       lvalue: &Lvalue,
                        rvalue: Rvalue) {
         debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
@@ -347,7 +364,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn push_assign_unit(&mut self,
                             span: Span,
                             block: BasicBlock,
-                            lvalue: Lvalue) {
+                            lvalue: &Lvalue) {
         let rvalue = self.unit_rvalue();
         self.push_assign(block, span, lvalue, rvalue)
     }
@@ -374,8 +391,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.cx.span_bug(self.local_decls[var].source_info.span,
-                         &format!("var {:?} not in any scope?", var));
+        span_bug!(self.cx, self.local_decls[var].source_info.span,
+                  "var {:?} not in any scope?", var);
     }
 
     /// Mark a variable initialized.
@@ -454,7 +471,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      span: Span,
                      block: BasicBlock,
                      kind: TerminatorKind) {
-        self.cfg.terminate(span, block, kind);
+        let source_info = self.source_info(span);
+        self.cfg.terminate(block, source_info, kind);
 
         // FIXME: should we be pushing live decls to our successors?
         /*
@@ -487,63 +505,87 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut decl_scopes = vec![];
         let mut visited_decls = HashSet::new();
 
+        // Used so we can make an empty iterator when we aren't in a conditional scope.
+        let empty_hashset = HashSet::new();
+
         // We build up the list of declarations by walking up the scopes, and walking through each
         // scope backwards. If this is the first time we've seen a variable with this name, we just
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
-            let mut decls = vec![];
+            debug!("find_live_decls0: scope={:?}", scope);
+            debug!("find_live_decls1: live decls: {:?}", decl_scopes);
 
-            debug!("find_live_decls: scope={:?}", scope);
-            debug!("find_live_decls: live decls1: {:?}", decl_scopes);
+            let locals = match self.conditional_scopes.get(&scope.id) {
+                Some(conditional_scope) => {
+                    let decls = conditional_scope.initialized_decls.last().unwrap();
+                    debug!("find_live_decls2: conditional_scope={:?}", decls);
 
-            if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
-                debug!(
-                    "find_live_decls: conditional_scope={:?}",
-                    conditional_scope.initialized_decls.last().unwrap());
+                    decls.iter()
+                }
+                None => {
+                    empty_hashset.iter()
+                }
+            };
 
-                for var in conditional_scope.initialized_decls.last().unwrap() {
-                    let ident = self.local_decls[*var].ident;
+            let locals = locals.collect::<Vec<_>>();
 
-                    if visited_decls.insert(ident) {
-                        if scope.moved_decls.contains(var) {
-                            decls.push(LiveDecl::Moved(*var));
+            debug!("find_live_decls3: locals: {:?}", locals);
+
+            let locals = locals.into_iter().chain(scope.drops.iter().rev());
+
+            let live_decls = locals
+                .filter_map(|local| {
+                    // Make sure the scope is correct.
+                    let local_decl = &self.local_decls[*local];
+                    debug!("find_live_decls4: local={:?} {:?}", local, local_decl);
+
+                    if scope.visibility_scope != local_decl.source_info.scope {
+                        self.cx.span_bug(
+                            local_decl.source_info.span,
+                            &format!("incorrect scope: expected `{:?}`: {:?}",
+                                     scope.visibility_scope,
+                                     local_decl));
+                    }
+
+                    if visited_decls.insert(local_decl.ident) {
+                        if scope.moved_decls.contains(local) {
+                            return Some(LiveDecl::Moved(*local));
                         } else {
-                            decls.push(LiveDecl::Active(*var));
+                            return Some(LiveDecl::Active(*local));
                         }
                     }
-                }
-            }
 
-            debug!("find_live_decls: live decls2: {:?}", decls);
+                    None
+                })
+                .collect();
 
-            for var in scope.drops.iter().rev() {
-                let ident = self.local_decls[*var].ident;
+            debug!("find_live_decls5: scope={:?} decls={:?}",
+                   scope.visibility_scope,
+                   live_decls);
 
-                if visited_decls.insert(ident) {
-                    if scope.moved_decls.contains(var) {
-                        decls.push(LiveDecl::Moved(*var));
-                    } else {
-                        decls.push(LiveDecl::Active(*var));
-                    }
-                }
-            }
-
-            debug!("find_live_decls: live decls3: {:?}", decls);
-
-            decl_scopes.push(DeclScope::new(decls));
+            decl_scopes.push(DeclScope::new(scope.visibility_scope, live_decls));
         }
 
         decl_scopes.reverse();
 
-        debug!("find_live_decls: live decls: {:?}", decl_scopes);
+        debug!("find_live_declsX: live decls: {:?}", decl_scopes);
 
         decl_scopes
     }
 
     /// Indicates that `lvalue` should be dropped on exit from
     /// `extent`.
-    pub fn schedule_drop(&mut self, span: Span, local: Local) {
+    pub fn schedule_drop(&mut self,
+                         span: Span,
+                         extent: CodeExtent,
+                         lvalue: &Lvalue) {
+        // Only temps and vars need their storage dead.
+        let local = match *lvalue {
+            Lvalue::Local(local) => local,
+            _ => return
+        };
+
         // FIXME: Make sure we aren't double dropping a localiable.
         for scope in self.scopes.iter_mut().rev() {
             for drop in &scope.drops {
@@ -561,8 +603,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_bug(span, "no scopes?");
         }
 
-        let scope = self.scopes.last_mut().unwrap();
-        scope.drops.push(local);
+        for scope in self.scopes.iter_mut().rev() {
+            let this_scope = scope.extent == extent;
+            if this_scope {
+                scope.drops.push(local);
+            }
+        }
+
+        span_bug!(self.cx, span, "extent {:?} not in scope to drop {:?}", extent, lvalue);
     }
 
     pub fn move_lvalue(&mut self, span: Span, lvalue: &Lvalue) {
@@ -594,6 +642,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
+    /*
     pub fn add_decls_from_pats<'c, I>(&mut self, block: BasicBlock, pats: I)
         where I: Iterator<Item=&'c P<ast::Pat>>,
     {
@@ -607,8 +656,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.initialize_decl(decl.local());
         }
 
-        self.cfg.block_data_mut(block).decls.push(DeclScope::new(decls));
+        self.cfg.block_data_mut(block).decls.push(
+            DeclScope::new(self.visibility_scope, decls)
+        );
     }
+    */
 
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {
         struct Visitor<'a, 'b: 'a> {
@@ -654,6 +706,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         None
+    }
+
+
+    /// Given a span and this scope's visibility scope, make a SourceInfo.
+    pub fn source_info(&self, span: Span) -> SourceInfo {
+        SourceInfo {
+            span: span,
+            scope: self.visibility_scope
+        }
     }
 }
 

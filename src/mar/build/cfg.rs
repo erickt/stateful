@@ -38,11 +38,11 @@ impl CFG {
     pub fn push_assign(&mut self,
                        block: BasicBlock,
                        span: Span,
-                       lvalue: Lvalue,
+                       lvalue: &Lvalue,
                        rvalue: Rvalue) {
         self.push(block, Statement::Assign {
             span: span,
-            lvalue: lvalue,
+            lvalue: lvalue.clone(),
             rvalue: rvalue,
         });
     }
@@ -78,15 +78,15 @@ impl CFG {
     }
 
     pub fn terminate(&mut self,
-                     span: Span,
                      block: BasicBlock,
+                     source_info: SourceInfo,
                      kind: TerminatorKind) {
         assert!(self.block_data(block).terminator.is_none(),
                 "terminate: block {:?} already has a terminator set", block);
 
         let block_data = self.block_data_mut(block);
         block_data.terminator = Some(Terminator {
-            span: span,
+            source_info: source_info,
             kind: kind,
         });
     }

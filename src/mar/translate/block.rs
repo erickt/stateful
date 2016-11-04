@@ -20,11 +20,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
-        let ast_builder = self.ast_builder.span(terminator.span);
+        let ast_builder = self.ast_builder.span(terminator.source_info.span);
 
         match terminator.kind {
             TerminatorKind::Goto { target, .. } => {
-                self.goto(terminator.span, target)
+                self.goto(terminator.source_info.span, target)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
                 let cond = cond.to_expr(&self.mar.local_decls);
@@ -32,13 +32,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let then_block = ast_builder
                     .span(self.block_span(then_block))
                     .block()
-                    .with_stmts(self.goto(terminator.span, then_block))
+                    .with_stmts(self.goto(terminator.source_info.span, then_block))
                     .build();
 
                 let else_block = ast_builder
                     .span(self.block_span(else_block))
                     .block()
-                    .with_stmts(self.goto(terminator.span, else_block))
+                    .with_stmts(self.goto(terminator.source_info.span, else_block))
                     .build();
 
                 vec![
@@ -57,7 +57,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         let block = ast_builder.block()
                             .span(self.mar.span)
-                            .with_stmts(self.goto(terminator.span, target.block))
+                            .with_stmts(self.goto(terminator.source_info.span, target.block))
                             .build();
 
                         ast_builder.arm()
@@ -117,7 +117,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .global()
                     .ids(&["futures", "Async", "NotReady"])
                     .build();
-                let next_state = self.state_expr(terminator.span, target);
+                let next_state = self.state_expr(terminator.source_info.span, target);
 
                 let tuple = ast_builder.expr().ok().tuple()
                     .expr().build(awaited_expr)
@@ -132,7 +132,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             TerminatorKind::Suspend { ref rvalue, target } => {
                 let ast_builder = ast_builder.span(rvalue.span);
-                let next_state = self.state_expr(terminator.span, target);
+                let next_state = self.state_expr(terminator.source_info.span, target);
 
                 match self.mar.state_machine_kind {
                     StateMachineKind::Generator => {
