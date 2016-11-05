@@ -24,19 +24,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .id("State")
             .id(self.state_id(block))
             .build()
-
     }
 
-    fn get_incoming_decl_scopes(
+    fn get_incoming_scope_decls(
         &self,
         block: BasicBlock
     ) -> Vec<(VisibilityScope, Vec<(Local, ast::Ident)>)> {
-        let mut decl_scopes = vec![];
+        let mut scope_decls = vec![];
 
-        for decl_scope in self.mar[block].decls() {
+        for (scope, live_decls) in self.mar[block].live_decls.iter() {
             let mut decls = vec![];
 
-            for live_decl in decl_scope.decls() {
+            for live_decl in live_decls {
                 // Only add active decls to the state.
                 let local = match *live_decl {
                     LiveDecl::Active(local) => {
@@ -49,10 +48,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.get_shadowed_decls(&mut decls, local);
             }
 
-            decl_scopes.push((decl_scope.scope(), decls));
+            scope_decls.push((*scope, decls));
         }
 
-        decl_scopes
+        scope_decls
     }
 
     fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
@@ -69,13 +68,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         let state_path = self.state_path(block);
-        let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
+        let incoming_scope_decls = self.get_incoming_scope_decls(block);
 
-        if incoming_decl_scopes.is_empty() {
+        if incoming_scope_decls.is_empty() {
             ast_builder.expr().path()
                 .build(state_path)
         } else {
-            let exprs = incoming_decl_scopes.iter()
+            let exprs = incoming_scope_decls.iter()
                 .map(|&(_, ref decls)| {
                     ast_builder.expr().tuple()
                         .with_exprs(
@@ -154,9 +153,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         let state_id = self.state_id(block);
-        let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
+        let incoming_scope_decls = self.get_incoming_scope_decls(block);
 
-        let ty_param_ids = incoming_decl_scopes.iter()
+        let ty_param_ids = incoming_scope_decls.iter()
             .flat_map(|&(_, ref decls)| {
                 decls.iter().map(|&(decl, _)| {
                     ast_builder.id(format!("T{}", decl.index()))
@@ -164,10 +163,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             })
             .collect::<Vec<_>>();
 
-        let variant = if incoming_decl_scopes.is_empty() {
+        let variant = if incoming_scope_decls.is_empty() {
             ast_builder.variant(state_id).unit()
         } else {
-            let mut tys = incoming_decl_scopes.iter()
+            let mut tys = incoming_scope_decls.iter()
                 .map(|&(_, ref decls)| {
                     ast_builder.ty().tuple()
                         .with_tys(
@@ -194,32 +193,66 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
-        let body = ast_builder.block()
+        let state_path = self.state_path(block);
+        let scope_decls = self.get_incoming_scope_decls(block);
+
+        let pat = if scope_decls.is_empty() {
+            ast_builder.pat().build_path(state_path)
+        } else {
+            let pats = scope_decls.iter().map(|&(scope, _)| {
+                ast_builder.pat().id(format!("scope{}", scope.index()))
+            });
+
+            ast_builder.pat().enum_().build(state_path)
+                .with_pats(pats)
+                .build()
+        };
+
+        // First, setup the blocks.
+        let mut body = ast_builder.block()
             .with_stmts(self.block(block))
             .build();
 
+        for &(scope, ref decls) in scope_decls.iter() {
+            let decl_pat = ast_builder.pat()
+                .tuple()
+                .with_pats(
+                    decls.iter().map(|&(_, name)| ast_builder.pat().id(name))
+                )
+                .build();
+
+            let stmt = ast_builder.stmt()
+                .let_().build(decl_pat)
+                .expr().id(format!("scope{}", scope.index()));
+
+            body = ast_builder.block()
+                .stmt().build(stmt)
+                .expr().build_block(body);
+        }
+
         ast_builder.arm()
-            .with_pat(self.state_pat(block))
+            .with_pat(pat)
             .body().build_block(body)
     }
 
-    fn state_pat(&self, block: BasicBlock) -> P<ast::Pat> {
+    /*
+    fn state_pat(&self,
+                 block: BasicBlock,
+                 scope_decls: &[(VisibilityScope, Vec<(Local, ast::Ident)>)]) -> P<ast::Pat> {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
-        let state_path = self.state_path(block);
-        let incoming_decl_scopes = self.get_incoming_decl_scopes(block);
 
-        if incoming_decl_scopes.is_empty() {
+        if scope_decls.is_empty() {
             ast_builder.pat().build_path(state_path)
         } else {
-            let pats = incoming_decl_scopes.iter().map(|&(scope, _)| {
+            let pats = scope_decls.iter().map(|&(scope, _)| {
                 ast_builder.pat().id(format!("scope{}", scope.index()))
             });
 
 
             /*
-            let pats = incoming_decl_scopes.iter().map(|scope| {
+            let pats = incoming_scope_decls.iter().map(|scope| {
                 ast_builder.pat().tuple()
                     .with_pats(
                         scope.iter().map(|&(decl, ident)| {
@@ -240,4 +273,5 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .build()
         }
     }
+    */
 }

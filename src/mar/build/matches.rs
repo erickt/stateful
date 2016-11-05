@@ -95,7 +95,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     source_info,
                     mutability,
                     id.node,
-                    irrefutable_pat.id,
                     None);
 
                 //self.storage_live_for_bindings(block, &irrefutable_pat);
@@ -108,6 +107,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.lvalue_into_pattern(block,
                                  irrefutable_pat,
                                  &lvalue)
+    }
+
+    fn add_decl_to_block(&mut self, block: BasicBlock, live_decl: LiveDecl) {
+        let block_data = self.cfg.block_data_mut(block);
+        let live_decls = block_data.live_decls.entry(self.visibility_scope)
+            .or_insert_with(Vec::new);
+        live_decls.push(live_decl);
     }
 
     pub fn lvalue_into_pattern(&mut self,
@@ -130,13 +136,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 };
 
-                self.initialize(block, irrefutable_pat.span, initializer.clone());
-
-                self.cfg.block_data_mut(block).decls.push(
-                    DeclScope::new(
-                        self.visibility_scope,
-                        vec![LiveDecl::Active(local)])
-                );
+                //self.initialize(block, irrefutable_pat.span, initializer.clone());
+                self.add_decl_to_block(block, LiveDecl::Active(local));
 
                 /*
                 let rvalue = Rvalue::Use(Operand::Consume(binding_source));
@@ -178,7 +179,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         source_info,
                         mutability,
                         id.node,
-                        pat.id,
                         ty.clone());
                 }
             }
@@ -252,7 +252,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                               source_info: SourceInfo,
                               mutability: ast::Mutability,
                               name: T,
-                              var_id: ast::NodeId,
                               var_ty: Option<P<ast::Ty>>) -> Local
         where T: ToIdent,
     {
@@ -270,7 +269,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
         let extent = self.extent_of_innermost_scope();
         self.schedule_drop(source_info.span, extent, &Lvalue::Local(var));
-        self.var_indices.insert(var_id, var);
 
         debug!("declare_binding: var={:?}", var);
 

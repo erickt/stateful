@@ -16,8 +16,8 @@ impl CFG {
     pub fn start_new_block(&mut self,
                            span: Span,
                            name: Option<&'static str>,
-                           decls: Vec<DeclScope>) -> BasicBlock {
-        self.basic_blocks.push(BasicBlockData::new(span, name, decls, None))
+                           live_decls: LiveDeclMap) -> BasicBlock {
+        self.basic_blocks.push(BasicBlockData::new(span, name, live_decls))
     }
 
     pub fn push(&mut self, block: BasicBlock, statement: Statement) {

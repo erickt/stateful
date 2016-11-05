@@ -1,5 +1,6 @@
 use aster::AstBuilder;
 use mar::indexed_vec::{Idx, IndexVec};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::ops::{Index, IndexMut};
 use std::u32;
@@ -220,6 +221,7 @@ pub struct LocalDecl {
     pub source_info: SourceInfo,
 }
 
+/*
 #[derive(Clone, Debug)]
 pub struct DeclScope {
     scope: VisibilityScope,
@@ -242,6 +244,7 @@ impl DeclScope {
         &self.decls
     }
 }
+*/
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
@@ -268,6 +271,8 @@ impl LiveDecl {
     }
 }
 
+pub type LiveDeclMap = BTreeMap<VisibilityScope, Vec<LiveDecl>>;
+
 ///////////////////////////////////////////////////////////////////////////
 // BasicBlock and Terminator
 
@@ -277,7 +282,7 @@ newtype_index!(BasicBlock, "bb");
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub decls: Vec<DeclScope>,
+    pub live_decls: LiveDeclMap,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
@@ -285,14 +290,13 @@ pub struct BasicBlockData {
 impl BasicBlockData {
     pub fn new(span: Span,
                name: Option<&'static str>,
-               decls: Vec<DeclScope>,
-               terminator: Option<Terminator>) -> Self {
+               decls: LiveDeclMap) -> Self {
         BasicBlockData {
             span: span,
             name: name,
-            decls: decls,
+            live_decls: decls,
             statements: vec![],
-            terminator: terminator,
+            terminator: None,
         }
     }
 
@@ -300,8 +304,8 @@ impl BasicBlockData {
         self.name
     }
 
-    pub fn decls(&self) -> &[DeclScope] {
-        &self.decls
+    pub fn live_decls(&self) -> &LiveDeclMap {
+        &self.live_decls
     }
 
     pub fn statements(&self) -> &[Statement] {

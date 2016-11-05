@@ -38,8 +38,6 @@ pub struct Builder<'a, 'b: 'a> {
 
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
-    /// Maps node ids of variable bindings to the `Local`s created for them.
-    var_indices: HashMap<ast::NodeId, Local>,
     local_decls: IndexVec<Local, LocalDecl>,
 
     /// cached block with the RETURN terminator
@@ -260,7 +258,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             visibility_scope: ARGUMENT_VISIBILITY_SCOPE,
             loop_scopes: vec![],
             conditional_scopes: HashMap::new(),
-            var_indices: HashMap::new(),
             local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
@@ -286,8 +283,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // First, gather up them all.
         let mut initialized_vars = HashSet::new();
         for block in self.cfg.basic_blocks.iter() {
-            for decl_scope in &block.decls {
-                for live_decl in decl_scope.decls() {
+            for live_decls in block.live_decls.values() {
+                for live_decl in live_decls {
                     initialized_vars.insert(live_decl.local());
                 }
             }
@@ -307,6 +304,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 &format!("uninitialized variables: {:?}", uninitialized_vars));
         }
 
+
+        debug!("decls: {:#?}", self.local_decls);
+        debug!("blocks: {:#?}", self.cfg.basic_blocks);
+
         Mar::new(
             self.state_machine_kind,
             self.cfg.basic_blocks,
@@ -320,7 +321,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn args_and_body(&mut self,
                      mut block: BasicBlock,
                      arguments: &[ast::Arg],
-                     argument_extent: CodeExtent,
+                     _argument_extent: CodeExtent,
                      ast_block: P<ast::Block>) -> BlockAnd<()> {
         //self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
 
@@ -333,8 +334,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             scope = self.declare_bindings(scope, ast_block.span, &arg.pat, &Some(arg.ty.clone()));
             unpack!(block = self.lvalue_into_pattern(block, &arg.pat, &lvalue));
 
+            // FIXME(stateful): MIR does this, but I'm not sure if it's necessary we do it since we
+            // the arguments are already pulled out into locals.
+            /*
             // Make sure we drop (parts of) the argument even when not matched on.
             self.schedule_drop(arg.pat.span, argument_extent, &lvalue);
+            */
         }
 
         // Enter the argument pattern bindings visibility scope, if it exists.
@@ -356,10 +361,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
+        debug!("start_new_block(name={:?}, decls={:?})", name, decls); 
 
-        let block = self.cfg.start_new_block(span, name, decls.clone());
-
-        debug!("start_new_block: id={:?} decls={:?}", block, decls); 
+        let block = self.cfg.start_new_block(span, name, decls);
+        debug!("start_new_block: block={:?}", block); 
 
         block
     }

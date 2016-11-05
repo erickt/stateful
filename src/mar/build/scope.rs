@@ -16,7 +16,7 @@ tracks where a `break` and `continue` should go to.
 use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fmt;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -39,7 +39,12 @@ pub struct Scope {
     /// Declarations that are initialized, and may be in this scope or a parent scope.
     initialized_decls: HashSet<Local>,
 
+    /// set of lvalues to drop when exiting this scope. This starts
+    /// out empty but grows as variables are declared during the
+    /// building process. This is a stack, so we always drop from the
+    /// end of the vector (top of the stack) first.
     drops: Vec<Local>,
+
     moved_decls: HashSet<Local>,
 }
 
@@ -148,7 +153,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                           f: F) -> BlockAnd<R>
         where F: FnOnce(&mut Builder) -> BlockAnd<R>
     {
-        debug!("in_scope(extent={:?}, block={:?}", extent, block);
+        debug!("in_scope(extent={:?}, block={:?})", extent, block);
         self.push_scope(extent, span, block);
         let rv = unpack!(block = f(self));
         unpack!(block = self.pop_scope(extent, block));
@@ -501,8 +506,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// This function constructs a vector of all of the variables in scope, and returns if the
     /// variables are currently shadowed.
-    pub fn find_live_decls(&self) -> Vec<DeclScope> {
-        let mut decl_scopes = vec![];
+    pub fn find_live_decls(&self) -> BTreeMap<VisibilityScope, Vec<LiveDecl>> {
+        let mut scope_decls = BTreeMap::new();
         let mut visited_decls = HashSet::new();
 
         // Used so we can make an empty iterator when we aren't in a conditional scope.
@@ -514,7 +519,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
             debug!("find_live_decls0: scope={:?}", scope);
-            debug!("find_live_decls1: live decls: {:?}", decl_scopes);
+            debug!("find_live_decls1: live decls: {:?}", scope_decls);
 
             let locals = match self.conditional_scopes.get(&scope.id) {
                 Some(conditional_scope) => {
@@ -550,28 +555,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                     if visited_decls.insert(local_decl.ident) {
                         if scope.moved_decls.contains(local) {
-                            return Some(LiveDecl::Moved(*local));
+                            Some(LiveDecl::Moved(*local))
                         } else {
-                            return Some(LiveDecl::Active(*local));
+                            Some(LiveDecl::Active(*local))
                         }
+                    } else {
+                        None
                     }
-
-                    None
                 })
-                .collect();
+                .collect::<Vec<_>>();
 
             debug!("find_live_decls5: scope={:?} decls={:?}",
                    scope.visibility_scope,
                    live_decls);
 
-            decl_scopes.push(DeclScope::new(scope.visibility_scope, live_decls));
+            scope_decls.entry(scope.visibility_scope)
+                .or_insert_with(Vec::new)
+                .extend(live_decls);
         }
 
-        decl_scopes.reverse();
+        debug!("find_live_declsX: live decls: {:?}", scope_decls);
 
-        debug!("find_live_declsX: live decls: {:?}", decl_scopes);
-
-        decl_scopes
+        scope_decls
     }
 
     /// Indicates that `lvalue` should be dropped on exit from
@@ -580,10 +585,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                          span: Span,
                          extent: CodeExtent,
                          lvalue: &Lvalue) {
+        debug!("schedule_drop(extent={:?}, lvalue={:?})", extent, lvalue);
+
         // Only temps and vars need their storage dead.
         let local = match *lvalue {
             Lvalue::Local(local) => local,
-            _ => return
+            _ => {
+                debug!("schedule_drop: lvalue is not local, ignoring");
+                return;
+            }
         };
 
         // FIXME: Make sure we aren't double dropping a localiable.
@@ -607,6 +617,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             let this_scope = scope.extent == extent;
             if this_scope {
                 scope.drops.push(local);
+                return;
             }
         }
 
