@@ -547,7 +547,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 debug!("find_live_decls4: local={:?} {:?}", local, local_decl);
 
                 if scope.visibility_scope != local_decl.source_info.scope {
-                    self.cx.span_bug(
+                    self.cx.span_err(
                         local_decl.source_info.span,
                         &format!("incorrect scope: expected `{:?}`: {:?}",
                                  scope.visibility_scope,

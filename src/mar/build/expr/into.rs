@@ -71,7 +71,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Call(ref fun, ref args) => {
                 let fun = unpack!(block = self.as_operand(block, fun));
                 let args = args.into_iter()
-                    .map(|arg| unpack!(block = self.as_operand(block, arg)))
+                    .map(|arg| unpack!(block = self.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
                 self.initialize(block, expr_span, &destination);
@@ -85,7 +85,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let self_ = unpack!(block = self.as_lvalue(block, self_));
 
                 let args = args
-                    .map(|arg| unpack!(block = self.as_operand(block, arg)))
+                    .map(|arg| unpack!(block = self.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
                 self.initialize(block, expr_span, &destination);

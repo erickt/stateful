@@ -213,7 +213,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .with_stmts(self.block(block))
             .build();
 
-        for &(scope, ref decls) in scope_decls.iter() {
+        for &(scope, ref decls) in scope_decls.iter().rev() {
             let decl_pat = ast_builder.pat()
                 .tuple()
                 .with_pats(

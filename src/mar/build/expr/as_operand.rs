@@ -18,12 +18,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.move_lvalue(expr.span, &operand);
                 block.and(Operand::Consume(operand))
             }
+            /*
             ExprKind::AddrOf(..) => {
                 // `&x` operands don't need a temporary.
                 let operand = unpack!(block = this.as_lvalue(block, expr));
                 this.move_lvalue(expr.span, &operand);
                 block.and(Operand::Consume(operand))
             }
+            */
             _ => {
                 let category = Category::of(&expr.node).unwrap();
                 debug!("expr_as_operand: category={:?} for={:?}", category, expr.node);

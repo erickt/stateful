@@ -52,7 +52,7 @@ impl CFG {
                      span: Span,
                      lvalue: Lvalue,
                      fun: Operand,
-                     args: Vec<Operand>) {
+                     args: Vec<Rvalue>) {
         self.push(block, Statement::Call {
             span: span,
             lvalue: lvalue,
@@ -68,7 +68,7 @@ impl CFG {
                             ident: ast::SpannedIdent,
                             tys: Vec<P<ast::Ty>>,
                             self_: Lvalue,
-                            args: Vec<Operand>) {
+                            args: Vec<Rvalue>) {
         self.push(block, Statement::MethodCall {
             span: span,
             lvalue: lvalue,

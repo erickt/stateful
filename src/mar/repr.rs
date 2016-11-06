@@ -658,7 +658,7 @@ pub enum Statement {
         span: Span,
         lvalue: Lvalue,
         fun: Operand,
-        args: Vec<Operand>,
+        args: Vec<Rvalue>,
     },
     MethodCall {
         span: Span,
@@ -666,7 +666,7 @@ pub enum Statement {
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
         self_: Lvalue,
-        args: Vec<Operand>,
+        args: Vec<Rvalue>,
     },
     Drop {
         lvalue: Local,
