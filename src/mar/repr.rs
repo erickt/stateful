@@ -567,6 +567,9 @@ pub enum Rvalue {
 
     Ref(ast::Mutability, Lvalue),
 
+    Binary(ast::BinOp, Operand, Operand),
+    Unary(ast::UnOp, Operand),
+
     Tuple(Vec<Operand>),
     Struct(ast::Path, Vec<ast::Field>, Vec<Operand>, Option<Operand>),
     Range(Option<Operand>, Option<Operand>, ast::RangeLimits),
@@ -585,6 +588,17 @@ impl ToExpr for Rvalue {
             }
             Rvalue::Ref(ast::Mutability::Mutable, ref arg) => {
                 builder.expr().mut_ref().build(arg.to_expr(local_decls))
+            }
+            Rvalue::Binary(op, ref lhs, ref rhs) => {
+                builder.expr().build_binary(
+                    op.node,
+                    lhs.to_expr(local_decls),
+                    rhs.to_expr(local_decls))
+            }
+            Rvalue::Unary(op, ref expr) => {
+                builder.expr().build_unary(
+                    op,
+                    expr.to_expr(local_decls))
             }
             Rvalue::Tuple(ref items) => {
                 builder.expr().tuple()

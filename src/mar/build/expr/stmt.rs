@@ -36,6 +36,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 block.unit()
             }
+            ExprKind::AssignOp(op, ref lhs, ref rhs) => {
+                // Note: we evaluate assignments right-to-left. This
+                // is better for borrowck interaction with overloaded
+                // operators like x[j] = x[i].
+
+                let rhs = unpack!(block = this.as_operand(block, rhs));
+                let lhs = unpack!(block = this.as_lvalue(block, lhs));
+                let result = unpack!(
+                    block = this.build_binary_op(
+                        block,
+                        op,
+                        Operand::Consume(lhs.clone()),
+                        rhs));
+
+                this.push_assign(block, expr_span, &lhs, result);
+
+                block.unit()
+            }
             ExprKind::Ret(ref returned_expr) => {
                 this.expr_ret(block, expr.span, returned_expr)
             }

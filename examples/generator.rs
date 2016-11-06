@@ -26,15 +26,10 @@ fn main() {
 }
 */
 
-
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    if true {
-        yield_!(1);
-    } else {
-        yield_!(2);
-    };
-    yield_!(3);
+    let mut i = 0;
+    i += 1;
 }
 
 fn main() {

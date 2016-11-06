@@ -41,33 +41,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let arg_lvalue = unpack!(block = this.as_lvalue(block, arg));
                 block.and(Rvalue::Ref(mutability, arg_lvalue))
             }
-            /*
-            ExprKind::Binary { op, lhs, rhs } => {
+            ExprKind::Binary(op, ref lhs, ref rhs) => {
                 let lhs = unpack!(block = this.as_operand(block, lhs));
                 let rhs = unpack!(block = this.as_operand(block, rhs));
-                this.build_binary_op(block, op, expr_span, expr.ty,
-                                     lhs, rhs)
+                this.build_binary_op(block, op, lhs, rhs)
             }
-            */
-            /*
-            ExprKind::Unary { op, arg } => {
+            ExprKind::Unary(op, ref arg) => {
                 let arg = unpack!(block = this.as_operand(block, arg));
-                // Check for -MIN on signed integers
-                if this.hir.check_overflow() && op == UnOp::Neg && expr.ty.is_signed() {
-                    let bool_ty = this.hir.bool_ty();
-
-                    let minval = this.minval_literal(expr_span, expr.ty);
-                    let is_min = this.temp(bool_ty);
-
-                    this.cfg.push_assign(block, source_info, &is_min,
-                                         Rvalue::BinaryOp(BinOp::Eq, arg.clone(), minval));
-
-                    let err = ConstMathErr::Overflow(Op::Neg);
-                    block = this.assert(block, Operand::Consume(is_min), false,
-                                        AssertMessage::Math(err), expr_span);
-                }
-                block.and(Rvalue::UnaryOp(op, arg))
+                block.and(Rvalue::Unary(op, arg))
             }
+            /*
             ExprKind::Box { value, value_extents } => {
                 let value = this.hir.mirror(value);
                 let result = this.temp(expr.ty);
@@ -190,7 +173,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Loop(..) |
             ExprKind::Call(..) |
             ExprKind::Field(..) |
-            ExprKind::Unary(..) |
             ExprKind::Index(..) |
             ExprKind::Break(..) |
             ExprKind::Continue(..) |
@@ -216,5 +198,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block.and(Rvalue::Use(operand))
             }
         }
+    }
+
+    pub fn build_binary_op(&mut self,
+                           block: BasicBlock,
+                           op: ast::BinOp,
+                           lhs: Operand,
+                           rhs: Operand) -> BlockAnd<Rvalue> {
+        block.and(Rvalue::Binary(op, lhs, rhs))
     }
 }
