@@ -406,6 +406,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("initialize_decl: scope={:?} var={:?} ident={:?}", self.scopes.last().unwrap().id, var, ident);
         
         for scope in self.scopes.iter_mut().rev() {
+            if !scope.decls.contains(&var) {
+                continue;
+            }
+
+            debug!("initialize_decl: found scope at {:?}", scope.id);
+
             // If the scope is conditional, buffer it there instead of pushing it up the scope.
             if let Some(conditional_scope) = self.conditional_scopes.get_mut(&scope.id) {
                 debug!("initialize_decl: found cond scope at {:?}", scope.id);
@@ -415,11 +421,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             } else {
                 // Otherwise initialize it in this scope and keep moving up the stack.
                 scope.initialized_decls.insert(var);
-
-                if scope.decls.contains(&var) {
-                    debug!("initialize_decl: found scope at {:?}", scope.id);
-                    return;
-                }
+                return;
             }
         }
 
@@ -529,6 +531,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             // Next, step through decls and add any that have been initialized.
             locals.extend(scope.initialized_decls.iter().cloned());
+
+            debug!("find_live_decls: candidates={:?}", locals);
 
             let mut live_decls = vec![];
             

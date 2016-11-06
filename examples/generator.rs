@@ -29,7 +29,7 @@ fn main() {
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
     let mut i = 0;
-    i += 1;
+    if i < 5 { }
 }
 
 fn main() {
