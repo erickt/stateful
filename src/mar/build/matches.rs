@@ -114,10 +114,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn add_decl_to_block(&mut self, block: BasicBlock, live_decl: LiveDecl) {
+        debug!("add_decl_to_block(block={:?}, live_decl={:?}", block, live_decl);
+
         let block_data = self.cfg.block_data_mut(block);
-        let live_decls = block_data.live_decls.entry(self.visibility_scope)
+        let incoming_decls = block_data.incoming_decls.entry(self.visibility_scope)
             .or_insert_with(Vec::new);
-        live_decls.push(live_decl);
+        incoming_decls.push(live_decl);
     }
 
     pub fn lvalue_into_pattern(&mut self,

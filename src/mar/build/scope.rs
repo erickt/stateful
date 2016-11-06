@@ -16,7 +16,7 @@ tracks where a `break` and `continue` should go to.
 use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -508,43 +508,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// variables are currently shadowed.
     pub fn find_live_decls(&self) -> BTreeMap<VisibilityScope, Vec<LiveDecl>> {
         let mut scope_decls = BTreeMap::new();
-        let mut visited_decls = HashSet::new();
-
-        // Used so we can make an empty iterator when we aren't in a conditional scope.
-        let empty_hashset = HashSet::new();
 
         // We build up the list of declarations by walking up the scopes, and walking through each
         // scope backwards. If this is the first time we've seen a variable with this name, we just
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
         for scope in self.scopes.iter().rev() {
-            debug!("find_live_decls0: scope={:?}", scope);
-            debug!("find_live_decls1: live decls: {:?}", scope_decls);
+            debug!("find_live_decls: current scope decls={:?}", scope_decls);
+            debug!("find_live_decls: scope={:?}", scope);
 
-            let locals = match self.conditional_scopes.get(&scope.id) {
-                Some(conditional_scope) => {
-                    let decls = conditional_scope.initialized_decls.last().unwrap();
-                    debug!("find_live_decls2: conditional_scope={:?}", decls);
+            let mut locals = BTreeSet::new();
 
-                    decls.iter()
-                }
-                None => {
-                    empty_hashset.iter()
-                }
+            // First add any conditionally initialized variables.
+            if let Some(conditional_scope) = self.conditional_scopes.get(&scope.id) {
+                let decls = conditional_scope.initialized_decls.last().unwrap();
+                debug!("find_live_decls: conditional={:?}", decls);
+
+                locals.extend(decls);
             };
 
-            let locals = locals.collect::<Vec<_>>();
-
-            debug!("find_live_decls3: locals: {:?}", locals);
-
-            let locals = locals.into_iter().chain(scope.drops.iter().rev());
+            // Next, step through decls and add any that have been initialized.
+            locals.extend(scope.initialized_decls.iter().cloned());
 
             let mut live_decls = vec![];
             
-            for local in locals {
+            for local in locals.into_iter() {
                 // Make sure the scope is correct.
-                let local_decl = &self.local_decls[*local];
-                debug!("find_live_decls4: local={:?} {:?}", local, local_decl);
+                let local_decl = &self.local_decls[local];
+                debug!("find_live_decls: local={:?} decl={:?}", local, local_decl);
 
                 if scope.visibility_scope != local_decl.source_info.scope {
                     self.cx.span_err(
@@ -554,18 +545,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                  local_decl));
                 }
 
-                if visited_decls.insert(local_decl.ident) {
-                    let live_decl = if scope.moved_decls.contains(local) {
-                        LiveDecl::Moved(*local)
-                    } else {
-                        LiveDecl::Active(*local)
-                    };
+                let live_decl = if scope.moved_decls.contains(&local) {
+                    LiveDecl::Moved(local)
+                } else {
+                    LiveDecl::Active(local)
+                };
 
-                    live_decls.push(live_decl);
-                }
+                live_decls.push(live_decl);
             }
 
-            debug!("find_live_decls5: scope={:?} decls={:?}",
+            debug!("find_live_decls: scope={:?} live decls={:?}",
                    scope.visibility_scope,
                    live_decls);
 
@@ -574,7 +563,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .extend(live_decls);
         }
 
-        debug!("find_live_declsX: live decls: {:?}", scope_decls);
+        debug!("find_live_decls: live decls={:?}", scope_decls);
 
         scope_decls
     }

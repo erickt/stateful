@@ -282,7 +282,7 @@ newtype_index!(BasicBlock, "bb");
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub live_decls: LiveDeclMap,
+    pub incoming_decls: LiveDeclMap,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
@@ -294,7 +294,7 @@ impl BasicBlockData {
         BasicBlockData {
             span: span,
             name: name,
-            live_decls: decls,
+            incoming_decls: decls,
             statements: vec![],
             terminator: None,
         }
@@ -304,8 +304,8 @@ impl BasicBlockData {
         self.name
     }
 
-    pub fn live_decls(&self) -> &LiveDeclMap {
-        &self.live_decls
+    pub fn incoming_decls(&self) -> &LiveDeclMap {
+        &self.incoming_decls
     }
 
     pub fn statements(&self) -> &[Statement] {

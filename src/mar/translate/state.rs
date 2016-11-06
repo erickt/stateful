@@ -32,7 +32,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     ) -> Vec<(VisibilityScope, Vec<(Local, ast::Ident)>)> {
         let mut scope_decls = vec![];
 
-        for (scope, live_decls) in self.mar[block].live_decls.iter() {
+        for (scope, live_decls) in self.mar[block].incoming_decls.iter() {
             let mut decls = vec![];
 
             for live_decl in live_decls {

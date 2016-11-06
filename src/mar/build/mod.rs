@@ -152,8 +152,7 @@ pub fn construct_fn(cx: &ExtCtxt,
     let mut block = START_BLOCK;
     unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
         // Declare the return pointer.
-        let temp = builder.temp(span, "return_pointer");
-        builder.initialize(block, span, &temp);
+        builder.temp(span, "return_pointer");
 
         unpack!(block = builder.in_scope(arg_extent, span, block, |builder| {
             builder.args_and_body(block, fn_decl.inputs(), arg_extent, ast_block)
@@ -286,7 +285,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // First, gather up them all.
         let mut initialized_vars = HashSet::new();
         for block in self.cfg.basic_blocks.iter() {
-            for live_decls in block.live_decls.values() {
+            for live_decls in block.incoming_decls.values() {
                 for live_decl in live_decls {
                     initialized_vars.insert(live_decl.local());
                 }
