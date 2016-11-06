@@ -29,8 +29,11 @@ fn main() {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    yield_!(1);
-    yield_!(2);
+    if true {
+        yield_!(1);
+    } else {
+        yield_!(2);
+    };
     yield_!(3);
 }
 
