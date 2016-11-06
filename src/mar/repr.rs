@@ -665,6 +665,7 @@ pub enum Statement {
         lvalue: Lvalue,
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
+        self_: Lvalue,
         args: Vec<Operand>,
     },
     Drop {

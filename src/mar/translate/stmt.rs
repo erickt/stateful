@@ -66,15 +66,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            Statement::MethodCall { span, ref lvalue, ident, ref tys, ref args } => {
+            Statement::MethodCall { span, ref lvalue, ident, ref tys, ref self_, ref args } => {
                 let lvalue = lvalue.to_expr(&self.mar.local_decls);
+                let self_ = self_.to_expr(&self.mar.local_decls);
 
-                let mut args = args.iter()
+                let args = args.iter()
                     .map(|arg| arg.to_expr(&self.mar.local_decls));
 
                 let rvalue = self.ast_builder.expr()
                     .span(ident.span).method_call(ident.node)
-                    .span(span).build(args.next().unwrap())
+                    .span(span).build(self_)
                     .with_tys(tys.clone())
                     .with_args(args)
                     .build();

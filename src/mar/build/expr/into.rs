@@ -74,22 +74,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = self.as_operand(block, arg)))
                     .collect::<Vec<_>>();
 
-                self.initialize(block, expr_span, destination.clone());
+                self.initialize(block, expr_span, &destination);
                 self.cfg.push_call(block, expr_span, destination, fun, args);
                 block.unit()
             }
             ExprKind::MethodCall(ref ident, ref tys, ref args) => {
-                let args = args.into_iter()
+                let mut args = args.into_iter();
+
+                let self_ = args.next().unwrap();
+                let self_ = unpack!(block = self.as_lvalue(block, self_));
+
+                let args = args
                     .map(|arg| unpack!(block = self.as_operand(block, arg)))
                     .collect::<Vec<_>>();
 
-                self.initialize(block, expr_span, destination.clone());
+                self.initialize(block, expr_span, &destination);
                 self.cfg.push_method_call(
                     block,
                     expr_span,
                     destination,
                     *ident,
                     tys.clone(),
+                    self_,
                     args);
 
                 block.unit()
@@ -255,6 +261,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             let body_block_end = unpack!(
                 this.in_scope(extent, body.span, body_block, |this| {
                     let temp = this.temp(body.span, "temp_loop");
+                    this.initialize(block, body.span, &temp);
+
                     this.ast_block(temp, body_block, body)
                 })
             );

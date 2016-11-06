@@ -38,6 +38,7 @@ pub struct Builder<'a, 'b: 'a> {
 
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
+    var_indices: HashMap<ast::NodeId, Local>,
     local_decls: IndexVec<Local, LocalDecl>,
 
     /// cached block with the RETURN terminator
@@ -151,7 +152,8 @@ pub fn construct_fn(cx: &ExtCtxt,
     let mut block = START_BLOCK;
     unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
         // Declare the return pointer.
-        builder.temp(span, "return_pointer");
+        let temp = builder.temp(span, "return_pointer");
+        builder.initialize(block, span, &temp);
 
         unpack!(block = builder.in_scope(arg_extent, span, block, |builder| {
             builder.args_and_body(block, fn_decl.inputs(), arg_extent, ast_block)
@@ -258,6 +260,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             visibility_scope: ARGUMENT_VISIBILITY_SCOPE,
             loop_scopes: vec![],
             conditional_scopes: HashMap::new(),
+            var_indices: HashMap::new(),
             local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
@@ -299,9 +302,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         if !uninitialized_vars.is_empty() {
-            self.cx.span_err(
+            self.cx.span_warn(
                 self.fn_span,
-                &format!("uninitialized variables: {:?}", uninitialized_vars));
+                &format!("uninitialized variables? {:?}", uninitialized_vars));
         }
 
 

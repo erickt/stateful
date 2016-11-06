@@ -336,10 +336,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn initialize(&mut self,
                       block: BasicBlock,
                       span: Span,
-                      lvalue: Lvalue) {
+                      lvalue: &Lvalue) {
         debug!("initialize: block={:?} lvalue={:?}", block, lvalue);
 
-        match lvalue {
+        match *lvalue {
             Lvalue::Local(local) => {
                 if !self.is_initialized(local) {
                     self.initialize_decl(local);
@@ -362,7 +362,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                        rvalue: Rvalue) {
         debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
-        self.initialize(block, span, lvalue.clone());
+        self.initialize(block, span, lvalue);
         self.cfg.push_assign(block, span, lvalue, rvalue);
     }
 
@@ -539,31 +539,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             let locals = locals.into_iter().chain(scope.drops.iter().rev());
 
-            let live_decls = locals
-                .filter_map(|local| {
-                    // Make sure the scope is correct.
-                    let local_decl = &self.local_decls[*local];
-                    debug!("find_live_decls4: local={:?} {:?}", local, local_decl);
+            let mut live_decls = vec![];
+            
+            for local in locals {
+                // Make sure the scope is correct.
+                let local_decl = &self.local_decls[*local];
+                debug!("find_live_decls4: local={:?} {:?}", local, local_decl);
 
-                    if scope.visibility_scope != local_decl.source_info.scope {
-                        self.cx.span_bug(
-                            local_decl.source_info.span,
-                            &format!("incorrect scope: expected `{:?}`: {:?}",
-                                     scope.visibility_scope,
-                                     local_decl));
-                    }
+                if scope.visibility_scope != local_decl.source_info.scope {
+                    self.cx.span_bug(
+                        local_decl.source_info.span,
+                        &format!("incorrect scope: expected `{:?}`: {:?}",
+                                 scope.visibility_scope,
+                                 local_decl));
+                }
 
-                    if visited_decls.insert(local_decl.ident) {
-                        if scope.moved_decls.contains(local) {
-                            Some(LiveDecl::Moved(*local))
-                        } else {
-                            Some(LiveDecl::Active(*local))
-                        }
+                if visited_decls.insert(local_decl.ident) {
+                    let live_decl = if scope.moved_decls.contains(local) {
+                        LiveDecl::Moved(*local)
                     } else {
-                        None
-                    }
-                })
-                .collect::<Vec<_>>();
+                        LiveDecl::Active(*local)
+                    };
+
+                    live_decls.push(live_decl);
+                }
+            }
 
             debug!("find_live_decls5: scope={:?} decls={:?}",
                    scope.visibility_scope,
@@ -600,7 +600,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for scope in self.scopes.iter_mut().rev() {
             for drop in &scope.drops {
                 if local == *drop {
-                    self.cx.span_bug(
+                    self.cx.span_err(
                         span,
                         &format!("variable already scheduled for drop: {:?}", local));
                 }
@@ -639,7 +639,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn schedule_move(&mut self, span: Span, local: Local) {
         if !self.is_initialized(local) {
-            self.cx.span_bug(
+            self.cx.span_err(
                 span,
                 &format!("trying to move an uninitialized local {:?}?", local));
         }

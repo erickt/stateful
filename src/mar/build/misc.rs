@@ -12,7 +12,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn temp<T>(&mut self, span: Span, name: T) -> Lvalue
         where T: ToIdent,
     {
-        /*
         // Add a unique number to the name.
         let name = format!("{}{}", name.to_ident(), self.local_decls.len());
         let ident = name.to_ident();
@@ -33,10 +32,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             source_info: source_info,
         });
         let lvalue = Lvalue::Local(temp);
+        let extent = self.extent_of_innermost_scope();
+        self.schedule_drop(source_info.span, extent, &lvalue);
         debug!("temp: created temp {:?} with name {:?}", lvalue, name);
         lvalue
-        */
 
+        /*
         let source_info = SourceInfo {
             span: span,
             scope: self.visibility_scope,
@@ -54,6 +55,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("temp: created temp {:?}", lvalue);
 
         lvalue
+        */
     }
 
     pub fn unit_rvalue(&mut self) -> Rvalue {

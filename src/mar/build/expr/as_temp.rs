@@ -24,6 +24,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let this = self;
 
         let temp = this.temp(expr.span, "temp_expr");
+        this.initialize(block, expr.span, &temp);
+        let extent = this.extent_of_innermost_scope();
+        this.schedule_drop(expr.span, extent, &temp);
+
         let expr_span = expr.span;
 
         // Careful here not to cause an infinite cycle. If we always

@@ -28,6 +28,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
     }
+
+    pub fn mac_as_lvalue(&mut self,
+                         block: BasicBlock,
+                         mac: &ast::Mac) -> Option<BlockAnd<Lvalue>> {
+        if is_path(&mac.node.path, "moved") {
+            let expr = parse_mac(self.cx, mac);
+            Some(self.as_lvalue(block, &expr))
+        } else {
+            None
+        }
+    }
 }
 
 pub fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {

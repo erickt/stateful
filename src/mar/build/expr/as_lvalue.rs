@@ -9,6 +9,7 @@
 // except according to those terms.
 
 use mar::build::expr::category::Category;
+use mar::build::mac::{is_path, parse_mac};
 use mar::build::{BlockAndExtension, Builder, BlockAnd};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
@@ -87,6 +88,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             ExprKind::Path(..) => {
                 block.and(Lvalue::Static(expr.clone()))
+            }
+
+            ExprKind::Mac(ref mac) if is_path(&mac.node.path, "moved") => {
+                let expr = parse_mac(this.cx, mac);
+                this.as_lvalue(block, &expr)
             }
 
             ExprKind::Try(..) |

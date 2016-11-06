@@ -87,18 +87,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                              irrefutable_pat: &P<ast::Pat>,
                              initializer: &P<ast::Expr>)
                              -> BlockAnd<()> {
+        debug!("expr_into_pattern(pat={:?}, init={:?})", irrefutable_pat, initializer);
+
         // optimize the case of `let x = ...`
         match irrefutable_pat.node {
-            PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) if self.is_local(id) => {
+            PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
+                /*
                 let source_info = self.source_info(irrefutable_pat.span);
                 let local = self.declare_binding(
                     source_info,
                     mutability,
                     id.node,
                     None);
+                    */
 
                 //self.storage_live_for_bindings(block, &irrefutable_pat);
-                let lvalue = Lvalue::Local(local);
+                let lvalue = Lvalue::Local(self.var_indices[&irrefutable_pat.id]);
                 return self.into(lvalue, block, initializer);
             }
             _ => {}
@@ -121,6 +125,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                irrefutable_pat: &P<ast::Pat>,
                                initializer: &Lvalue)
                                -> BlockAnd<()> {
+        debug!("lvalue_into_pattern(pat={:?}, init={:?})", irrefutable_pat, initializer);
+
         match irrefutable_pat.node {
             PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
                 //let source_info = self.source_info(irrefutable_pat.span);
@@ -179,6 +185,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         source_info,
                         mutability,
                         id.node,
+                        pat.id,
                         ty.clone());
                 }
             }
@@ -252,6 +259,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                               source_info: SourceInfo,
                               mutability: ast::Mutability,
                               name: T,
+                              var_id: ast::NodeId,
                               var_ty: Option<P<ast::Ty>>) -> Local
         where T: ToIdent,
     {
@@ -269,6 +277,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
         let extent = self.extent_of_innermost_scope();
         self.schedule_drop(source_info.span, extent, &Lvalue::Local(var));
+        self.var_indices.insert(var_id, var);
 
         debug!("declare_binding: var={:?}", var);
 

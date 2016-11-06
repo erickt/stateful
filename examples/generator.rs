@@ -8,11 +8,10 @@
 use std::slice;
 use std::iter::Iterator;
 
-/*
 #[generator]
 fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
-    /*
     let mut iter = moved!(items).into_iter();
+    /*
     let item = Iterator::next(&mut iter);
     */
 }
@@ -20,22 +19,6 @@ fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
 fn main() {
     let items = &[1, 2, 3];
     for value in gen(items) {
-        println!("{}", value);
-    }
-}
-*/
-
-#[generator]
-fn gen() -> Box<Iterator<Item=usize>> {
-    yield_!(4);
-    /*
-    let mut iter = moved!(items).into_iter();
-    let item = Iterator::next(&mut iter);
-    */
-}
-
-fn main() {
-    for value in gen() {
         println!("{}", value);
     }
 }
