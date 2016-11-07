@@ -406,21 +406,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("initialize_decl: scope={:?} var={:?} ident={:?}", self.scopes.last().unwrap().id, var, ident);
         
         for scope in self.scopes.iter_mut().rev() {
-            if !scope.decls.contains(&var) {
-                continue;
-            }
-
-            debug!("initialize_decl: found scope at {:?}", scope.id);
-
             // If the scope is conditional, buffer it there instead of pushing it up the scope.
             if let Some(conditional_scope) = self.conditional_scopes.get_mut(&scope.id) {
                 debug!("initialize_decl: found cond scope at {:?}", scope.id);
+
                 conditional_scope.initialized_decls.last_mut().unwrap().insert(var);
 
                 return;
-            } else {
-                // Otherwise initialize it in this scope and keep moving up the stack.
+
+            // Otherwise initialize it in the stack that created the variable.
+            } else if scope.decls.contains(&var) {
+                debug!("initialize_decl: found scope at {:?}", scope.id);
+
                 scope.initialized_decls.insert(var);
+
                 return;
             }
         }
@@ -542,7 +541,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 debug!("find_live_decls: local={:?} decl={:?}", local, local_decl);
 
                 if scope.visibility_scope != local_decl.source_info.scope {
-                    self.cx.span_err(
+                    self.cx.span_warn(
                         local_decl.source_info.span,
                         &format!("incorrect scope: expected `{:?}`: {:?}",
                                  scope.visibility_scope,
@@ -646,26 +645,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    /*
-    pub fn add_decls_from_pats<'c, I>(&mut self, block: BasicBlock, pats: I)
-        where I: Iterator<Item=&'c P<ast::Pat>>,
-    {
-        let decls = pats
-            .flat_map(|pat| self.declare_bindings(pat, None))
-            .map(|local| LiveDecl::Active(local))
-            .collect::<Vec<_>>();
-
-        for decl in &decls {
-            // Make sure the local is initialized.
-            self.initialize_decl(decl.local());
-        }
-
-        self.cfg.block_data_mut(block).decls.push(
-            DeclScope::new(self.visibility_scope, decls)
-        );
-    }
-    */
-
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {
         struct Visitor<'a, 'b: 'a> {
             builder: &'a Builder<'a, 'b>,
@@ -711,7 +690,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         None
     }
-
 
     /// Given a span and this scope's visibility scope, make a SourceInfo.
     pub fn source_info(&self, span: Span) -> SourceInfo {
