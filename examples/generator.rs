@@ -28,7 +28,8 @@ fn main() {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    if true { } else { }
+    let i = true;
+    if i == true { } else { }
 }
 
 fn main() {
