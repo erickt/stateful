@@ -51,7 +51,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let outer_source_info = self.source_info(span);
         self.in_conditional_scope(span, |this| {
             for (arm, target) in arms.iter().zip(targets) {
-                this.next_conditional_scope();
+                this.next_conditional_scope(arm.body.span);
 
                 let scope = this.declare_bindings(
                     None,

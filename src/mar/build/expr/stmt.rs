@@ -20,7 +20,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                        |loop_scope| loop_scope.continue_block)
             }
             ExprKind::Break(label) => {
-                this.break_or_continue(expr_span, label, block, |loop_scope| {
+                this.break_or_continue(expr_span, label, block, |mut loop_scope| {
+                    loop_scope.might_break = true;
                     loop_scope.break_block
                 })
             }
@@ -105,16 +106,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             block: BasicBlock,
                             exit_selector: F)
                             -> BlockAnd<()>
-        where F: FnOnce(&LoopScope) -> BasicBlock
+        where F: FnOnce(&mut LoopScope) -> BasicBlock
     {
+        debug!("break_or_continue(block={:?})", block);
+
         if !self.is_in_loop() {
             self.cx.span_err(span, "cannot break outside of a loop");
         }
 
         let (exit_block, extent) = {
             let loop_scope = self.find_loop_scope(span, label);
-            (exit_selector(&loop_scope), loop_scope.extent)
+            (exit_selector(loop_scope), loop_scope.extent)
         };
+
+        debug!("break_or_continue(extent={:?}, exit_block={:?})", extent, exit_block);
+
 
         self.exit_scope(span, extent, block, exit_block);
         self.start_new_block(span, Some("AfterBreakOrContinue")).unit()

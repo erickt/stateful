@@ -221,31 +221,6 @@ pub struct LocalDecl {
     pub source_info: SourceInfo,
 }
 
-/*
-#[derive(Clone, Debug)]
-pub struct DeclScope {
-    scope: VisibilityScope,
-    decls: Vec<LiveDecl>,
-}
-
-impl DeclScope {
-    pub fn new(scope: VisibilityScope, decls: Vec<LiveDecl>) -> Self {
-        DeclScope {
-            scope: scope,
-            decls: decls,
-        }
-    }
-
-    pub fn scope(&self) -> VisibilityScope {
-        self.scope
-    }
-
-    pub fn decls(&self) -> &[LiveDecl] {
-        &self.decls
-    }
-}
-*/
-
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
     Active(Local),

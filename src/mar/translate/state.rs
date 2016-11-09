@@ -217,7 +217,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             let decl_pat = ast_builder.pat()
                 .tuple()
                 .with_pats(
-                    decls.iter().map(|&(_, name)| ast_builder.pat().id(name))
+                    decls.iter().map(|&(local, name)| {
+                        match self.mar.local_decls[local].mutability {
+                            ast::Mutability::Immutable => ast_builder.pat().id(name),
+                            ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
+                        }
+                    })
                 )
                 .build();
 
@@ -234,44 +239,4 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .with_pat(pat)
             .body().build_block(body)
     }
-
-    /*
-    fn state_pat(&self,
-                 block: BasicBlock,
-                 scope_decls: &[(VisibilityScope, Vec<(Local, ast::Ident)>)]) -> P<ast::Pat> {
-        let span = self.block_span(block);
-        let ast_builder = self.ast_builder.span(span);
-
-
-        if scope_decls.is_empty() {
-            ast_builder.pat().build_path(state_path)
-        } else {
-            let pats = scope_decls.iter().map(|&(scope, _)| {
-                ast_builder.pat().id(format!("scope{}", scope.index()))
-            });
-
-
-            /*
-            let pats = incoming_scope_decls.iter().map(|scope| {
-                ast_builder.pat().tuple()
-                    .with_pats(
-                        scope.iter().map(|&(decl, ident)| {
-                            let decl_data = self.mar.local_decl_data(decl);
-
-                            match decl_data.mutability {
-                                Mutability::Immutable => ast_builder.pat().id(ident),
-                                Mutability::Mutable => ast_builder.pat().mut_id(ident),
-                            }
-                        })
-                        )
-                    .build()
-                });
-                */
-
-            ast_builder.pat().enum_().build(state_path)
-                .with_pats(pats)
-                .build()
-        }
-    }
-    */
 }

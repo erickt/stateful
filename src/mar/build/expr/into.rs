@@ -12,14 +12,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      expr: &P<ast::Expr>) -> BlockAnd<()> {
         debug!("into_expr(destination={:?}, block={:?}, expr={:?})", destination, block, expr);
 
+        let this = self;
         let expr_span = expr.span;
+        let source_info = this.source_info(expr_span);
 
         match expr.node {
             ExprKind::Block(ref ast_block) => {
-                self.ast_block(destination, block, ast_block)
+                this.ast_block(destination, block, ast_block)
             }
             ExprKind::If(ref cond_expr, ref then_expr, ref else_expr) => {
-                self.expr_if(
+                this.expr_if(
                     destination,
                     block,
                     expr.span,
@@ -28,7 +30,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     else_expr)
             }
             ExprKind::Match(ref discriminant, ref arms) => {
-                self.match_expr(
+                this.match_expr(
                     destination,
                     expr.span,
                     block,
@@ -36,19 +38,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     arms)
             }
             ExprKind::Loop(ref body, label) => {
-                self.expr_loop(
+                this.expr_loop(
                     destination,
                     block,
-                    expr.span,
+                    source_info,
                     None,
                     body,
                     label)
             }
             ExprKind::While(ref cond_expr, ref body, label) => {
-                self.expr_loop(
+                this.expr_loop(
                     destination,
                     block,
-                    expr.span,
+                    source_info,
                     Some(&cond_expr),
                     body,
                     label)
@@ -59,37 +61,37 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 panic!("{:?} Should never reach this point - `desugar` should have desugared this.", expr);
             }
             ExprKind::Mac(ref mac) => {
-                match self.expr_mac(destination.clone(), block, mac) {
+                match this.expr_mac(destination.clone(), block, mac) {
                     Some(block) => block,
                     None => {
-                        let rvalue = unpack!(block = self.as_rvalue(block, expr));
-                        self.push_assign(block, expr_span, &destination, rvalue);
+                        let rvalue = unpack!(block = this.as_rvalue(block, expr));
+                        this.push_assign(block, expr_span, &destination, rvalue);
                         block.unit()
                     }
                 }
             }
             ExprKind::Call(ref fun, ref args) => {
-                let fun = unpack!(block = self.as_operand(block, fun));
+                let fun = unpack!(block = this.as_operand(block, fun));
                 let args = args.into_iter()
-                    .map(|arg| unpack!(block = self.as_rvalue(block, arg)))
+                    .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
-                self.initialize(block, expr_span, &destination);
-                self.cfg.push_call(block, expr_span, destination, fun, args);
+                this.initialize(block, expr_span, &destination);
+                this.cfg.push_call(block, expr_span, destination, fun, args);
                 block.unit()
             }
             ExprKind::MethodCall(ref ident, ref tys, ref args) => {
                 let mut args = args.into_iter();
 
                 let self_ = args.next().unwrap();
-                let self_ = unpack!(block = self.as_lvalue(block, self_));
+                let self_ = unpack!(block = this.as_lvalue(block, self_));
 
                 let args = args
-                    .map(|arg| unpack!(block = self.as_rvalue(block, arg)))
+                    .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
-                self.initialize(block, expr_span, &destination);
-                self.cfg.push_method_call(
+                this.initialize(block, expr_span, &destination);
+                this.cfg.push_method_call(
                     block,
                     expr_span,
                     destination,
@@ -107,7 +109,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Continue(..) |
             ExprKind::Break(..) |
             ExprKind::Ret(..) => {
-                self.stmt_expr(block, expr)
+                // As a difference from MIR, we need to make sure the destination is actually
+                // assigned.
+                //this.push_assign_unit(expr.span, block, &destination);
+                this.stmt_expr(block, expr)
             }
 
             // these are the cases that are more naturally handled by some other mode
@@ -133,8 +138,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     _ => true,
                 });
 
-                let rvalue = unpack!(block = self.as_rvalue(block, expr));
-                self.push_assign(block, expr_span, &destination, rvalue);
+                let rvalue = unpack!(block = this.as_rvalue(block, expr));
+                this.push_assign(block, expr_span, &destination, rvalue);
                 block.unit()
             }
 
@@ -142,7 +147,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Type(..) |
             ExprKind::Try(..) |
             ExprKind::Paren(..) => {
-                self.cx.span_bug(expr_span,
+                this.cx.span_bug(expr_span,
                                  &format!("not yet supported: {:?}", expr));
             }
         }
@@ -165,11 +170,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
 
         self.in_conditional_scope(span, |this| {
-            this.next_conditional_scope();
+            this.next_conditional_scope(span);
 
             then_block = unpack!(this.ast_block(destination.clone(), then_block, then_expr));
 
-            this.next_conditional_scope();
+            this.next_conditional_scope(span);
 
             else_block = if let Some(ref else_expr) = *else_expr {
                 unpack!(this.into(destination, else_block, else_expr))
@@ -205,7 +210,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn expr_loop(&mut self,
                  destination: Lvalue,
                  block: BasicBlock,
-                 span: Span,
+                 source_info: SourceInfo,
                  condition: Option<&P<ast::Expr>>,
                  body: &P<ast::Block>,
                  label: Option<ast::SpannedIdent>) -> BlockAnd<()> {
@@ -223,11 +228,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         //                         |                          |
         //                         +--------------------------+
 
-        let loop_block = self.start_new_block(body.span, Some("Loop"));
-        let exit_block = self.start_new_block(body.span, Some("LoopExit"));
+        let this = self;
+
+        let loop_block = this.start_new_block(source_info.span, Some("Loop"));
+
+        // The “return” value of the loop body must always be an unit, but we cannot
+        // reuse that as a “return” value of the whole loop expressions, because some
+        // loops are diverging (e.g. `loop {}`). Thus, we introduce a unit temporary as
+        // the destination for the loop body and assign the loop’s own “return” value
+        // immediately after the iteration is finished.
+        let tmp = this.temp(body.span, "temp_loop");
+        // FIXME(stateful): as another MIR divergence, we need to assign the return value
+        // in case we have a break.
+        this.push_assign_unit(body.span, loop_block, &tmp);
+
+        let exit_block = this.start_new_block(source_info.span, Some("LoopExit"));
 
         // start the loop
-        self.terminate(
+        this.terminate(
             body.span,
             block,
             TerminatorKind::Goto {
@@ -235,37 +253,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 end_scope: false,
             });
 
-        self.in_loop_scope(label, loop_block, exit_block, |this| {
-            // conduct the test, if necessary
-            let body_block;
-            if let Some(cond_expr) = condition {
-                // FIXME: This does not yet handle the expr having a transition.
+        let might_break = this.in_loop_scope(label, loop_block, exit_block, |this| {
+            //let extent = this.start_new_extent();
+            //let body_block_end = unpack!(this.in_scope(extent, source_info.span, loop_block, |this| {
+                // conduct the test, if necessary
+                let body_block;
+                if let Some(cond_expr) = condition {
+                    // This loop has a condition, ergo its exit_block is reachable.
+                    this.find_loop_scope(source_info.span, None).might_break = true;
 
-                let loop_block_end;
-                let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
-                body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
+                    let loop_block_end;
+                    let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
+                    body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
 
-                this.terminate(
-                    cond_expr.span,
-                    loop_block_end,
-                    TerminatorKind::If {
-                        cond: cond,
-                        targets: (body_block, exit_block),
-                    });
-            } else {
-                body_block = loop_block;
-            }
+                    this.terminate(
+                        cond_expr.span,
+                        loop_block_end,
+                        TerminatorKind::If {
+                            cond: cond,
+                            targets: (body_block, exit_block),
+                        });
+                } else {
+                    body_block = loop_block;
+                }
 
-            // execute the body, branching back to the test
-            let extent = this.start_new_extent();
-            let body_block_end = unpack!(
-                this.in_scope(extent, body.span, body_block, |this| {
-                    let temp = this.temp(body.span, "temp_loop");
-                    this.initialize(block, body.span, &temp);
-
-                    this.ast_block(temp, body_block, body)
-                })
-            );
+                // Execute the body, branching back to the test.
+                let body_block_end = unpack!(this.ast_block(tmp, body_block, body));
+            //}));
 
             this.terminate(
                 body.span,
@@ -275,16 +289,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     end_scope: true,
                 });
         });
-
-        // FIXME: is this needed?
-        /*
-        let live_decls = self.find_live_decls();
-        self.cfg.block_data_mut(exit_block).decls = live_decls.clone();
-        */
-
-        // `loop { ... }` has a type of `()`.
-        self.push_assign_unit(span, exit_block, &destination);
-
+        // If the loop may reach its exit_block, we assign an empty tuple to the
+        // destination to keep the MIR well-formed.
+        if might_break {
+            this.push_assign_unit(source_info.span, exit_block, &destination);
+        }
         exit_block.unit()
     }
 }
