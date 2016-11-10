@@ -30,9 +30,9 @@ fn main() {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    let mut i = false;
-    loop {
-        break;
+    let mut thing = true;
+    if thing {
+        thing = false
     }
 }
 

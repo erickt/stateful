@@ -312,7 +312,7 @@ pub enum TerminatorKind {
 
     /// jump to branch 0 if this lvalue evaluates to true
     If {
-        cond: Operand,
+        cond: Lvalue,
         targets: (BasicBlock, BasicBlock),
     },
 
