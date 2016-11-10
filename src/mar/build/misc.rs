@@ -36,26 +36,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.schedule_drop(source_info.span, extent, &lvalue);
         debug!("temp: created temp {:?} with name {:?}", lvalue, name);
         lvalue
-
-        /*
-        let source_info = SourceInfo {
-            span: span,
-            scope: self.visibility_scope,
-        };
-
-        // Add a unique number to the name.
-        let name = format!("{}{}", name.to_ident(), self.local_decls.len());
-        let local = self.declare_binding(
-            source_info,
-            ast::Mutability::Mutable,
-            name,
-            None);
-        let lvalue = Lvalue::Local(local);
-
-        debug!("temp: created temp {:?}", lvalue);
-
-        lvalue
-        */
     }
 
     pub fn unit_rvalue(&mut self) -> Rvalue {
