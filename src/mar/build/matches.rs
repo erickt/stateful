@@ -92,16 +92,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // optimize the case of `let x = ...`
         match irrefutable_pat.node {
             PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
-                /*
-                let source_info = self.source_info(irrefutable_pat.span);
-                let local = self.declare_binding(
-                    source_info,
-                    mutability,
-                    id.node,
-                    None);
-                    */
-
-                //self.storage_live_for_bindings(block, &irrefutable_pat);
                 let lvalue = Lvalue::Local(self.var_indices[&irrefutable_pat.id]);
                 return self.into(lvalue, block, initializer);
             }
@@ -131,11 +121,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         match irrefutable_pat.node {
             PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
-                //let source_info = self.source_info(irrefutable_pat.span);
-                //let local = self.declare_binding(source_info, mutability, id.node, None);
-                //let binding_source = Lvalue::Local(local);
-                //self.initialize(block, irrefutable_pat.span, binding_source);
-
                 let local = match *initializer {
                     Lvalue::Local(local) => local,
                     _ => {
@@ -144,14 +129,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 };
 
-                //self.initialize(block, irrefutable_pat.span, initializer.clone());
                 self.add_decl_to_block(block, LiveDecl::Active(local));
-
-                /*
-                let rvalue = Rvalue::Use(Operand::Consume(binding_source));
-
-                self.push_assign(block, source_info.span, initializer, rvalue);
-                */
 
                 block.unit()
             }
@@ -159,7 +137,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 span_bug!(
                     self.cx,
                     irrefutable_pat.span,
-                    "Canot handle pat {:?}",
+                    "Cannot handle pat {:?}",
                     irrefutable_pat)
             }
         }
@@ -194,67 +172,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             _ => {
                 self.cx.span_bug(
                     pat.span,
-                    &format!("Canot handle pat {:?}", pat))
+                    &format!("Cannot handle pat {:?}", pat))
             }
         }
         var_scope
-
-        /*
-        struct Visitor<'a, 'b: 'a, 'c: 'b> {
-            builder: &'a mut Builder<'b, 'c>,
-            new_vars: Vec<Local>,
-            ty: Option<P<ast::Ty>>,
-        }
-
-        impl<'a, 'b: 'a, 'c: 'b> visit::Visitor for Visitor<'a, 'b, 'c> {
-            fn visit_pat(&mut self, pat: &ast::Pat) {
-                match pat.node {
-                    PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
-                        // Consider only lower case identities as a variable.
-                        let id_str = id.node.name.as_str();
-                        let first_char = id_str.chars().next().unwrap();
-
-                        if first_char == first_char.to_ascii_lowercase() {
-                            let source_info = SourceInfo {
-                                span: pat.span,
-                                scope: self.builder.visibility_scope,
-                            };
-
-                            let var = self.builder.declare_binding(
-                                source_info,
-                                mutability,
-                                id.node,
-                                self.ty.clone(),
-                                );
-                            self.new_vars.push(var);
-                        }
-                    }
-                    PatKind::Ident(..) => {
-                        self.builder.cx.span_bug(
-                            pat.span,
-                            &format!("Canot handle pat {:?}", pat))
-                    }
-                    _ => { }
-                }
-
-                visit::walk_pat(self, pat);
-            }
-
-            fn visit_mac(&mut self, _mac: &ast::Mac) { }
-        }
-
-        let mut visitor = Visitor {
-            builder: self,
-            new_vars: vec![],
-            ty: ty,
-        };
-
-        visit::Visitor::visit_pat(&mut visitor, pat);
-
-        debug!("declare_bindings: {:?} => {:?}", pat, visitor.new_vars);
-
-        visitor.new_vars
-        */
     }
 
     pub fn declare_binding<T>(&mut self,
