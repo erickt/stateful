@@ -145,8 +145,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn declare_bindings(&mut self,
                             mut var_scope: Option<VisibilityScope>,
-                            _scope_span: Span,
-                            pat: &ast::Pat,
+                            scope_span: Span,
+                            pat: &P<ast::Pat>,
                             ty: &Option<P<ast::Ty>>) -> Option<VisibilityScope> {
         debug!("declare_bindings(scope={:?}, pat={:?}, ty={:?}", var_scope, pat, ty);
 
@@ -169,12 +169,40 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         ty.clone());
                 }
             }
-            _ => {
-                self.cx.span_bug(
-                    pat.span,
-                    &format!("Cannot handle pat {:?}", pat))
+
+            PatKind::Struct(_, ref subpatterns, _) => {
+                for field in subpatterns {
+                    var_scope = self.declare_bindings(var_scope, scope_span, &field.node.pat, &None);
+                }
+            }
+
+            PatKind::TupleStruct(_, ref subpatterns, _) |
+            PatKind::Tuple(ref subpatterns, _) => {
+                for subpattern in subpatterns {
+                    var_scope = self.declare_bindings(var_scope, scope_span, subpattern, &None);
+                }
+            }
+
+            PatKind::Slice(ref prefix, ref slice, ref suffix) => {
+                for subpattern in prefix.iter().chain(slice).chain(suffix) {
+                    var_scope = self.declare_bindings(var_scope, scope_span, subpattern, &None);
+                }
+            }
+
+            // These patterns don't contain any bindings
+            PatKind::Lit(_) |
+            PatKind::Path(_, _) |
+            PatKind::Range(_, _) |
+            PatKind::Wild => { }
+
+            PatKind::Ident(ast::BindingMode::ByRef(_), _, _) |
+            PatKind::Box(_) |
+            PatKind::Ref(_, _) |
+            PatKind::Mac(_) => {
+                span_bug!(self.cx, pat.span, "Cannot handle pat {:?}", pat)
             }
         }
+
         var_scope
     }
 
