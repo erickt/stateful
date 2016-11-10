@@ -1,4 +1,15 @@
+// Copyright 2015 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use mar::build::expr::category::Category;
+use mar::build::mac::{is_mac, parse_mac};
 use mar::build::{BlockAndExtension, Builder, BlockAnd};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
@@ -15,9 +26,27 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Path(..) => {
                 // Path operands don't need a temporary.
                 let operand = unpack!(block = this.as_lvalue(block, expr));
-                this.move_lvalue(expr.span, &operand);
+
+                // Only move this value if it's not `copied!(...)`.
+                if !this.copied_exprs.contains(&expr.id) {
+                    this.move_lvalue(expr.span, &operand);
+                }
+
                 block.and(Operand::Consume(operand))
             }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
+                let expr = parse_mac(this.cx, mac);
+                this.moved_exprs.insert(expr.id);
+                this.as_operand(block, &expr)
+            }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
+                let expr = parse_mac(this.cx, mac);
+                this.copied_exprs.insert(expr.id);
+                this.as_operand(block, &expr)
+            }
+
             /*
             ExprKind::AddrOf(..) => {
                 // `&x` operands don't need a temporary.

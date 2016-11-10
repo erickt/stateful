@@ -20,6 +20,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             _ => {
                 if is_path(&mac.node.path, "moved") {
                     let expr = parse_mac(self.cx, mac);
+                    self.moved_exprs.insert(expr.id);
+
+                    Some(self.into(destination, block, &expr))
+                } else if is_path(&mac.node.path, "copied") {
+                    let expr = parse_mac(self.cx, mac);
+                    self.copied_exprs.insert(expr.id);
 
                     Some(self.into(destination, block, &expr))
                 } else {
@@ -56,6 +62,10 @@ pub fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
     panictry!(parser.expect(&Token::Eof));
 
     expr
+}
+
+pub fn is_mac(mac: &ast::Mac, name: &str) -> bool {
+    is_path(&mac.node.path, name)
 }
 
 pub fn is_path(path: &ast::Path, name: &str) -> bool {

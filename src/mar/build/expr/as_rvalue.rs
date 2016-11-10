@@ -1,4 +1,5 @@
 use mar::build::expr::category::{Category, RvalueFunc};
+use mar::build::mac::{is_mac, parse_mac};
 use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
@@ -166,6 +167,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block = unpack!(this.stmt_expr(block, expr));
                 block.and(this.unit_rvalue())
             }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
+                let expr = parse_mac(this.cx, mac);
+                this.moved_exprs.insert(expr.id);
+                this.as_rvalue(block, &expr)
+            }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
+                let expr = parse_mac(this.cx, mac);
+                this.copied_exprs.insert(expr.id);
+                this.as_rvalue(block, &expr)
+            }
+
             ExprKind::Lit(..) |
             ExprKind::Block(..) |
             ExprKind::Match(..) |

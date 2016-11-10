@@ -10,10 +10,11 @@
 
 //! See docs in build/expr/mod.rs
 
-use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::build::expr::category::Category;
+use mar::build::mac::{is_mac, parse_mac};
+use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
-use syntax::ast;
+use syntax::ast::{self, ExprKind};
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -27,33 +28,49 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let expr_span = expr.span;
 
-        // Careful here not to cause an infinite cycle. If we always
-        // called `into`, then for lvalues like `x.f`, it would
-        // eventually fallback to us, and we'd loop. There's a reason
-        // for this: `as_temp` is the point where we bridge the "by
-        // reference" semantics of `as_lvalue` with the "by value"
-        // semantics of `into`, `as_operand`, `as_rvalue`, and (of
-        // course) `as_temp`.
-        match Category::of(&expr.node).unwrap() {
-            Category::Lvalue => {
-                let lvalue = unpack!(block = this.as_lvalue(block, expr));
-                let rvalue = Rvalue::Use(Operand::Consume(lvalue));
-                this.push_assign(block, expr_span, &temp, rvalue);
+        match expr.node {
+            ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
+                let expr = parse_mac(this.cx, mac);
+                this.moved_exprs.insert(expr.id);
+                this.as_temp(block, &expr)
             }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
+                let expr = parse_mac(this.cx, mac);
+                this.copied_exprs.insert(expr.id);
+                this.as_temp(block, &expr)
+            }
+
             _ => {
-                unpack!(block = this.into(temp.clone(), block, expr));
+                // Careful here not to cause an infinite cycle. If we always
+                // called `into`, then for lvalues like `x.f`, it would
+                // eventually fallback to us, and we'd loop. There's a reason
+                // for this: `as_temp` is the point where we bridge the "by
+                // reference" semantics of `as_lvalue` with the "by value"
+                // semantics of `into`, `as_operand`, `as_rvalue`, and (of
+                // course) `as_temp`.
+                match Category::of(&expr.node).unwrap() {
+                    Category::Lvalue => {
+                        let lvalue = unpack!(block = this.as_lvalue(block, expr));
+                        let rvalue = Rvalue::Use(Operand::Consume(lvalue));
+                        this.push_assign(block, expr_span, &temp, rvalue);
+                    }
+                    _ => {
+                        unpack!(block = this.into(temp.clone(), block, expr));
+                    }
+                }
+
+                /*
+                // In constants, temp_lifetime is None. We should not need to drop
+                // anything because no values with a destructor can be created in
+                // a constant at this time, even if the type may need dropping.
+                if let Some(temp_lifetime) = temp_lifetime {
+                    this.schedule_drop(expr_span, temp_lifetime, &temp, expr_ty);
+                }
+                */
+
+                block.and(temp)
             }
         }
-
-        /*
-        // In constants, temp_lifetime is None. We should not need to drop
-        // anything because no values with a destructor can be created in
-        // a constant at this time, even if the type may need dropping.
-        if let Some(temp_lifetime) = temp_lifetime {
-            this.schedule_drop(expr_span, temp_lifetime, &temp, expr_ty);
-        }
-        */
-
-        block.and(temp)
     }
 }

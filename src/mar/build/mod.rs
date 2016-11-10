@@ -43,6 +43,9 @@ pub struct Builder<'a, 'b: 'a> {
 
     /// cached block with the RETURN terminator
     cached_return_block: Option<BasicBlock>,
+
+    moved_exprs: HashSet<ast::NodeId>,
+    copied_exprs: HashSet<ast::NodeId>,
 }
 
 #[derive(Debug)]
@@ -169,78 +172,6 @@ pub fn construct_fn(cx: &ExtCtxt,
     }));
     assert_eq!(block, builder.return_block());
 
-/*
-
-        /*
-        // Create an initial scope for the function.
-        builder.push_scope(extent, span, block);
-
-        let source_info = SourceInfo {
-            span: span,
-            scope: builder.visibility_scope,
-        };
-
-        // Declare the return pointer.
-        builder.declare_binding(
-            source_info,
-            ast::Mutability::Immutable,
-            "return_",
-            None,
-        );
-        */
-
-        unpack!(block = builder.in_scope(span, block, |this| {
-            this.args_and_body(block, fn_decl.inputs(), ast_block)
-        }));
-
-        let return_block = builder.return_block();
-
-        // Make sure the return pointer was actually initialized.
-        // FIXME: The return pointer really shouldn't be considered active here, but I'm not sure
-        // how to fix that yet.
-        {
-            let end_decl_scopes = &builder.cfg.basic_blocks[return_block].decls;
-            if end_decl_scopes.len() != 1 {
-                cx.span_warn(
-                    span,
-                    &format!("end block has multiple scopes? {:#?}", end_decl_scopes));
-            }
-
-            let end_decls = end_decl_scopes.last().unwrap().decls();
-            if end_decls.len() != 1 {
-                cx.span_warn(
-                    span,
-                    &format!("end block has multiple decls? {:#?}", end_decls));
-            }
-
-            let return_decl = end_decls.last().unwrap();
-            if return_decl.local() != RETURN_POINTER {
-                cx.span_warn(
-                    span,
-                    &format!("end block decl is not return pointer? {:#?}", return_decl));
-            }
-
-            if return_decl.is_moved() {
-                cx.span_warn(
-                    span,
-                    &format!("return pointer has been moved? {:?}", return_decl));
-            }
-        }
-
-        builder.terminate(span, block, TerminatorKind::Goto {
-            target: return_block,
-            end_scope: true,
-        });
-
-        // The return value shouldn't be dropped when we pop the scope.
-        builder.schedule_move(span, RETURN_POINTER);
-
-        builder.pop_scope(extent, return_block);
-
-        builder.terminate(span, return_block, TerminatorKind::Return);
-    }
-    */
-
     builder.finish(fn_decl)
 }
 
@@ -263,6 +194,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
+            moved_exprs: HashSet::new(),
+            copied_exprs: HashSet::new(),
         };
 
         assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);

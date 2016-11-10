@@ -160,7 +160,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                cond_expr: &P<ast::Expr>,
                then_expr: &P<ast::Block>,
                else_expr: &Option<P<ast::Expr>>) -> BlockAnd<()> {
-        let operand = unpack!(block = self.as_lvalue(block, cond_expr));
+        let operand = unpack!(block = self.as_operand(block, cond_expr));
 
         let mut then_block = self.start_new_block(span, Some("Then"));
         let mut else_block = self.start_new_block(span, Some("Else"));
@@ -263,7 +263,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     this.find_loop_scope(source_info.span, None).might_break = true;
 
                     let loop_block_end;
-                    let cond = unpack!(loop_block_end = this.as_lvalue(loop_block, cond_expr));
+                    let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
                     body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
 
                     this.terminate(

@@ -30,9 +30,10 @@ fn main() {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    let mut thing = true;
-    if thing {
-        thing = false
+    let mut i = 0;
+    while copied!(i) < 5 {
+        println!("i: {}", i);
+        i += 1;
     }
 }
 

@@ -1,5 +1,6 @@
-use mar::build::{BlockAnd, BlockAndExtension, Builder};
+use mar::build::mac::{is_mac, parse_mac};
 use mar::build::scope::LoopScope;
+use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
 use syntax::codemap::Span;
@@ -58,6 +59,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Ret(ref returned_expr) => {
                 this.expr_ret(block, expr.span, returned_expr)
             }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
+                let expr = parse_mac(this.cx, mac);
+                this.moved_exprs.insert(expr.id);
+                this.stmt_expr(block, &expr)
+            }
+
+            ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
+                let expr = parse_mac(this.cx, mac);
+                this.copied_exprs.insert(expr.id);
+                this.stmt_expr(block, &expr)
+            }
+
             _ => {
                 let temp = this.temp(expr_span, "temp_stmt_expr");
                 unpack!(block = this.into(temp, block, expr));
