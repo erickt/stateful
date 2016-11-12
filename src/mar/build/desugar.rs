@@ -13,51 +13,34 @@ use syntax::util::small_vector::SmallVector;
 
 pub fn desugar_block(cx: &ExtCtxt,
                      state_machine_kind: StateMachineKind,
-                     block: P<ast::Block>) -> P<ast::Block> {
-    let mut expander = Expander::new(cx, state_machine_kind);
-    let mut assigner = Assigner { next_node_id: ast::NodeId::new(1) };
+                     fn_decl: FunctionDecl,
+                     block: P<ast::Block>) -> (FunctionDecl, P<ast::Block>) {
+    let mut desugar = Desugar {
+        cx: cx,
+        state_machine_kind: state_machine_kind,
+        next_node_id: ast::NodeId::new(1),
+    };
 
-    let expanded = expander.fold_block(block);
-    assigner.fold_block(expanded)
+    let fn_decl = FunctionDecl::new(
+        desugar.fold_ident(fn_decl.ident),
+        desugar.fold_fn_decl(fn_decl.fn_decl),
+        fn_decl.unsafety,
+        fn_decl.abi,
+        desugar.fold_generics(fn_decl.generics),
+    );
+
+    let block = desugar.fold_block(block);
+
+    (fn_decl, block)
 }
 
-struct Assigner {
-    pub next_node_id: ast::NodeId,
-}
-
-impl Folder for Assigner {
-    fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
-        assert_eq!(old_id, ast::DUMMY_NODE_ID);
-
-        let node_id = self.next_node_id;
-
-        let next_node_id = match self.next_node_id.as_usize().checked_add(1) {
-            Some(next_node_id) => ast::NodeId::new(next_node_id),
-            None => { panic!("ran out of node ids!") }
-        };
-        self.next_node_id = next_node_id;
-
-        node_id
-    }
-
-    fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
-        fold::noop_fold_mac(mac, self)
-    }
-}
-
-struct Expander<'a, 'b: 'a> {
+struct Desugar<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     state_machine_kind: StateMachineKind,
+    next_node_id: ast::NodeId,
 }
 
-impl<'a, 'b> Expander<'a, 'b> {
-    fn new(cx: &'a ExtCtxt<'b>, state_machine_kind: StateMachineKind) -> Self {
-        Expander {
-            cx: cx,
-            state_machine_kind: state_machine_kind,
-        }
-    }
-
+impl<'a, 'b> Desugar<'a, 'b> {
     fn fold_sub_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
         expr.map(|expr| fold::noop_fold_expr(expr, self))
     }
@@ -83,10 +66,23 @@ impl<'a, 'b> Expander<'a, 'b> {
             }
         }
     }
-
 }
 
-impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
+impl<'a, 'b: 'a> fold::Folder for Desugar<'a, 'b> {
+    fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
+        assert_eq!(old_id, ast::DUMMY_NODE_ID);
+
+        let node_id = self.next_node_id;
+
+        let next_node_id = match self.next_node_id.as_usize().checked_add(1) {
+            Some(next_node_id) => ast::NodeId::new(next_node_id),
+            None => { panic!("ran out of node ids!") }
+        };
+        self.next_node_id = next_node_id;
+
+        node_id
+    }
+
     fn fold_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
         expr.map(|expr| {
             match expr.node {
@@ -189,7 +185,7 @@ impl<'a, 'b: 'a> fold::Folder for Expander<'a, 'b> {
     }
 }
 
-pub fn is_try_path(path: &ast::Path) -> bool {
+fn is_try_path(path: &ast::Path) -> bool {
     let builder = AstBuilder::new();
     let yield_ = builder.path().id("try").build();
 
@@ -227,6 +223,11 @@ fn desugar_for_loop(pat: P<ast::Pat>,
     // iter.next()
     let iter_next = builder.expr().method_call("next")
         .id("__stateful_iter")
+        .build();
+
+    // moved!(iter.next())
+    let iter_next = builder.expr().mac().path().id("moved").build()
+        .expr().build(iter_next)
         .build();
 
     // ::std::option::Option::Some($pat)
@@ -378,7 +379,6 @@ fn parse_mac_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
 
     let mut parser = Parser::new(
         cx.parse_sess(),
-        cx.cfg().clone(),
         Box::new(rdr.clone()));
 
     let expr = panictry!(parser.parse_expr());
@@ -449,7 +449,7 @@ fn desugar_yield(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Expr> {
 ///     ...
 /// }
 /// ```
-pub fn desugar_await(cx: &ExtCtxt, future_expr: P<ast::Expr>) -> P<ast::Expr> {
+fn desugar_await(cx: &ExtCtxt, future_expr: P<ast::Expr>) -> P<ast::Expr> {
     quote_expr!(cx,
         {
             let mut await_result = ::std::option::Option::None;

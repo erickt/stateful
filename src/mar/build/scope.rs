@@ -16,7 +16,7 @@ tracks where a `break` and `continue` should go to.
 use mar::build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use mar::indexed_vec::Idx;
 use mar::repr::*;
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::mem;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -43,7 +43,7 @@ pub struct Scope {
     /// out empty but grows as variables are declared during the
     /// building process. This is a stack, so we always drop from the
     /// end of the vector (top of the stack) first.
-    drops: Vec<Local>,
+    drops: BTreeSet<Local>,
 
     moved_decls: HashSet<Local>,
 
@@ -191,7 +191,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("in_scope(extent={:?}, block={:?})", extent, block);
         self.push_scope(extent, span, block);
         let rv = unpack!(block = f(self));
-        unpack!(block = self.pop_scope(extent, block));
+        unpack!(block = self.pop_scope(extent, span, block));
         debug!("in_scope: exiting extent={:?} block={:?}", extent, block);
 
         /*
@@ -229,7 +229,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             decls: HashSet::new(),
             initialized_decls: HashSet::new(),
             moved_decls: HashSet::new(),
-            drops: vec![],
+            drops: BTreeSet::new(),
             conditionals: vec![],
         });
 
@@ -243,6 +243,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// match 1-to-1 with `push_scope`.
     pub fn pop_scope(&mut self,
                      extent: CodeExtent,
+                     span: Span,
                      block: BasicBlock) -> BlockAnd<()> {
         let scope = self.scopes.pop().unwrap();
         debug!("pop_scope: extent={:?} block={:?} scope={:#?}", extent, block, scope);
@@ -253,15 +254,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // add in any drops needed on the fallthrough path (any other
         // exiting paths, such as those that arise from `break`, will
         // have drops already)
-        for var in scope.drops.iter().rev() {
+        for local in scope.drops.iter().rev() {
+            // FIXME: Make sure we aren't double dropping a variable.
+            for scope in self.scopes.iter_mut().rev() {
+                if scope.drops.contains(&local) {
+                    span_err!(self.cx, span,
+                              "variable already scheduled for drop: {:?}",
+                              local);
+                }
+            }
+
             // If the variable has already been initialized, drop it. Otherwise we want the rust
             // warning if a variable hasn't been initialized, so just insert the declaration into
             // our block.
-            if !scope.initialized_decls.contains(var) {
-                //self.cfg.push_declare(block, *var);
+            if !scope.initialized_decls.contains(local) {
+                //self.cfg.push_declare(block, *local);
             }
 
-            drop_decl(&mut self.cfg, block, &scope, *var);
+            drop_decl(&mut self.cfg, block, &scope, *local);
         }
 
         debug!("pop_scope: remaining scopes={:#?}", self.scopes); 
@@ -331,16 +341,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                                         extent)),
             };
 
-        for scope in self.scopes.iter_mut().rev().take(popped_scopes) {
-            for var in &scope.drops {
+        for scope in self.scopes.iter().rev().take(popped_scopes) {
+            // FIXME: Make sure we aren't double dropping a variable.
+            for local in &scope.drops {
+                for scope in self.scopes.iter().rev().skip(popped_scopes) {
+                    if scope.drops.contains(&local) {
+                        span_err!(self.cx, span,
+                                  "variable already scheduled for drop: {:?}",
+                                  local);
+                    }
+                }
+
                 // If the variable has already been initialized, drop it. Otherwise we want the rust
                 // warning if a variable hasn't been initialized, so just insert the declaration into
                 // our block.
-                if !scope.initialized_decls.contains(var) {
+                if !scope.initialized_decls.contains(local) {
                     //self.cfg.push_declare(target, *var);
                 }
 
-                drop_decl(&mut self.cfg, target, scope, *var);
+                drop_decl(&mut self.cfg, target, scope, *local);
             }
         }
 
@@ -370,6 +389,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes[1].extent
     }
 
+    /// Mark the lvalue initialized. This assumes that the lvalue has been previously declared.
     pub fn initialize(&mut self,
                       block: BasicBlock,
                       span: Span,
@@ -380,14 +400,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             Lvalue::Local(local) => {
                 if !self.is_initialized(local) {
                     self.initialize_decl(local);
-                    self.cfg.push_declare(block, local);
                 }
             }
-            Lvalue::Projection(..) => {
-                self.cx.span_warn(span, "what does it mean to initialize a projection?");
-            }
-            Lvalue::Static(..) => {
-                self.cx.span_bug(span, "cannot initialize statics yet");
+            _ => {
+                span_bug!(self.cx, span, "cannot initialize yet: {:?}", lvalue);
             }
         }
     }
@@ -399,8 +415,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                        rvalue: Rvalue) {
         debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
-        self.initialize(block, span, lvalue);
-        self.cfg.push_assign(block, span, lvalue, rvalue);
+        match *lvalue {
+            Lvalue::Local(local) => {
+                if !self.is_initialized(local) {
+                    self.initialize_decl(local);
+                    self.cfg.push_declare(block, local);
+                }
+
+                self.cfg.push_assign(block, span, lvalue, rvalue);
+            }
+            _ => {
+                span_bug!(self.cx, span, "cannot assign yet: {:?}", lvalue)
+            }
+        }
     }
 
     pub fn push_assign_unit(&mut self,
@@ -615,14 +642,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         };
 
-        // FIXME: Make sure we aren't double dropping a localiable.
+        // FIXME: Make sure we aren't double dropping a variable.
         for scope in self.scopes.iter_mut().rev() {
-            for drop in &scope.drops {
-                if local == *drop {
-                    self.cx.span_err(
-                        span,
-                        &format!("variable already scheduled for drop: {:?}", local));
-                }
+            if scope.drops.contains(&local) {
+                span_err!(self.cx,
+                          span,
+                          "variable already scheduled for drop: {:?}",
+                          local);
             }
         }
 
@@ -633,9 +659,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         for scope in self.scopes.iter_mut().rev() {
-            let this_scope = scope.extent == extent;
-            if this_scope {
-                scope.drops.push(local);
+            if scope.extent == extent {
+                if !scope.drops.insert(local) {
+                    span_err!(self.cx,
+                              span,
+                              "variable already scheduled for drop: {:?}",
+                              local);
+
+                }
+
                 return;
             }
         }
@@ -728,7 +760,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 }
 
 fn drop_decl(cfg: &mut CFG, block: BasicBlock, scope: &Scope, var: Local) {
-    debug!("drop_decl: scope={:?} var={:?}", scope.id, var);
+    debug!("drop_decl(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
     let moved = scope.moved_decls.contains(&var);
     cfg.push_drop(block, var, moved);
 }

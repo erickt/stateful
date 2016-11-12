@@ -74,7 +74,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let_extent_stack.push(remainder_scope);
 
                         // Declare the bindings, which may cause a visibility scope.
-                        let scope = this.declare_bindings(None, stmt.span, &local.pat, &local.ty);
+                        let scope = this.declare_bindings(
+                            None,
+                            stmt.span,
+                            &local.pat,
+                            &local.ty);
 
                         // Evaluate the initializer, if present.
                         if let Some(ref init) = local.init {
@@ -121,7 +125,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // Finally, we pop all the let scopes before exiting out from teh scope of the block
             // itself.
             for extent in let_extent_stack.into_iter().rev() {
-                unpack!(block = this.pop_scope(extent, block));
+                unpack!(block = this.pop_scope(extent, ast_block.span, block));
             }
             // Restore the original visibility scope.
             this.visibility_scope = outer_visibility_scope;

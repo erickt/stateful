@@ -29,14 +29,26 @@ fn main() {
 */
 
 #[generator]
-fn gen() -> Box<Iterator<Item=usize>> {
-    for i in 0 .. 5 {
+fn gen((x, y): (usize, usize)) -> Box<Iterator<Item=usize>> {
+    let range = x..y;
+    /*
+    let iter = range.into_iter();
+
+    /*
+    loop {
+        let x = 1;
+        break;
+    }
+
+    for i in  {
         println!("i: {}", i);
     }
+    */
+    */
 }
 
 fn main() {
-    for value in gen() {
+    for value in gen((5, 10)) {
         println!("{}", value);
     }
 }

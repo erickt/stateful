@@ -7,19 +7,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         match *stmt {
             Statement::Expr(ref stmt) => vec![stmt.clone()],
             Statement::Declare(local) => {
+                let mut stmts = self.rename_shadowed_local(local).into_iter()
+                    .collect::<Vec<_>>();
+
                 let local_decl = self.mar.local_decl_data(local);
                 let ast_builder = self.ast_builder.span(local_decl.source_info.span);
-
-                let mut stmts = vec![];
-
-                if let Some(shadowed_decl) = local_decl.shadowed_decl {
-                    let shadowed_ident = self.shadowed_ident(shadowed_decl);
-
-                    stmts.push(
-                        ast_builder.stmt().let_id(shadowed_ident)
-                        .expr().id(local_decl.ident)
-                    );
-                }
 
                 let stmt_builder = match local_decl.mutability {
                     ast::Mutability::Mutable => {
@@ -34,6 +26,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     stmt_builder
                         .build_option_ty(local_decl.ty.clone())
                         .build()
+                );
+
+                stmts
+            }
+            Statement::Let { span, ref pat, ref lvalues, ref ty, ref rvalue } => {
+                let rvalue = rvalue.to_expr(&self.mar.local_decls);
+
+                // Rename shadowed variables.
+                let mut stmts = lvalues.iter()
+                    .filter_map(|&local| self.rename_shadowed_local(local))
+                    .collect::<Vec<_>>();
+
+                stmts.push(
+                    self.ast_builder.span(span).stmt().let_()
+                        .build(pat.clone())
+                        .build_option_ty(ty.clone())
+                        .expr().build(rvalue)
                 );
 
                 stmts
@@ -118,6 +127,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
+        }
+    }
+
+    fn rename_shadowed_local(&self, local: Local) -> Option<ast::Stmt> {
+        let local_decl = self.mar.local_decl_data(local);
+        let ast_builder = self.ast_builder.span(local_decl.source_info.span);
+
+        if let Some(shadowed_decl) = local_decl.shadowed_decl {
+            let shadowed_ident = self.shadowed_ident(shadowed_decl);
+
+            Some(ast_builder.stmt().let_id(shadowed_ident)
+                .expr().id(local_decl.ident)
+            )
+        } else {
+            None
         }
     }
 }

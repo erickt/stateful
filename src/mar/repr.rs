@@ -34,11 +34,11 @@ macro_rules! newtype_index {
 
 #[derive(Debug)]
 pub struct FunctionDecl {
-    ident: ast::Ident,
-    fn_decl: P<ast::FnDecl>,
-    unsafety: ast::Unsafety,
-    abi: abi::Abi,
-    generics: ast::Generics,
+    pub ident: ast::Ident,
+    pub fn_decl: P<ast::FnDecl>,
+    pub unsafety: ast::Unsafety,
+    pub abi: abi::Abi,
+    pub generics: ast::Generics,
 }
 
 impl FunctionDecl {
@@ -62,6 +62,10 @@ impl FunctionDecl {
 
     pub fn inputs(&self) -> &[ast::Arg] {
         &self.fn_decl.inputs
+    }
+
+    pub fn fn_decl(&self) -> &P<ast::FnDecl> {
+        &self.fn_decl
     }
 
     pub fn unsafety(&self) -> ast::Unsafety {
@@ -207,10 +211,19 @@ pub const RETURN_POINTER: Local = Local(0);
 
 #[derive(Debug, PartialEq)]
 pub struct LocalDecl {
+    /// `let mut x` vs `let x`.
+    ///
+    /// Temporaries and the return pointer are always mutable.
     pub mutability: ast::Mutability,
-    pub ident: ast::Ident,
+
+    /// Type of this local.
     pub ty: Option<P<ast::Ty>>,
-    pub shadowed_decl: Option<Local>,
+
+    /// Name of the local, used in debuginfo and pretty-printing.
+    ///
+    /// Note that function arguments can also have this set to `Some(_)`
+    /// to generate better debuginfo.
+    pub ident: ast::Ident,
 
     /// For user-declared variables, stores their source information.
     ///
@@ -219,6 +232,8 @@ pub struct LocalDecl {
     /// This is the primary way to differentiate between user-declared
     /// variables and compiler-generated temporaries.
     pub source_info: SourceInfo,
+
+    pub shadowed_decl: Option<Local>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -318,7 +333,7 @@ pub enum TerminatorKind {
 
     /// lvalue evaluates to some enum; jump depending on the branch
     Match {
-        discr: Lvalue,
+        discr: Operand,
         targets: Vec<Arm>,
     },
 
@@ -638,6 +653,15 @@ impl ToExpr for Constant {
 pub enum Statement {
     Expr(ast::Stmt),
     Declare(Local),
+    /// As opposed to MIR, we don't have an easy way breaking up irrefutable patterns, so instead
+    /// we'll add a dedicated statement for them when we are that hides their destructuring.
+    Let {
+        span: Span,
+        pat: P<ast::Pat>,
+        ty: Option<P<ast::Ty>>,
+        lvalues: Vec<Local>,
+        rvalue: Rvalue,
+    },
     Assign {
         span: Span,
         lvalue: Lvalue,
@@ -654,7 +678,7 @@ pub enum Statement {
         lvalue: Lvalue,
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
-        self_: Lvalue,
+        self_: Operand,
         args: Vec<Rvalue>,
     },
     Drop {

@@ -55,7 +55,6 @@ pub fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
 
     let mut parser = Parser::new(
         cx.parse_sess(),
-        cx.cfg().clone(),
         Box::new(rdr.clone()));
 
     let expr = panictry!(parser.parse_expr());

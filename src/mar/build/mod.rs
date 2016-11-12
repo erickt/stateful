@@ -39,6 +39,7 @@ pub struct Builder<'a, 'b: 'a> {
     extents: IndexVec<CodeExtent, CodeExtentData>,
 
     var_indices: HashMap<ast::NodeId, Local>,
+    ty_indices: HashMap<ast::NodeId, P<ast::Ty>>,
     local_decls: IndexVec<Local, LocalDecl>,
 
     /// cached block with the RETURN terminator
@@ -145,7 +146,11 @@ pub fn construct_fn(cx: &ExtCtxt,
                     span: Span,
                     fn_decl: FunctionDecl,
                     ast_block: P<ast::Block>) -> Mar {
-    let ast_block = desugar::desugar_block(cx, state_machine_kind, ast_block);
+    let (fn_decl, ast_block) = desugar::desugar_block(
+        cx,
+        state_machine_kind,
+        fn_decl,
+        ast_block);
 
     let mut builder = Builder::new(cx, span, state_machine_kind);
 
@@ -191,6 +196,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             loop_scopes: vec![],
             conditional_scopes: HashMap::new(),
             var_indices: HashMap::new(),
+            ty_indices: HashMap::new(),
             local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
@@ -208,9 +214,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn finish(self, fn_decl: FunctionDecl) -> Mar {
         for (index, block) in self.cfg.basic_blocks.iter().enumerate() {
             if block.terminator.is_none() {
-                self.cx.span_bug(
-                    self.fn_span,
-                    &format!("no terminator on block {:?}", index));
+                span_bug!(self.cx, self.fn_span, "no terminator on block {:?}", index);
             }
         }
 
@@ -234,9 +238,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         if !uninitialized_vars.is_empty() {
-            self.cx.span_warn(
+            span_warn!(
+                self.cx,
                 self.fn_span,
-                &format!("uninitialized variables? {:?}", uninitialized_vars));
+                "uninitialized variables? {:?}",
+                uninitialized_vars);
         }
 
 
@@ -258,36 +264,37 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      arguments: &[ast::Arg],
                      _argument_extent: CodeExtent,
                      ast_block: P<ast::Block>) -> BlockAnd<()> {
-        //self.schedule_drop(ast_block.span, extent, RETURN_POINTER);
-
         let mut scope = None;
         // Bind the argument patterns
-        for (index, arg) in arguments.iter().enumerate() {
-            // Function arguments always get the first Local indices after the return pointer
-            let lvalue = Lvalue::Local(Local::new(index + 1));
+        for arg in arguments.iter() {
+            scope = self.declare_bindings(
+                scope,
+                ast_block.span,
+                &arg.pat,
+                &Some(arg.ty.clone()));
 
-            scope = self.declare_bindings(scope, ast_block.span, &arg.pat, &Some(arg.ty.clone()));
-            unpack!(block = self.lvalue_into_pattern(block, &arg.pat, &lvalue));
+            {
+                let pat_locals = self.locals_from_pat(&arg.pat);
 
-            // FIXME(stateful): MIR does this, but I'm not sure if it's necessary we do it since we
-            // the arguments are already pulled out into locals.
-            /*
-            // Make sure we drop (parts of) the argument even when not matched on.
-            self.schedule_drop(arg.pat.span, argument_extent, &lvalue);
-            */
+                // Mark all the locals initialized.
+                for local in &pat_locals {
+                    self.initialize(block, arg.pat.span, &Lvalue::Local(*local));
+                }
+
+                let block_data = self.cfg.block_data_mut(block);
+                let incoming_decls = block_data.incoming_decls.entry(self.visibility_scope)
+                    .or_insert_with(Vec::new);
+
+                incoming_decls.extend(
+                    pat_locals.into_iter().map(LiveDecl::Active)
+                );
+            }
         }
 
         // Enter the argument pattern bindings visibility scope, if it exists.
         if let Some(visibility_scope) = scope {
             self.visibility_scope = visibility_scope;
         }
-
-        /*
-        // Register the arguments as declarations.
-        self.add_decls_from_pats(
-            block,
-            arguments.iter().map(|arg| &arg.pat));
-        */
 
         unpack!(block = self.ast_block(Lvalue::Local(RETURN_POINTER), block, &ast_block));
 

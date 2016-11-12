@@ -45,7 +45,6 @@ impl<'a, 'b> ExpandMac<'a, 'b> {
 
         let mut parser = Parser::new(
             self.cx.parse_sess(),
-            self.cx.cfg().clone(),
             Box::new(rdr));
 
         let ident = panictry!(parser.parse_ident());

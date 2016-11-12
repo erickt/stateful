@@ -84,7 +84,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let mut args = args.into_iter();
 
                 let self_ = args.next().unwrap();
-                let self_ = unpack!(block = this.as_lvalue(block, self_));
+                let self_ = unpack!(block = this.as_operand(block, self_));
 
                 let args = args
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
@@ -254,32 +254,29 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             });
 
         let might_break = this.in_loop_scope(label, loop_block, exit_block, |this| {
-            //let extent = this.start_new_extent();
-            //let body_block_end = unpack!(this.in_scope(extent, source_info.span, loop_block, |this| {
-                // conduct the test, if necessary
-                let body_block;
-                if let Some(cond_expr) = condition {
-                    // This loop has a condition, ergo its exit_block is reachable.
-                    this.find_loop_scope(source_info.span, None).might_break = true;
+            // conduct the test, if necessary
+            let body_block;
+            if let Some(cond_expr) = condition {
+                // This loop has a condition, ergo its exit_block is reachable.
+                this.find_loop_scope(source_info.span, None).might_break = true;
 
-                    let loop_block_end;
-                    let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
-                    body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
+                let loop_block_end;
+                let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
+                body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
 
-                    this.terminate(
-                        cond_expr.span,
-                        loop_block_end,
-                        TerminatorKind::If {
-                            cond: cond,
-                            targets: (body_block, exit_block),
-                        });
-                } else {
-                    body_block = loop_block;
-                }
+                this.terminate(
+                    cond_expr.span,
+                    loop_block_end,
+                    TerminatorKind::If {
+                        cond: cond,
+                        targets: (body_block, exit_block),
+                    });
+            } else {
+                body_block = loop_block;
+            }
 
-                // Execute the body, branching back to the test.
-                let body_block_end = unpack!(this.ast_block(tmp, body_block, body));
-            //}));
+            // Execute the body, branching back to the test.
+            let body_block_end = unpack!(this.ast_block(tmp, body_block, body));
 
             this.terminate(
                 body.span,

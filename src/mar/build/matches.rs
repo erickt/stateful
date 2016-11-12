@@ -17,9 +17,11 @@ use aster::ident::ToIdent;
 use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use std::ascii::AsciiExt;
+use std::collections::HashMap;
 use syntax::ast::{self, PatKind};
 use syntax::codemap::Span;
 use syntax::ptr::P;
+use syntax::visit::{self, Visitor};
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn match_expr(&mut self,
@@ -29,7 +31,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       discriminant: P<ast::Expr>,
                       arms: &[ast::Arm])
                       -> BlockAnd<()> {
-        let discriminant_lvalue = unpack!(block = self.as_lvalue(block, &discriminant));
+        let discriminant_lvalue = unpack!(block = self.as_operand(block, &discriminant));
 
         let targets = arms.iter()
             .map(|arm| {
@@ -53,18 +55,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             for (arm, target) in arms.iter().zip(targets) {
                 this.next_conditional_scope(arm.body.span);
 
-                let scope = this.declare_bindings(
-                    None,
-                    arm.body.span,
-                    &arm.pats[0],
-                    &None);
+                let extent = this.start_new_extent();
+                let body = unpack!(this.in_scope(extent, span, target.block, |this| {
+                    let scope = this.declare_bindings(
+                        None,
+                        arm.body.span,
+                        &arm.pats[0],
+                        &None);
 
-                // Re-enter the visibility scope we created the bindings in.
-                this.visibility_scope = scope.unwrap_or(this.visibility_scope);
 
-                let body = this.into(destination.clone(), target.block, &arm.body);
+                    // Re-enter the visibility scope we created the bindings in.
+                    this.visibility_scope = scope.unwrap_or(this.visibility_scope);
 
-                arm_bodies.push(unpack!(body));
+                    this.into(destination.clone(), target.block, &arm.body)
+                }));
+
+                arm_bodies.push(body);
             }
         });
 
@@ -92,7 +98,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // optimize the case of `let x = ...`
         match irrefutable_pat.node {
             PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
-                let lvalue = Lvalue::Local(self.var_indices[&irrefutable_pat.id]);
+                let local = self.var_indices[&irrefutable_pat.id];
+                let lvalue = Lvalue::Local(local);
+
                 return self.into(lvalue, block, initializer);
             }
             _ => {}
@@ -103,15 +111,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                  &lvalue)
     }
 
-    fn add_decl_to_block(&mut self, block: BasicBlock, live_decl: LiveDecl) {
-        debug!("add_decl_to_block(block={:?}, live_decl={:?}", block, live_decl);
-
-        let block_data = self.cfg.block_data_mut(block);
-        let incoming_decls = block_data.incoming_decls.entry(self.visibility_scope)
-            .or_insert_with(Vec::new);
-        incoming_decls.push(live_decl);
-    }
-
     pub fn lvalue_into_pattern(&mut self,
                                block: BasicBlock,
                                irrefutable_pat: &P<ast::Pat>,
@@ -119,28 +118,27 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                -> BlockAnd<()> {
         debug!("lvalue_into_pattern(pat={:?}, init={:?})", irrefutable_pat, initializer);
 
-        match irrefutable_pat.node {
-            PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
-                let local = match *initializer {
-                    Lvalue::Local(local) => local,
-                    _ => {
-                        span_bug!(self.cx, irrefutable_pat.span,
-                                  "initializer not local? {:?}", initializer)
-                    }
-                };
+        let span = irrefutable_pat.span;
+        let locals = self.locals_from_pat(irrefutable_pat);
 
-                self.add_decl_to_block(block, LiveDecl::Active(local));
-
-                block.unit()
-            }
-            _ => {
-                span_bug!(
-                    self.cx,
-                    irrefutable_pat.span,
-                    "Cannot handle pat {:?}",
-                    irrefutable_pat)
-            }
+        if locals.is_empty() {
+            span_bug!(self.cx, span, "no variables found in pattern: {:?}", irrefutable_pat);
         }
+
+        // Initialize all the locals.
+        for local in &locals {
+            self.initialize(block, span, &Lvalue::Local(*local));
+        }
+
+        self.cfg.push(block, Statement::Let {
+            span: span,
+            pat: irrefutable_pat.clone(),
+            ty: self.ty_indices.get(&irrefutable_pat.id).map(|ty| ty.clone()),
+            lvalues: locals,
+            rvalue: Rvalue::Use(Operand::Consume(initializer.clone())),
+        });
+
+        block.unit()
     }
 
     pub fn declare_bindings(&mut self,
@@ -149,6 +147,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             pat: &P<ast::Pat>,
                             ty: &Option<P<ast::Ty>>) -> Option<VisibilityScope> {
         debug!("declare_bindings(scope={:?}, pat={:?}, ty={:?}", var_scope, pat, ty);
+
+        // Cache the type of this pattern.
+        if let Some(ref ty) = *ty {
+            self.ty_indices.insert(pat.id, ty.clone());
+        }
 
         match pat.node {
             PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
@@ -172,20 +175,32 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             PatKind::Struct(_, ref subpatterns, _) => {
                 for field in subpatterns {
-                    var_scope = self.declare_bindings(var_scope, scope_span, &field.node.pat, &None);
+                    var_scope = self.declare_bindings(
+                        var_scope,
+                        scope_span,
+                        &field.node.pat,
+                        &None);
                 }
             }
 
             PatKind::TupleStruct(_, ref subpatterns, _) |
             PatKind::Tuple(ref subpatterns, _) => {
                 for subpattern in subpatterns {
-                    var_scope = self.declare_bindings(var_scope, scope_span, subpattern, &None);
+                    var_scope = self.declare_bindings(
+                        var_scope,
+                        scope_span,
+                        subpattern,
+                        &None);
                 }
             }
 
             PatKind::Slice(ref prefix, ref slice, ref suffix) => {
                 for subpattern in prefix.iter().chain(slice).chain(suffix) {
-                    var_scope = self.declare_bindings(var_scope, scope_span, subpattern, &None);
+                    var_scope = self.declare_bindings(
+                        var_scope,
+                        scope_span,
+                        subpattern,
+                        &None);
                 }
             }
 
@@ -206,17 +221,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         var_scope
     }
 
-    pub fn declare_binding<T>(&mut self,
-                              source_info: SourceInfo,
-                              mutability: ast::Mutability,
-                              name: T,
-                              var_id: ast::NodeId,
-                              var_ty: Option<P<ast::Ty>>) -> Local
+    fn declare_binding<T>(&mut self,
+                          source_info: SourceInfo,
+                          mutability: ast::Mutability,
+                          name: T,
+                          var_id: ast::NodeId,
+                          var_ty: Option<P<ast::Ty>>) -> Local
         where T: ToIdent,
     {
         let name = name.to_ident();
-        debug!("declare_binding(source_info={:?}, name={:?}, var_ty={:?})",
-               source_info, name, var_ty);
+        debug!("declare_binding(source_info={:?}, name={:?}, var_id={:?}, var_ty={:?})",
+               source_info,
+               name,
+               var_id,
+               var_ty);
 
         let shadowed_decl = self.find_local(name);
         let var = self.local_decls.push(LocalDecl {
@@ -233,6 +251,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("declare_binding: var={:?}", var);
 
         var
+    }
+
+    // Extract locals from a pattern. This must be run after `declare_bindings` on this pattern.
+    pub fn locals_from_pat(&self, pat: &P<ast::Pat>) -> Vec<Local> {
+        struct PatVisitor<'a> {
+            var_indices: &'a HashMap<ast::NodeId, Local>,
+            locals: Vec<Local>,
+        }
+
+        impl<'a> Visitor for PatVisitor<'a> {
+            fn visit_pat(&mut self, pat: &ast::Pat) {
+                if let Some(&local) = self.var_indices.get(&pat.id) {
+                    debug!("locals_from_pat: pat={:?} local={:?}", pat, local);
+                    self.locals.push(local);
+                }
+
+                visit::walk_pat(self, pat);
+            }
+        }
+
+        let mut visitor = PatVisitor {
+            var_indices: &self.var_indices,
+            locals: vec![],
+        };
+
+        visitor.visit_pat(pat);
+
+        visitor.locals
     }
 
     fn is_local(&self, id: ast::SpannedIdent) -> bool {

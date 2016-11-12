@@ -67,7 +67,7 @@ impl CFG {
                             lvalue: Lvalue,
                             ident: ast::SpannedIdent,
                             tys: Vec<P<ast::Ty>>,
-                            self_: Lvalue,
+                            self_: Operand,
                             args: Vec<Rvalue>) {
         self.push(block, Statement::MethodCall {
             span: span,
