@@ -76,7 +76,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
-                this.initialize(block, expr_span, &destination);
+                this.declare(block, expr_span, &destination);
                 this.cfg.push_call(block, expr_span, destination, fun, args);
                 block.unit()
             }
@@ -90,7 +90,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
-                this.initialize(block, expr_span, &destination);
+                this.declare(block, expr_span, &destination);
                 this.cfg.push_method_call(
                     block,
                     expr_span,

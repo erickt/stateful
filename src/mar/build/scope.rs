@@ -408,6 +408,25 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
+    pub fn declare(&mut self,
+                   block: BasicBlock,
+                   span: Span,
+                   lvalue: &Lvalue) {
+        debug!("push_assign: block={:?} lvalue={:?}", block, lvalue);
+
+        match *lvalue {
+            Lvalue::Local(local) => {
+                if !self.is_initialized(local) {
+                    self.initialize_decl(local);
+                    self.cfg.push_declare(block, local);
+                }
+            }
+            _ => {
+                span_bug!(self.cx, span, "cannot assign yet: {:?}", lvalue)
+            }
+        }
+    }
+
     pub fn push_assign(&mut self,
                        block: BasicBlock,
                        span: Span,

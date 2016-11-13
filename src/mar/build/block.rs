@@ -92,23 +92,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         if let Some(visibility_scope) = scope {
                             this.visibility_scope = visibility_scope;
                         }
-
-                        /*
-                        let decls = this.declare_bindings(&local.pat, local.ty.clone());
-
-                        if decls.is_empty() {
-                            this.cx.span_bug(stmt.span, "No decls found?")
-                        } else if decls.len() == 1 {
-                            let decl = decls[0];
-                            this.local_decls[decl].ty = local.ty.clone();
-
-                            if let Some(ref init) = local.init {
-                                block = unpack!(this.into(Lvalue::Local(decl), block, init));
-                            }
-                        } else {
-                            this.cx.span_bug(stmt.span, "Cannot handle multiple decls at the moment?")
-                        }
-                        */
                     }
                     StmtKind::Item(..) => {
                         this.cx.span_bug(stmt.span, "Cannot handle item declarations yet");

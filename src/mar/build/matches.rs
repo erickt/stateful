@@ -63,6 +63,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         &arm.pats[0],
                         &None);
 
+                    let pat_locals = this.locals_from_pat(&arm.pats[0]);
+
+                    for local in &pat_locals {
+                        this.initialize(block, arm.pats[0].span, &Lvalue::Local(*local));
+                    }
+
+                    {
+                        let block_data = this.cfg.block_data_mut(target.block);
+                        let incoming_decls = block_data.incoming_decls
+                            .entry(this.visibility_scope)
+                            .or_insert_with(Vec::new);
+
+                        incoming_decls.extend(
+                            pat_locals.into_iter().map(LiveDecl::Active)
+                        );
+                    }
 
                     // Re-enter the visibility scope we created the bindings in.
                     this.visibility_scope = scope.unwrap_or(this.visibility_scope);

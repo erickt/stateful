@@ -31,20 +31,18 @@ fn main() {
 #[generator]
 fn gen((x, y): (usize, usize)) -> Box<Iterator<Item=usize>> {
     let range = x..y;
-    /*
-    let iter = range.into_iter();
+    let mut iter = range.into_iter();
 
-    /*
     loop {
-        let x = 1;
-        break;
+        match copied!(iter).next() {
+            Some(item) => {
+                println!("item: {}", item);
+            }
+            None => {
+                break;
+            }
+        }
     }
-
-    for i in  {
-        println!("i: {}", i);
-    }
-    */
-    */
 }
 
 fn main() {
