@@ -340,63 +340,65 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let len = self.scopes.len();
         assert!(scope_count < len, "should not use `exit_scope` to pop ALL scopes");
 
-        for index in (len - scope_count .. len).rev() {
-            let b = self.start_new_block(span, Some("ExitDrop"));
-            self.terminate(
-                span,
-                block,
-                TerminatorKind::Goto {
-                    target: b,
-                    end_scope: true,
-                }
-            );
-            block = b;
+        {
+            for scope_index in (len - scope_count + 1 .. len).rev() {
+                block = {
+                    let b = self.start_new_block_at(span, Some("Drop"), scope_index + 1);
+                    self.terminate(span, block, TerminatorKind::Goto { target: b, end_scope: true });
+                    b
+                };
 
-            let scope = &self.scopes[index];
+                let scope = &self.scopes[scope_index];
+                debug!("exit_scope: dropping: block={:?} scope={:#?}", block, scope);
 
-            for local in scope.drops.iter().rev() {
-                // Make sure we aren't double dropping a variable.
-                for scope in &self.scopes[..index] {
-                    if scope.drops.contains(&local) {
-                        span_err!(self.cx, span,
-                                  "variable already scheduled for drop: {:?}",
-                                  local);
+                for local in &scope.drops {
+                    // FIXME: Make sure we aren't double dropping a variable.
+                    for scope in self.scopes[..scope_index].iter().rev() {
+                        if scope.drops.contains(&local) {
+                            span_err!(self.cx, span,
+                                      "variable already scheduled for drop: {:?}",
+                                      local);
+                        }
+                    }
+
+                    // If the variable has already been initialized, drop it. Otherwise we want the rust
+                    // warning if a variable hasn't been initialized, so just insert the declaration into
+                    // our block.
+                    if scope.initialized_decls.contains(local) {
+                        drop_decl(&mut self.cfg, block, scope, *local);
                     }
                 }
-
-                // If the variable has already been initialized, drop it. Otherwise we want the rust
-                // warning if a variable hasn't been initialized, so just insert the declaration into
-                // our block.
-                if !scope.initialized_decls.contains(local) {
-                    //self.cfg.push_declare(target, *var);
-                }
-
-                drop_decl(&mut self.cfg, block, scope, *local);
             }
         }
 
         /*
-        for scope in self.scopes.iter().rev().take(popped_scopes) {
-            debug!("exit_scope: dropping: {:#?}", scope);
+        {
+            let (remaining_scopes, popped_scopes) = self.scopes.split_at(scope_count);
 
-            // FIXME: Make sure we aren't double dropping a variable.
-            for local in scope.drops.iter().rev() {
-                for scope in self.scopes.iter().rev().skip(popped_scopes) {
-                    if scope.drops.contains(&local) {
-                        span_err!(self.cx, span,
-                                  "variable already scheduled for drop: {:?}",
-                                  local);
+            for scope in popped_scopes.iter().rev() {
+                debug!("exit_scope: dropping: {:#?}", scope);
+
+                let b = self.start_new_block_at(
+
+                for local in &scope.drops {
+                    // FIXME: Make sure we aren't double dropping a variable.
+                    for scope in remaining_scopes.iter().rev() {
+                        if scope.drops.contains(&local) {
+                            span_err!(self.cx, span,
+                                      "variable already scheduled for drop: {:?}",
+                                      local);
+                        }
                     }
-                }
 
-                // If the variable has already been initialized, drop it. Otherwise we want the rust
-                // warning if a variable hasn't been initialized, so just insert the declaration into
-                // our block.
-                if !scope.initialized_decls.contains(local) {
-                    //self.cfg.push_declare(target, *var);
-                }
+                    // If the variable has already been initialized, drop it. Otherwise we want the rust
+                    // warning if a variable hasn't been initialized, so just insert the declaration into
+                    // our block.
+                    if !scope.initialized_decls.contains(local) {
+                        //self.cfg.push_declare(target, *var);
+                    }
 
-                drop_decl(&mut self.cfg, target, scope, *local);
+                    drop_decl(&mut self.cfg, target, scope, *local);
+                }
             }
         }
         */
@@ -408,6 +410,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 target: target,
                 end_scope: true,
             });
+    }
+
+    fn start_new_block_at(&mut self,
+                          span: Span,
+                          name: Option<&'static str>,
+                          scope: usize) -> BasicBlock {
+        let decls = self.find_live_decls_at(scope);
+        debug!("start_new_block_at(name={:?}, scope={:?}, decls={:?})", name, scope, decls); 
+
+        let block = self.cfg.start_new_block(span, name, decls);
+        debug!("start_new_block_at: block={:?}", block); 
+
+        block
     }
 
     pub fn extent_of_innermost_scope(&self) -> CodeExtent {
@@ -608,7 +623,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// This function constructs a vector of all of the variables in scope, and returns if the
     /// variables are currently shadowed.
     pub fn find_live_decls(&self) -> BTreeMap<VisibilityScope, Vec<LiveDecl>> {
-        debug!("find_live_decls: decls={:#?}", self.local_decls);
+        self.find_live_decls_at(self.scopes.len())
+    }
+
+    pub fn find_live_decls_at(&self, index: usize) -> BTreeMap<VisibilityScope, Vec<LiveDecl>> {
+        debug!("find_live_decls: scope={:?}, decls={:#?}", index, self.local_decls);
         debug!("find_live_decls: scopes={:#?}", self.scopes);
 
         let mut scope_decls = BTreeMap::new();
@@ -618,7 +637,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // scope backwards. If this is the first time we've seen a variable with this name, we just
         // add it to our list. However, if we've seen it before, then we need to rename it so that
         // it'll be accessible once the shading variable goes out of scope.
-        for scope in self.scopes.iter().rev() {
+        for scope in self.scopes[..index].iter().rev() {
             debug!("find_live_decls: current scope decls={:?}", scope_decls);
 
             // First, add any conditionally initialized variables. We'll just grab the last one

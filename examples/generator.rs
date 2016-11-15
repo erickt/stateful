@@ -32,17 +32,13 @@ fn main() {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    let name1 = Thing;
+    let range = 1..5;
 
     /*
     let mut iter = range.into_iter();
-    */
 
     loop {
-        break;
-
-        /*
-        match copied!(iter).next() {
+        match ::std::iter::Iterator::next(&mut iter) {
             Some(item) => {
                 println!("item: {}", item);
             }
@@ -50,10 +46,26 @@ fn gen() -> Box<Iterator<Item=usize>> {
                 break;
             }
         }
-        */
     }
+    */
 
-    let name2 = name1;
+    /*
+    for item in range {
+        println!("item: {}", item);
+    }
+    */
+
+    {
+        let mut __stateful_iter = ::std::iter::IntoIterator::into_iter(range);
+        loop  {
+            match ::std::iter::Iterator::next(&mut __stateful_iter) {
+                ::std::option::Option::Some(item) => {
+                    println!("item: {}" , item);
+                }
+                ::std::option::Option::None => break ,
+            }
+        }
+    }
 }
 
 fn main() {

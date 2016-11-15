@@ -220,15 +220,21 @@ fn desugar_for_loop(pat: P<ast::Pat>,
         .with_arg(iter.clone())
         .build();
 
-    // iter.next()
-    let iter_next = builder.expr().method_call("next")
-        .id("__stateful_iter")
+    // ::std::iter::Iterator::next(&mut $into_iter)
+    let iter_next = builder.expr().call()
+        .path()
+            .global()
+            .ids(&["std", "iter", "Iterator", "next"])
+            .build()
+        .arg().mut_ref().id("__stateful_iter")
         .build();
 
+    /*
     // moved!(iter.next())
     let iter_next = builder.expr().mac().path().id("moved").build()
         .expr().build(iter_next)
         .build();
+    */
 
     // ::std::option::Option::Some($pat)
     let some_pat = builder.pat().enum_()
