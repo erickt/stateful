@@ -10,6 +10,8 @@
 use std::slice;
 use std::iter::Iterator;
 
+struct Thing;
+
 /*
 #[generator]
 fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
@@ -29,11 +31,17 @@ fn main() {
 */
 
 #[generator]
-fn gen((x, y): (usize, usize)) -> Box<Iterator<Item=usize>> {
-    let range = x..y;
+fn gen() -> Box<Iterator<Item=usize>> {
+    let name1 = Thing;
+
+    /*
     let mut iter = range.into_iter();
+    */
 
     loop {
+        break;
+
+        /*
         match copied!(iter).next() {
             Some(item) => {
                 println!("item: {}", item);
@@ -42,11 +50,14 @@ fn gen((x, y): (usize, usize)) -> Box<Iterator<Item=usize>> {
                 break;
             }
         }
+        */
     }
+
+    let name2 = name1;
 }
 
 fn main() {
-    for value in gen((5, 10)) {
+    for value in gen() {
         println!("{}", value);
     }
 }

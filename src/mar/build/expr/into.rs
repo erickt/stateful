@@ -231,17 +231,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let this = self;
 
         let loop_block = this.start_new_block(source_info.span, Some("Loop"));
-
-        // The “return” value of the loop body must always be an unit, but we cannot
-        // reuse that as a “return” value of the whole loop expressions, because some
-        // loops are diverging (e.g. `loop {}`). Thus, we introduce a unit temporary as
-        // the destination for the loop body and assign the loop’s own “return” value
-        // immediately after the iteration is finished.
-        let tmp = this.temp(body.span, "temp_loop");
-        // FIXME(stateful): as another MIR divergence, we need to assign the return value
-        // in case we have a break.
-        this.push_assign_unit(body.span, loop_block, &tmp);
-
         let exit_block = this.start_new_block(source_info.span, Some("LoopExit"));
 
         // start the loop
@@ -274,6 +263,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             } else {
                 body_block = loop_block;
             }
+
+            // The “return” value of the loop body must always be an unit, but we cannot
+            // reuse that as a “return” value of the whole loop expressions, because some
+            // loops are diverging (e.g. `loop {}`). Thus, we introduce a unit temporary as
+            // the destination for the loop body and assign the loop’s own “return” value
+            // immediately after the iteration is finished.
+            let tmp = this.temp(body.span, "temp_loop");
+            // FIXME(stateful): as another MIR divergence, we need to assign the return value
+            // in case we have a break.
+            this.push_assign_unit(body.span, loop_block, &tmp);
 
             // Execute the body, branching back to the test.
             let body_block_end = unpack!(this.ast_block(tmp, body_block, body));

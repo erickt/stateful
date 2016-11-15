@@ -330,20 +330,57 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn exit_scope(&mut self,
                       span: Span,
                       extent: CodeExtent,
-                      block: BasicBlock,
+                      mut block: BasicBlock,
                       target: BasicBlock) {
         debug!("exit_scope(extent={:?}, block={:?}, target={:?})", extent, block, target);
+        let scope_count = 1 + self.scopes.iter().rev().position(|scope| scope.extent == extent)
+                                                      .unwrap_or_else(||{
+            span_bug!(self.cx, span, "extent {:?} does not enclose", extent)
+        });
+        let len = self.scopes.len();
+        assert!(scope_count < len, "should not use `exit_scope` to pop ALL scopes");
 
-        let popped_scopes =
-            match self.scopes.iter().rev().position(|scope| scope.extent == extent) {
-                Some(p) => p + 1,
-                None => self.cx.span_bug(span, &format!("extent {:?} does not enclose",
-                                                        extent)),
-            };
+        for index in (len - scope_count .. len).rev() {
+            let b = self.start_new_block(span, Some("ExitDrop"));
+            self.terminate(
+                span,
+                block,
+                TerminatorKind::Goto {
+                    target: b,
+                    end_scope: true,
+                }
+            );
+            block = b;
 
+            let scope = &self.scopes[index];
+
+            for local in scope.drops.iter().rev() {
+                // Make sure we aren't double dropping a variable.
+                for scope in &self.scopes[..index] {
+                    if scope.drops.contains(&local) {
+                        span_err!(self.cx, span,
+                                  "variable already scheduled for drop: {:?}",
+                                  local);
+                    }
+                }
+
+                // If the variable has already been initialized, drop it. Otherwise we want the rust
+                // warning if a variable hasn't been initialized, so just insert the declaration into
+                // our block.
+                if !scope.initialized_decls.contains(local) {
+                    //self.cfg.push_declare(target, *var);
+                }
+
+                drop_decl(&mut self.cfg, block, scope, *local);
+            }
+        }
+
+        /*
         for scope in self.scopes.iter().rev().take(popped_scopes) {
+            debug!("exit_scope: dropping: {:#?}", scope);
+
             // FIXME: Make sure we aren't double dropping a variable.
-            for local in &scope.drops {
+            for local in scope.drops.iter().rev() {
                 for scope in self.scopes.iter().rev().skip(popped_scopes) {
                     if scope.drops.contains(&local) {
                         span_err!(self.cx, span,
@@ -362,6 +399,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 drop_decl(&mut self.cfg, target, scope, *local);
             }
         }
+        */
 
         self.terminate(
             span,
