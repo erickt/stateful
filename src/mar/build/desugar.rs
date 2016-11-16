@@ -18,18 +18,21 @@ pub fn desugar_block(cx: &ExtCtxt,
     let mut desugar = Desugar {
         cx: cx,
         state_machine_kind: state_machine_kind,
+    };
+
+    let mut assigner = AssignIds {
         next_node_id: ast::NodeId::new(1),
     };
 
     let fn_decl = FunctionDecl::new(
-        desugar.fold_ident(fn_decl.ident),
-        desugar.fold_fn_decl(fn_decl.fn_decl),
+        assigner.fold_ident(desugar.fold_ident(fn_decl.ident)),
+        assigner.fold_fn_decl(desugar.fold_fn_decl(fn_decl.fn_decl)),
         fn_decl.unsafety,
         fn_decl.abi,
-        desugar.fold_generics(fn_decl.generics),
+        assigner.fold_generics(desugar.fold_generics(fn_decl.generics)),
     );
 
-    let block = desugar.fold_block(block);
+    let block = assigner.fold_block(desugar.fold_block(block));
 
     (fn_decl, block)
 }
@@ -37,7 +40,6 @@ pub fn desugar_block(cx: &ExtCtxt,
 struct Desugar<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     state_machine_kind: StateMachineKind,
-    next_node_id: ast::NodeId,
 }
 
 impl<'a, 'b> Desugar<'a, 'b> {
@@ -48,12 +50,12 @@ impl<'a, 'b> Desugar<'a, 'b> {
     pub fn expr_mac(&mut self, mac: &ast::Mac) -> Option<P<ast::Expr>> {
         match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
             (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
-                let expr = self.fold_sub_expr(expr);
-                Some(desugar_yield(self.cx, expr))
+                let expr = desugar_yield(self.cx, expr);
+                Some(self.fold_sub_expr(expr))
             }
             (StateMachineKind::Async, Some(transition::Transition::Await(expr))) => {
-                let expr = self.fold_sub_expr(expr);
-                Some(desugar_await(self.cx, expr))
+                let expr = desugar_await(self.cx, expr);
+                Some(self.fold_sub_expr(expr))
             }
             _ => {
                 if is_try_path(&mac.node.path) {
@@ -69,20 +71,6 @@ impl<'a, 'b> Desugar<'a, 'b> {
 }
 
 impl<'a, 'b: 'a> fold::Folder for Desugar<'a, 'b> {
-    fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
-        assert_eq!(old_id, ast::DUMMY_NODE_ID);
-
-        let node_id = self.next_node_id;
-
-        let next_node_id = match self.next_node_id.as_usize().checked_add(1) {
-            Some(next_node_id) => ast::NodeId::new(next_node_id),
-            None => { panic!("ran out of node ids!") }
-        };
-        self.next_node_id = next_node_id;
-
-        node_id
-    }
-
     fn fold_expr(&mut self, expr: P<ast::Expr>) -> P<ast::Expr> {
         expr.map(|expr| {
             match expr.node {
@@ -182,6 +170,30 @@ impl<'a, 'b: 'a> fold::Folder for Desugar<'a, 'b> {
                 fold::noop_fold_mac(mac, self)
             }
         }
+    }
+}
+
+struct AssignIds {
+    next_node_id: ast::NodeId,
+}
+
+impl fold::Folder for AssignIds {
+    fn new_id(&mut self, old_id: ast::NodeId) -> ast::NodeId {
+        assert_eq!(old_id, ast::DUMMY_NODE_ID);
+
+        let node_id = self.next_node_id;
+
+        let next_node_id = match self.next_node_id.as_usize().checked_add(1) {
+            Some(next_node_id) => ast::NodeId::new(next_node_id),
+            None => { panic!("ran out of node ids!") }
+        };
+        self.next_node_id = next_node_id;
+
+        node_id
+    }
+
+    fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
+        fold::noop_fold_mac(mac, self)
     }
 }
 
