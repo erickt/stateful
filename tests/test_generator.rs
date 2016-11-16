@@ -1,10 +1,131 @@
 #![feature(plugin)]
 #![cfg_attr(feature = "impl_trait", feature(conservative_impl_trait))]
 #![plugin(stateful)]
-#![allow(unused_variables)]
-#![allow(unused_mut)]
+#![allow(dead_code)]
 #![allow(non_shorthand_field_patterns)]
+#![allow(unused_mut)]
+#![allow(unused_variables)]
 
+use std::iter::{IntoIterator, Iterator};
+use std::marker::PhantomData;
+
+struct Empty<T>(PhantomData<T>);
+
+impl<T> Empty<T> {
+    fn new() -> Self {
+        Empty(PhantomData)
+    }
+}
+
+impl<T> IntoIterator for Empty<T> {
+    type Item = T;
+    type IntoIter = EmptyIterator<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        EmptyIterator::new()
+    }
+}
+
+struct EmptyIterator<T>(PhantomData<T>);
+
+impl<T> EmptyIterator<T> {
+    fn new() -> Self {
+        EmptyIterator(PhantomData)
+    }
+}
+
+impl<T> Iterator for EmptyIterator<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        None
+    }
+}
+
+#[test]
+fn test_empty() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_empty_if() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        if true { }
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_empty_if_let() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        let items = Empty::<usize>::new();
+        let mut iter = items.into_iter();
+        if let Some(_) = copied!(iter).next() { }
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_empty_loop() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        loop {
+            break;
+        }
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_empty_while() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        while false { }
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_empty_while_let() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        let items = Empty::<usize>::new();
+        let mut iter = items.into_iter();
+        while let Some(_) = copied!(iter).next() { }
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+#[test]
+fn test_empty_for() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        let iter = Empty::<usize>::new();
+        for _ in iter { }
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+/*
 #[test]
 fn test_ints() {
     #[generator]
@@ -220,3 +341,4 @@ fn test_if_yield() {
     assert_eq!(gen.next(), Some(3));
     assert_eq!(gen.next(), None);
 }
+*/
