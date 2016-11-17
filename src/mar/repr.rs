@@ -350,7 +350,7 @@ pub enum TerminatorKind {
     Suspend {
         // FIXME: We don't yet support resuming the coroutine with a value yet.
         // lvalue: Lvalue,
-        rvalue: P<ast::Expr>,
+        rvalue: Rvalue,
         target: BasicBlock,
     },
 }

@@ -125,7 +125,6 @@ fn test_empty_for() {
     assert_eq!(gen.next(), None);
 }
 
-/*
 #[test]
 fn test_ints() {
     #[generator]
@@ -167,8 +166,8 @@ fn test_item_slice() {
 fn test_moved() {
     #[generator]
     fn gen<T: 'static>(items: Vec<T>) -> Box<Iterator<Item=T>> {
-        for item in moved!(items) {
-            yield_!(moved!(item));
+        for item in items {
+            yield_!(item);
         }
     }
 
@@ -265,6 +264,7 @@ fn test_yield_in_assign() {
     assert_eq!(gen.next(), None);
 }
 
+/*
 #[test]
 fn test_shadowing() {
     #[generator]

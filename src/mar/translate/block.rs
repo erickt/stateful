@@ -133,13 +133,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             TerminatorKind::Suspend { ref rvalue, target } => {
+                let rvalue = rvalue.to_expr(&self.mar.local_decls);
                 let ast_builder = ast_builder.span(rvalue.span);
                 let next_state = self.state_expr(terminator.source_info.span, target);
 
                 match self.mar.state_machine_kind {
                     StateMachineKind::Generator => {
                         let tuple = ast_builder.expr().tuple()
-                            .expr().build(rvalue.clone())
+                            .expr().build(rvalue)
                             .expr().build(next_state)
                             .build();
 
@@ -150,7 +151,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                     StateMachineKind::Async => {
                         let tuple = ast_builder.expr().tuple()
-                            .expr().build(rvalue.clone())
+                            .expr().build(rvalue)
                             .expr().build(next_state)
                             .build();
 

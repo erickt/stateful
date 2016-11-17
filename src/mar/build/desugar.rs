@@ -48,14 +48,16 @@ impl<'a, 'b> Desugar<'a, 'b> {
     }
 
     pub fn expr_mac(&mut self, mac: &ast::Mac) -> Option<P<ast::Expr>> {
+        // NOTE: we're folding then desugaring because `suspend!()` cannot currently be directly
+        // called.
         match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
             (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
-                let expr = desugar_yield(self.cx, expr);
-                Some(self.fold_sub_expr(expr))
+                let expr = self.fold_sub_expr(expr);
+                Some(desugar_yield(self.cx, expr))
             }
             (StateMachineKind::Async, Some(transition::Transition::Await(expr))) => {
-                let expr = desugar_await(self.cx, expr);
-                Some(self.fold_sub_expr(expr))
+                let expr = self.fold_sub_expr(expr);
+                Some(desugar_await(self.cx, expr))
             }
             _ => {
                 if is_try_path(&mac.node.path) {

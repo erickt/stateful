@@ -7,19 +7,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Generate code to suspend the coroutine.
     pub fn expr_suspend(&mut self,
                         destination: Lvalue,
-                        block: BasicBlock,
-                        expr: P<ast::Expr>) -> BlockAnd<()> {
-        let expr_span = expr.span;
-        let next_block = self.start_new_block(expr.span, Some("AfterSuspend"));
+                        mut block: BasicBlock,
+                        rvalue: P<ast::Expr>) -> BlockAnd<()> {
+        let rvalue_span = rvalue.span;
 
-        self.terminate(expr.span, block, TerminatorKind::Suspend {
-            rvalue: expr,
+        let rvalue = unpack!(block = self.as_rvalue(block, &rvalue));
+        let next_block = self.start_new_block(rvalue_span, Some("AfterSuspend"));
+
+        self.terminate(rvalue_span, block, TerminatorKind::Suspend {
+            rvalue: rvalue,
             target: next_block,
         });
 
         // We don't yet support receiving values into the coroutine yet, so just store a `()` in
         // the destination.
-        self.push_assign_unit(expr_span, next_block, &destination);
+        self.push_assign_unit(rvalue_span, next_block, &destination);
 
         next_block.unit()
     }
