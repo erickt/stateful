@@ -180,28 +180,34 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.as_rvalue(block, &expr)
             }
 
+            ExprKind::Paren(..) |
             ExprKind::Lit(..) |
             ExprKind::Block(..) |
             ExprKind::Match(..) |
             ExprKind::If(..) |
+            ExprKind::IfLet(..) |
+            ExprKind::While(..) |
+            ExprKind::WhileLet(..) |
+            ExprKind::ForLoop(..) |
+            ExprKind::Closure(..) |
             ExprKind::Loop(..) |
+            ExprKind::Repeat(..) |
+            ExprKind::Vec(..) |
             ExprKind::Call(..) |
+            ExprKind::MethodCall(..) |
             ExprKind::Field(..) |
+            ExprKind::TupField(..) |
             ExprKind::Index(..) |
             ExprKind::Break(..) |
             ExprKind::Continue(..) |
             ExprKind::Ret(..) |
-            ExprKind::Path(..) => {
-                // these do not have corresponding `Rvalue` variants,
-                // so make an operand and then return that
-                debug_assert!(match Category::of(&expr.node) {
-                    Some(Category::Rvalue(RvalueFunc::AsRvalue)) => false,
-                    _ => true,
-                });
-                let operand = unpack!(block = this.as_operand(block, expr));
-                block.and(Rvalue::Use(operand))
-            }
-            _ => {
+            ExprKind::Path(..) |
+            ExprKind::Box(..) |
+            ExprKind::InPlace(..) |
+            ExprKind::InlineAsm(..) |
+            ExprKind::Type(..) |
+            ExprKind::Try(..) |
+            ExprKind::Cast(..) => {
                 // these do not have corresponding `Rvalue` variants,
                 // so make an operand and then return that
                 debug_assert!(match Category::of(&expr.node) {
