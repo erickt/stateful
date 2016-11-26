@@ -342,10 +342,6 @@ pub enum TerminatorKind {
     /// `END_BLOCK`.
     Return,
 
-    Await {
-        target: BasicBlock,
-    },
-
     /// jump to target on next iteration.
     Suspend {
         // FIXME: We don't yet support resuming the coroutine with a value yet.
@@ -364,7 +360,6 @@ impl Terminator {
             }
             TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
             TerminatorKind::Return => vec![],
-            TerminatorKind::Await { target } => vec![target],
             TerminatorKind::Suspend { target, .. } => vec![target],
         }
     }
@@ -379,7 +374,6 @@ impl Terminator {
                 vec![then, else_]
             }
             TerminatorKind::Return => vec![],
-            TerminatorKind::Await { ref mut target } => vec![target],
             TerminatorKind::Suspend { ref mut target, .. } => vec![target],
         }
     }

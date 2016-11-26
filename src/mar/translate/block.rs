@@ -114,24 +114,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            TerminatorKind::Await { target } => {
-                let awaited_expr = ast_builder.expr().path()
-                    .global()
-                    .ids(&["futures", "Async", "NotReady"])
-                    .build();
-                let next_state = self.state_expr(terminator.source_info.span, target);
-
-                let tuple = ast_builder.expr().ok().tuple()
-                    .expr().build(awaited_expr)
-                    .expr().build(next_state)
-                    .build();
-
-                vec![
-                    ast_builder.stmt().semi()
-                        .return_expr()
-                        .build(tuple)
-                ]
-            }
             TerminatorKind::Suspend { ref rvalue, target } => {
                 let rvalue = rvalue.to_expr(&self.mar.local_decls);
                 let ast_builder = ast_builder.span(rvalue.span);
