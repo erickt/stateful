@@ -548,7 +548,7 @@ impl ToExpr for Operand {
 pub enum Rvalue {
     /// x (either a move or copy, depending on type of x)
     Use(Operand),
-
+    Mac(ast::Mac),
     Ref(ast::Mutability, Lvalue),
 
     Binary(ast::BinOp, Operand, Operand),
@@ -566,6 +566,9 @@ impl ToExpr for Rvalue {
         match *self {
             Rvalue::Use(ref lvalue) => {
                 lvalue.to_expr(local_decls)
+            }
+            Rvalue::Mac(ref mac) => {
+                builder.expr().build_mac(mac.clone())
             }
             Rvalue::Ref(ast::Mutability::Immutable, ref arg) => {
                 builder.expr().ref_().build(arg.to_expr(local_decls))

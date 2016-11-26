@@ -125,6 +125,19 @@ fn test_empty_for() {
     assert_eq!(gen.next(), None);
 }
 
+#[should_panic]
+#[test]
+fn test_empty_with_macro() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        assert_eq!(true, false);
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
+
 #[test]
 fn test_ints() {
     #[generator]

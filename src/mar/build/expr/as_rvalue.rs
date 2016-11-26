@@ -179,6 +179,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.copied_exprs.insert(expr.id);
                 this.as_rvalue(block, &expr)
             }
+            ExprKind::Mac(ref mac) => {
+                block.and(Rvalue::Mac(mac.clone()))
+            }
 
             ExprKind::Paren(..) |
             ExprKind::Lit(..) |
