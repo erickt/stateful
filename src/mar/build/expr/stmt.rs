@@ -1,5 +1,4 @@
 use mar::build::mac::{is_mac, parse_mac};
-use mar::build::scope::LoopScope;
 use mar::build::{BlockAnd, BlockAndExtension, Builder};
 use mar::repr::*;
 use syntax::ast::{self, ExprKind};
@@ -17,14 +16,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         match expr.node {
             ExprKind::Continue(label) => {
-                this.break_or_continue(expr_span, label, block,
-                                       |loop_scope| loop_scope.continue_block)
-            }
-            ExprKind::Break(label) => {
-                this.break_or_continue(expr_span, label, block, |mut loop_scope| {
-                    loop_scope.might_break = true;
-                    loop_scope.break_block
+                this.break_or_continue(expr_span, block, |this| {
+                    let loop_scope = this.find_loop_scope(expr_span, label);
+                    (loop_scope.continue_block, loop_scope.extent)
                 })
+            }
+            ExprKind::Break(label, None) => {
+                this.break_or_continue(expr_span, block, |this| {
+                    let loop_scope = this.find_loop_scope(expr_span, label);
+                    loop_scope.might_break = true;
+                    (loop_scope.break_block, loop_scope.extent)
+                })
+            }
+            ExprKind::Break(_label, Some(ref _value)) => {
+                span_bug!(this.cx, expr_span, "break returning values is not supported yet");
             }
             ExprKind::Assign(ref lhs, ref rhs) => {
                 // Note: we evaluate assignments right-to-left. This
@@ -116,11 +121,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     fn break_or_continue<F>(&mut self,
                             span: Span,
-                            label: Option<ast::SpannedIdent>,
-                            block: BasicBlock,
+                            mut block: BasicBlock,
                             exit_selector: F)
                             -> BlockAnd<()>
-        where F: FnOnce(&mut LoopScope) -> BasicBlock
+        where F: FnOnce(&mut Builder<'a, 'b>) -> (BasicBlock, CodeExtent)
     {
         debug!("break_or_continue(block={:?})", block);
 
@@ -128,15 +132,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.cx.span_err(span, "cannot break outside of a loop");
         }
 
-        let (exit_block, extent) = {
-            let loop_scope = self.find_loop_scope(span, label);
-            (exit_selector(loop_scope), loop_scope.extent)
-        };
-
+        let (exit_block, extent) = exit_selector(self);
         debug!("break_or_continue(extent={:?}, exit_block={:?})", extent, exit_block);
 
-
         self.exit_scope(span, extent, block, exit_block);
-        self.start_new_block(span, Some("AfterBreakOrContinue")).unit()
+        block = self.start_new_block(span, Some("AfterBreakOrContinue"));
+
+        // the `after-break-or-continue` block will never have any paths flowing into it, but we
+        // need to make sure it has the same incoming decls that are currently in scope.
+        let live_decls = self.find_live_decls();
+        self.cfg.block_data_mut(block).incoming_decls = live_decls;
+
+        block.unit()
     }
 }

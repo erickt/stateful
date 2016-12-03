@@ -151,9 +151,9 @@ fn expand_async(cx: &mut ExtCtxt,
 pub fn plugin_registrar(registry: &mut rustc_plugin::Registry) {
     let builder = aster::AstBuilder::new();
 
-    registry.register_syntax_extension(builder.name("generator"),
+    registry.register_syntax_extension(builder.symbol("generator"),
                                        MultiModifier(Box::new(expand_generator)));
 
-    registry.register_syntax_extension(builder.name("async"),
+    registry.register_syntax_extension(builder.symbol("async"),
                                        MultiModifier(Box::new(expand_async)));
 }

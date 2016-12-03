@@ -242,55 +242,58 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 end_scope: false,
             });
 
-        let might_break = this.in_loop_scope(label, loop_block, exit_block, |this| {
-            let extent = this.start_new_extent();
-            let body_block_end = unpack!(this.in_scope(extent, source_info.span, loop_block, |this| {
-                // conduct the test, if necessary
-                let body_block;
-                if let Some(cond_expr) = condition {
-                    // This loop has a condition, ergo its exit_block is reachable.
-                    this.find_loop_scope(source_info.span, None).might_break = true;
+        let might_break = this.in_loop_scope(
+            label, loop_block, exit_block,
+            move |this| {
+                let extent = this.start_new_extent();
+                let body_block_end = unpack!(this.in_scope(extent, source_info.span, loop_block, |this| {
+                    // conduct the test, if necessary
+                    let body_block;
+                    if let Some(cond_expr) = condition {
+                        // This loop has a condition, ergo its exit_block is reachable.
+                        this.find_loop_scope(source_info.span, None).might_break = true;
 
-                    let loop_block_end;
-                    let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
-                    body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
+                        let loop_block_end;
+                        let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
+                        body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
 
-                    this.terminate(
-                        cond_expr.span,
-                        loop_block_end,
-                        TerminatorKind::If {
-                            cond: cond,
-                            targets: (body_block, exit_block),
-                        });
-                } else {
-                    body_block = loop_block;
-                }
+                        this.terminate(
+                            cond_expr.span,
+                            loop_block_end,
+                            TerminatorKind::If {
+                                cond: cond,
+                                targets: (body_block, exit_block),
+                            });
+                    } else {
+                        body_block = loop_block;
+                    }
 
-                // The “return” value of the loop body must always be an unit, but we cannot
-                // reuse that as a “return” value of the whole loop expressions, because some
-                // loops are diverging (e.g. `loop {}`). Thus, we introduce a unit temporary as
-                // the destination for the loop body and assign the loop’s own “return” value
-                // immediately after the iteration is finished.
-                let tmp = this.temp(body.span, "temp_loop");
+                    // The “return” value of the loop body must always be an unit, but we cannot
+                    // reuse that as a “return” value of the whole loop expressions, because some
+                    // loops are diverging (e.g. `loop {}`). Thus, we introduce a unit temporary as
+                    // the destination for the loop body and assign the loop’s own “return” value
+                    // immediately after the iteration is finished.
+                    let tmp = this.temp(body.span, "temp_loop");
 
-                /*
-                // FIXME(stateful): as another MIR divergence, we need to assign the return value
-                // in case we have a break.
-                this.push_assign_unit(body.span, body_block, &tmp);
-                */
+                    /*
+                    // FIXME(stateful): as another MIR divergence, we need to assign the return value
+                    // in case we have a break.
+                    this.push_assign_unit(body.span, body_block, &tmp);
+                    */
 
-                // Execute the body, branching back to the test.
-                this.ast_block(tmp, body_block, body)
-            }));
+                    // Execute the body, branching back to the test.
+                    this.ast_block(tmp, body_block, body)
+                }));
 
-            this.terminate(
-                body.span,
-                body_block_end,
-                TerminatorKind::Goto {
-                    target: loop_block,
-                    end_scope: true,
-                });
-        });
+                this.terminate(
+                    body.span,
+                    body_block_end,
+                    TerminatorKind::Goto {
+                        target: loop_block,
+                        end_scope: true,
+                    });
+            }
+        );
 
         // If the loop may reach its exit_block, we assign an empty tuple to the
         // destination to keep the MIR well-formed.
