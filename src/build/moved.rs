@@ -1,6 +1,8 @@
+/*
 use aster::AstBuilder;
-use build::Builder;
 use syntax::ast;
+
+use build::Builder;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;
 use syntax::fold::{self, Folder};
@@ -83,3 +85,4 @@ fn is_moved_path(path: &ast::Path) -> bool {
 
     !path.global && path.segments == moved.segments
 }
+*/

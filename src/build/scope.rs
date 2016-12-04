@@ -20,8 +20,6 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::mem;
 use syntax::ast;
 use syntax::codemap::Span;
-use syntax::ptr::P;
-use syntax::visit;
 
 #[derive(Debug)]
 pub struct Scope {
@@ -780,6 +778,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
+    /*
     pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {
         struct Visitor<'a, 'b: 'a> {
             builder: &'a Builder<'a, 'b>,
@@ -812,6 +811,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         visitor.locals
     }
+    */
 
     pub fn get_local_from_path(&self, path: &ast::Path) -> Option<Local> {
         if !path.global && path.segments.len() == 1 {

@@ -64,6 +64,7 @@ impl FunctionDecl {
         &self.fn_decl.inputs
     }
 
+    /*
     pub fn fn_decl(&self) -> &P<ast::FnDecl> {
         &self.fn_decl
     }
@@ -75,6 +76,7 @@ impl FunctionDecl {
     pub fn abi(&self) -> abi::Abi {
         self.abi
     }
+    */
 
     pub fn generics(&self) -> &ast::Generics {
         &self.generics
@@ -249,6 +251,7 @@ impl LiveDecl {
         }
     }
 
+    /*
     pub fn is_active(&self) -> bool {
         match *self {
             LiveDecl::Active(_) => true,
@@ -259,6 +262,7 @@ impl LiveDecl {
     pub fn is_moved(&self) -> bool {
         !self.is_active()
     }
+    */
 }
 
 pub type LiveDeclMap = BTreeMap<VisibilityScope, Vec<LiveDecl>>;
@@ -290,6 +294,7 @@ impl BasicBlockData {
         }
     }
 
+    /*
     pub fn name(&self) -> Option<&'static str> {
         self.name
     }
@@ -297,6 +302,7 @@ impl BasicBlockData {
     pub fn incoming_decls(&self) -> &LiveDeclMap {
         &self.incoming_decls
     }
+    */
 
     pub fn statements(&self) -> &[Statement] {
         &self.statements
@@ -306,9 +312,11 @@ impl BasicBlockData {
         self.terminator.as_ref().expect("invalid terminator state")
     }
 
+    /*
     pub fn terminator_mut(&mut self) -> &mut Terminator {
         self.terminator.as_mut().expect("invalid terminator state")
     }
+    */
 }
 
 #[derive(Debug)]
@@ -364,6 +372,7 @@ impl Terminator {
         }
     }
 
+    /*
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match self.kind {
             TerminatorKind::Goto { ref mut target, .. } => vec![target],
@@ -377,6 +386,7 @@ impl Terminator {
             TerminatorKind::Suspend { ref mut target, .. } => vec![target],
         }
     }
+    */
 }
 
 #[derive(Debug, Clone)]
@@ -699,10 +709,18 @@ newtype_index!(CodeExtent, "extent");
 pub enum CodeExtentData {
     Misc(ast::NodeId),
 
-    ParameterScope { fn_id: ast::NodeId, body_id: ast::NodeId },
+    // extent of the call-site for a function or closure (outlives
+    // the parameters as well as the body).
+    CallSiteScope,
 
+    // extent of parameters passed to a function or closure (they
+    // outlive its body)
+    ParameterScope,
+
+    /*
     // extent of code following a `let id = expr;` binding in a block
     Remainder(BlockRemainder),
+    */
 }
 
 /// Represents a subscope of `block` for a binding that is introduced

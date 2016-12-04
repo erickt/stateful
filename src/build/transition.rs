@@ -1,8 +1,10 @@
-use build::Builder;
 use build::mac::{parse_mac, is_path};
-use syntax::ast::{self, ExprKind, StmtKind};
+use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
+
+/*
+use build::Builder;
 use syntax::visit;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -108,6 +110,7 @@ impl visit::Visitor for ContainsTransitionVisitor {
 
     fn visit_mac(&mut self, _mac: &ast::Mac) { }
 }
+*/
 
 pub enum Transition {
     Yield(P<ast::Expr>),
@@ -127,6 +130,7 @@ pub fn parse_mac_transition(cx: &ExtCtxt, mac: &ast::Mac) -> Option<Transition> 
     }
 }
 
+/*
 fn is_transition_path(path: &ast::Path) -> bool {
     if path.global {
         return false;
@@ -137,6 +141,7 @@ fn is_transition_path(path: &ast::Path) -> bool {
         is_suspend_path(path) ||
         is_moved_path(path)
 }
+*/
 
 fn is_yield_path(path: &ast::Path) -> bool {
     is_path(path, "yield_")
@@ -150,6 +155,8 @@ fn is_suspend_path(path: &ast::Path) -> bool {
     is_path(path, "suspend")
 }
 
+/*
 fn is_moved_path(path: &ast::Path) -> bool {
     is_path(path, "moved")
 }
+*/

@@ -92,9 +92,6 @@ pub struct ScopeAuxiliary {
     */
 }
 
-#[derive(Debug)]
-pub struct Error;
-
 ///////////////////////////////////////////////////////////////////////////
 /// The `BlockAnd` "monad" packages up the new basic block along with a
 /// produced value (sometimes just unit, of course). The `unpack!`
@@ -154,8 +151,8 @@ pub fn construct_fn(cx: &ExtCtxt,
 
     let mut builder = Builder::new(cx, span, state_machine_kind);
 
-    let call_site_extent = builder.start_new_extent();
-    let arg_extent = builder.start_new_extent();
+    let call_site_extent = builder.extents.push(CodeExtentData::CallSiteScope);
+    let arg_extent = builder.extents.push(CodeExtentData::ParameterScope);
 
     let mut block = START_BLOCK;
     unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
@@ -316,10 +313,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.extents.push(CodeExtentData::Misc(ast::DUMMY_NODE_ID));
 
         extent
-    }
-
-    pub fn is_inside_loop(&self) -> bool {
-        !self.loop_scopes.is_empty()
     }
 
     fn return_block(&mut self) -> BasicBlock {
