@@ -1,6 +1,6 @@
 use aster::ident::ToIdent;
 use build::Builder;
-use mar::*;
+use mir::*;
 use syntax::ast;
 use syntax::codemap::Span;
 

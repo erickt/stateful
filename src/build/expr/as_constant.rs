@@ -11,7 +11,7 @@
 //! See docs in build/expr/mod.rs
 
 use build::Builder;
-use mar::*;
+use mir::*;
 use syntax::ast::{self, ExprKind};
 use syntax::ptr::P;
 

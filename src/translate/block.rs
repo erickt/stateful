@@ -1,11 +1,11 @@
-use mar::*;
+use mir::*;
 use syntax::ast;
 use syntax::codemap::Span;
 use translate::Builder;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
-        let block_data = &self.mar[block];
+        let block_data = &self.mir[block];
 
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
@@ -27,7 +27,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 self.goto(terminator.source_info.span, target)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
-                let cond = cond.to_expr(&self.mar.local_decls);
+                let cond = cond.to_expr(&self.mir.local_decls);
 
                 let then_block = ast_builder
                     .span(self.block_span(then_block))
@@ -49,14 +49,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             TerminatorKind::Match { ref discr, ref targets } => {
-                let discr = discr.to_expr(&self.mar.local_decls);
+                let discr = discr.to_expr(&self.mir.local_decls);
 
                 let arms = targets.iter()
                     .map(|target| {
                         let ast_builder = ast_builder.span(self.block_span(target.block));
 
                         let block = ast_builder.block()
-                            .span(self.mar.span)
+                            .span(self.mir.span)
                             .with_stmts(self.goto(terminator.source_info.span, target.block))
                             .build();
 
@@ -75,11 +75,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             TerminatorKind::Return => {
                 let next_state = ast_builder.expr().path()
-                    .span(self.mar.span)
+                    .span(self.mir.span)
                     .ids(&["State", "Illegal"])
                     .build();
 
-                match self.mar.state_machine_kind {
+                match self.mir.state_machine_kind {
                     StateMachineKind::Generator => {
                         vec![
                             /*
@@ -115,11 +115,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
             TerminatorKind::Suspend { ref rvalue, target } => {
-                let rvalue = rvalue.to_expr(&self.mar.local_decls);
+                let rvalue = rvalue.to_expr(&self.mir.local_decls);
                 let ast_builder = ast_builder.span(rvalue.span);
                 let next_state = self.state_expr(terminator.source_info.span, target);
 
-                match self.mar.state_machine_kind {
+                match self.mir.state_machine_kind {
                     StateMachineKind::Generator => {
                         let tuple = ast_builder.expr().tuple()
                             .expr().build(rvalue)
@@ -175,6 +175,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn block_span(&self, block: BasicBlock) -> Span {
-        self.mar[block].span
+        self.mir[block].span
     }
 }

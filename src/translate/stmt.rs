@@ -1,4 +1,4 @@
-use mar::*;
+use mir::*;
 use syntax::ast;
 use translate::Builder;
 
@@ -10,7 +10,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let mut stmts = self.rename_shadowed_local(local).into_iter()
                     .collect::<Vec<_>>();
 
-                let local_decl = self.mar.local_decl_data(local);
+                let local_decl = self.mir.local_decl_data(local);
                 let ast_builder = self.ast_builder.span(local_decl.source_info.span);
 
                 let stmt_builder = match local_decl.mutability {
@@ -31,7 +31,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts
             }
             Statement::Let { span, ref pat, ref lvalues, ref ty, ref rvalue } => {
-                let rvalue = rvalue.to_expr(&self.mar.local_decls);
+                let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
                 // Rename shadowed variables.
                 let mut stmts = lvalues.iter()
@@ -48,8 +48,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts
             }
             Statement::Assign { span, ref lvalue, ref rvalue } => {
-                let lvalue = lvalue.to_expr(&self.mar.local_decls);
-                let rvalue = rvalue.to_expr(&self.mar.local_decls);
+                let lvalue = lvalue.to_expr(&self.mir.local_decls);
+                let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
                 vec![
                     self.ast_builder.span(span).stmt().semi()
@@ -58,11 +58,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             Statement::Call { span, ref lvalue, ref fun, ref args } => {
-                let lvalue = lvalue.to_expr(&self.mar.local_decls);
+                let lvalue = lvalue.to_expr(&self.mir.local_decls);
 
-                let fun = fun.to_expr(&self.mar.local_decls);
+                let fun = fun.to_expr(&self.mir.local_decls);
                 let args = args.iter()
-                    .map(|arg| arg.to_expr(&self.mar.local_decls));
+                    .map(|arg| arg.to_expr(&self.mir.local_decls));
 
                 let rvalue = self.ast_builder.span(span).expr()
                     .call().build(fun)
@@ -76,11 +76,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             Statement::MethodCall { span, ref lvalue, ident, ref tys, ref self_, ref args } => {
-                let lvalue = lvalue.to_expr(&self.mar.local_decls);
-                let self_ = self_.to_expr(&self.mar.local_decls);
+                let lvalue = lvalue.to_expr(&self.mir.local_decls);
+                let self_ = self_.to_expr(&self.mir.local_decls);
 
                 let args = args.iter()
-                    .map(|arg| arg.to_expr(&self.mar.local_decls));
+                    .map(|arg| arg.to_expr(&self.mir.local_decls));
 
                 let rvalue = self.ast_builder.expr()
                     .span(ident.span).method_call(ident.node)
@@ -96,7 +96,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             Statement::Drop { lvalue, moved } => {
-                let decl = self.mar.local_decl_data(lvalue);
+                let decl = self.mir.local_decl_data(lvalue);
                 let ast_builder = self.ast_builder.span(decl.source_info.span);
 
                 // We need an explicit drop here to make sure we drop variables as they go out of
@@ -131,7 +131,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn rename_shadowed_local(&self, local: Local) -> Option<ast::Stmt> {
-        let local_decl = self.mar.local_decl_data(local);
+        let local_decl = self.mir.local_decl_data(local);
         let ast_builder = self.ast_builder.span(local_decl.source_info.span);
 
         if let Some(shadowed_decl) = local_decl.shadowed_decl {

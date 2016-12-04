@@ -15,7 +15,7 @@
 
 use aster::ident::ToIdent;
 use build::{BlockAnd, BlockAndExtension, Builder};
-use mar::*;
+use mir::*;
 use std::ascii::AsciiExt;
 use std::collections::HashMap;
 use syntax::ast::{self, PatKind};

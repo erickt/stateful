@@ -1,5 +1,5 @@
 use data_structures::indexed_vec::Idx;
-use mar::*;
+use mir::*;
 use std::collections::HashSet;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -8,7 +8,7 @@ use translate::Builder;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn state_id(&self, block: BasicBlock) -> ast::Ident {
-        match self.mar[block].name {
+        match self.mir[block].name {
             Some(name) => {
                 self.ast_builder.id(format!("State{}{}", block.index(), name))
             }
@@ -20,7 +20,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn state_path(&self, block: BasicBlock) -> ast::Path {
         self.ast_builder.path()
-            .span(self.mar.span)
+            .span(self.mir.span)
             .id("State")
             .id(self.state_id(block))
             .build()
@@ -32,14 +32,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     ) -> Vec<(VisibilityScope, Vec<(Local, ast::Ident)>)> {
         let mut scope_decls = vec![];
 
-        for (scope, live_decls) in self.mar[block].incoming_decls.iter().rev() {
+        for (scope, live_decls) in self.mir[block].incoming_decls.iter().rev() {
             let mut decls = vec![];
 
             for live_decl in live_decls {
                 // Only add active decls to the state.
                 let local = match *live_decl {
                     LiveDecl::Active(local) => {
-                        decls.push((local, self.mar.local_decls[local].ident));
+                        decls.push((local, self.mir.local_decls[local].ident));
                         local
                     }
                     LiveDecl::Moved(local) => local,
@@ -55,8 +55,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
-        if let Some(decl) = self.mar.local_decls[local].shadowed_decl {
-            debug!("get_shadowed_decl: {:?} {:?}", decl, self.mar.local_decls[decl]);
+        if let Some(decl) = self.mir.local_decls[local].shadowed_decl {
+            debug!("get_shadowed_decl: {:?} {:?}", decl, self.mir.local_decls[decl]);
 
             decls.push((decl, self.shadowed_ident(decl)));
 
@@ -92,14 +92,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
 
     pub fn state_enum_default_and_arms(&self) -> (P<ast::Item>, P<ast::Item>, Vec<ast::Arm>) {
-        let all_basic_blocks = self.mar.basic_blocks();
+        let all_basic_blocks = self.mir.basic_blocks();
 
         let mut ty_param_ids = Vec::new();
         let mut seen_ty_param_ids = HashSet::new();
         let mut state_variants = Vec::with_capacity(all_basic_blocks.len());
         let mut state_arms = Vec::with_capacity(all_basic_blocks.len());
 
-        for (block, _) in self.mar.basic_blocks().iter_enumerated() {
+        for (block, _) in self.mir.basic_blocks().iter_enumerated() {
             let (variant, tp) = self.state_variant(block);
 
             // It's possible for a declaration to be created but not actually get used in the state
@@ -218,7 +218,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .tuple()
                 .with_pats(
                     decls.iter().map(|&(local, name)| {
-                        match self.mar.local_decls[local].mutability {
+                        match self.mir.local_decls[local].mutability {
                             ast::Mutability::Immutable => ast_builder.pat().id(name),
                             ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
                         }

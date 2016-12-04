@@ -13,7 +13,7 @@ extern crate rustc_errors as errors;
 
 mod build;
 mod data_structures;
-mod mar;
+mod mir;
 //mod transform;
 mod translate;
 //mod traversal;
@@ -27,7 +27,7 @@ use syntax::ext::base::{
 };
 use syntax::print::pprust;
 use data_structures::indexed_vec::Idx;
-use mar::{FunctionDecl, Mar, StateMachineKind};
+use mir::{FunctionDecl, Mir, StateMachineKind};
 
 fn expand_state_machine(cx: &mut ExtCtxt,
                         _sp: Span,
@@ -73,29 +73,29 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     };
 
 
-    let mar = build::construct_fn(
+    let mir = build::construct_fn(
         cx,
         state_machine_kind,
         item.span,
         fn_decl,
         ast_block);
 
-    validate(cx, &mar);
+    validate(cx, &mir);
 
     /*
-    if let Some(item) = mar::translate::translate(cx, &mar) {
+    if let Some(item) = translate::translate(cx, &mir) {
         debug!("{}", pprust::item_to_string(&item));
         debug!("-------");
     }
 
-    let mut pass_manager = mar::transform::pass_manager::PassManager::new();
-    pass_manager.add_pass(Box::new(mar::transform::simplify_cfg::SimplifyCfg::new()));
-    pass_manager.run(&mut mar);
+    let mut pass_manager = transform::pass_manager::PassManager::new();
+    pass_manager.add_pass(Box::new(mir::transform::simplify_cfg::SimplifyCfg::new()));
+    pass_manager.run(&mut mir);
     */
 
-    validate(cx, &mar);
+    validate(cx, &mir);
 
-    match translate::translate(cx, &mar) {
+    match translate::translate(cx, &mir) {
         Some(item) => {
             debug!("{}", pprust::item_to_string(&item));
 
@@ -108,15 +108,15 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     }
 }
 
-fn validate(cx: &mut ExtCtxt, mar: &Mar) {
-    let basic_blocks = mar.basic_blocks();
+fn validate(cx: &mut ExtCtxt, mir: &Mir) {
+    let basic_blocks = mir.basic_blocks();
     for (bb, block) in basic_blocks.iter_enumerated() {
         let terminator = block.terminator();
 
         for succ in terminator.successors() {
             if succ.index() >= basic_blocks.len() {
                 cx.span_bug(
-                    mar.span,
+                    mir.span,
                     &format!("block {:?} terminator does not exist: {:?} len: {:?}",
                             bb,
                             terminator.kind,

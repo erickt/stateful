@@ -10,7 +10,7 @@
 
 use bit_vec::BitVec;
 use data_structures::indexed_vec::Idx;
-use mar::*;
+use mir::*;
 
 /// Preorder traversal of a graph.
 ///
@@ -31,29 +31,29 @@ use mar::*;
 /// A preorder traversal of this graph is either `A B D C` or `A C D B`
 #[derive(Clone)]
 pub struct Preorder<'a> {
-    mar: &'a Mar,
+    mir: &'a Mir,
     visited: BitVec,
     worklist: Vec<BasicBlock>,
 }
 
 impl<'a> Preorder<'a> {
-    pub fn new(mar: &'a Mar, root: BasicBlock) -> Preorder<'a> {
+    pub fn new(mir: &'a Mir, root: BasicBlock) -> Preorder<'a> {
         let worklist = vec![root];
 
         Preorder {
-            mar: mar,
-            visited: BitVec::from_elem(mar.basic_blocks().len(), false),
+            mir: mir,
+            visited: BitVec::from_elem(mir.basic_blocks().len(), false),
             worklist: worklist
         }
     }
 }
 
-pub fn preorder(mar: &Mar) -> Preorder {
-    let mut preorder = Preorder::new(mar, START_BLOCK);
+pub fn preorder(mir: &Mir) -> Preorder {
+    let mut preorder = Preorder::new(mir, START_BLOCK);
 
     // MAR: We need to also visit nodes with statements so they can be type checked.
     preorder.worklist.extend(
-        mar.basic_blocks().iter_enumerated().filter_map(|(bb, block)| {
+        mir.basic_blocks().iter_enumerated().filter_map(|(bb, block)| {
             if block.statements.is_empty() {
                 None
             } else {
@@ -75,7 +75,7 @@ impl<'a> Iterator for Preorder<'a> {
             }
             self.visited.set(idx.index(), true);
 
-            let data = &self.mar[idx];
+            let data = &self.mir[idx];
 
             if let Some(ref term) = data.terminator {
                 for succ in term.successors() {
@@ -110,21 +110,21 @@ impl<'a> Iterator for Preorder<'a> {
 ///
 /// A Postorder traversal of this graph is `D B C A` or `D C B A`
 pub struct Postorder<'a: 'a> {
-    mar: &'a Mar,
+    mir: &'a Mir,
     visited: BitVec,
     visit_stack: Vec<(BasicBlock, vec::IntoIter<BasicBlock>)>
 }
 
 impl<'a> Postorder<'a> {
-    pub fn new(mar: &'a Mar, root: BasicBlock) -> Postorder<'a> {
+    pub fn new(mir: &'a Mir, root: BasicBlock) -> Postorder<'a> {
         let mut po = Postorder {
-            mar: mar,
-            visited: BitVec::from_elem(mar.basic_blocks().len(), false),
+            mir: mir,
+            visited: BitVec::from_elem(mir.basic_blocks().len(), false),
             visit_stack: Vec::new()
         };
 
 
-        let data = &po.mar[root];
+        let data = &po.mir[root];
 
         if let Some(ref term) = data.terminator {
             po.visited.set(root.index(), true);
@@ -200,7 +200,7 @@ impl<'a> Postorder<'a> {
             if !self.visited.get(bb.index()).unwrap_or(false) {
                 self.visited.set(bb.index(), true);
 
-                if let Some(ref term) = self.mar[bb].terminator {
+                if let Some(ref term) = self.mir[bb].terminator {
                     let succs = term.successors().into_iter();
                     self.visit_stack.push((bb, succs));
                 }
@@ -209,8 +209,8 @@ impl<'a> Postorder<'a> {
     }
 }
 
-pub fn postorder<'a>(mar: &'a Mar) -> Postorder<'a> {
-    Postorder::new(mar, START_BLOCK)
+pub fn postorder<'a>(mir: &'a Mir) -> Postorder<'a> {
+    Postorder::new(mir, START_BLOCK)
 }
 
 impl<'a> Iterator for Postorder<'a> {
@@ -222,7 +222,7 @@ impl<'a> Iterator for Postorder<'a> {
             self.traverse_successor();
         }
 
-        next.map(|(bb, _)| (bb, &self.mar[bb]))
+        next.map(|(bb, _)| (bb, &self.mir[bb]))
     }
 }
 
@@ -253,19 +253,19 @@ impl<'a> Iterator for Postorder<'a> {
 /// to re-use the traversal
 #[derive(Clone)]
 pub struct ReversePostorder<'a: 'a> {
-    mar: &'a Mar,
+    mir: &'a Mir,
     blocks: Vec<BasicBlock>,
     idx: usize
 }
 
 impl<'a> ReversePostorder<'a> {
-    pub fn new(mar: &'a Mar, root: BasicBlock) -> ReversePostorder<'a> {
-        let blocks : Vec<_> = Postorder::new(mar, root).map(|(bb, _)| bb).collect();
+    pub fn new(mir: &'a Mir, root: BasicBlock) -> ReversePostorder<'a> {
+        let blocks : Vec<_> = Postorder::new(mir, root).map(|(bb, _)| bb).collect();
 
         let len = blocks.len();
 
         ReversePostorder {
-            mar: mar,
+            mir: mir,
             blocks: blocks,
             idx: len
         }
@@ -277,8 +277,8 @@ impl<'a> ReversePostorder<'a> {
 }
 
 
-pub fn reverse_postorder(mar: &Mar) -> ReversePostorder {
-    ReversePostorder::new(mar, START_BLOCK)
+pub fn reverse_postorder(mir: &Mir) -> ReversePostorder {
+    ReversePostorder::new(mir, START_BLOCK)
 }
 
 impl<'a> Iterator for ReversePostorder<'a> {
@@ -288,7 +288,7 @@ impl<'a> Iterator for ReversePostorder<'a> {
         if self.idx == 0 { return None; }
         self.idx -= 1;
 
-        self.blocks.get(self.idx).map(|&bb| (bb, &self.mar[bb]))
+        self.blocks.get(self.idx).map(|&bb| (bb, &self.mir[bb]))
     }
 }
 */

@@ -1,5 +1,5 @@
 use build::{BlockAnd, BlockAndExtension, Builder};
-use mar::*;
+use mir::*;
 use syntax::ast;
 use syntax::ptr::P;
 

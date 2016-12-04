@@ -13,7 +13,7 @@
 use build::expr::category::Category;
 use build::mac::{is_mac, parse_mac};
 use build::{BlockAnd, BlockAndExtension, Builder};
-use mar::*;
+use mir::*;
 use syntax::ast::{self, ExprKind};
 use syntax::ptr::P;
 

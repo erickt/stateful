@@ -1,8 +1,8 @@
-use mar::Mar;
-use super::pass::MarPass;
+use mir::Mir;
+use transform::pass::MirPass;
 
 pub struct PassManager {
-    passes: Vec<Box<MarPass>>,
+    passes: Vec<Box<MirPass>>,
 }
 
 impl PassManager {
@@ -12,13 +12,13 @@ impl PassManager {
         }
     }
 
-    pub fn add_pass(&mut self, pass: Box<MarPass>) {
+    pub fn add_pass(&mut self, pass: Box<MirPass>) {
         self.passes.push(pass);
     }
 
-    pub fn run(&mut self, mar: &mut Mar) {
+    pub fn run(&mut self, mir: &mut Mir) {
         for pass in &mut self.passes {
-            pass.run_pass(mar);
+            pass.run_pass(mir);
         }
     }
 }

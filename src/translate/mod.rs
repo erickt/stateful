@@ -1,36 +1,36 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
-use mar::*;
+use mir::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
 
-pub fn translate(cx: &ExtCtxt, mar: &Mar) -> Option<P<ast::Item>> {
-    let ast_builder = AstBuilder::new().span(mar.span);
+pub fn translate(cx: &ExtCtxt, mir: &Mir) -> Option<P<ast::Item>> {
+    let ast_builder = AstBuilder::new().span(mir.span);
 
-    let return_ty = mar.fn_decl.return_ty();
+    let return_ty = mir.fn_decl.return_ty();
 
-    let item_builder = ast_builder.item().fn_(mar.fn_decl.ident())
-        .with_args(mar.fn_decl.inputs().iter().cloned())
+    let item_builder = ast_builder.item().fn_(mir.fn_decl.ident())
+        .with_args(mir.fn_decl.inputs().iter().cloned())
         .build_return(return_ty.clone())
-        .generics().with(mar.fn_decl.generics().clone())
+        .generics().with(mir.fn_decl.generics().clone())
         .build();
 
     let builder = Builder {
         cx: cx,
         ast_builder: ast_builder,
-        mar: mar,
+        mir: mir,
     };
 
-    let start_state_expr = builder.state_expr(mar.span, START_BLOCK);
+    let start_state_expr = builder.state_expr(mir.span, START_BLOCK);
     let (state_enum, state_default, state_arms) =
         builder.state_enum_default_and_arms();
 
     let state_machine_impl;
     let state_machine_impl_driver;
 
-    match mar.state_machine_kind {
+    match mir.state_machine_kind {
         StateMachineKind::Generator => {
             state_machine_impl = quote_item!(cx,
                 impl<S, F, Item> StateMachine<S, F>
@@ -167,12 +167,12 @@ fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
 pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     ast_builder: AstBuilder,
-    mar: &'a Mar,
+    mir: &'a Mir,
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn shadowed_ident(&self, local: Local) -> ast::Ident {
-        let decl_ident = self.mar.local_decls[local].ident;
+        let decl_ident = self.mir.local_decls[local].ident;
         self.ast_builder.id(format!("{}_shadowed_{}", decl_ident, local.index()))
     }
 }

@@ -1,7 +1,7 @@
 use build::expr::category::{Category, RvalueFunc};
 use build::mac::{is_mac, parse_mac};
 use build::{BlockAnd, BlockAndExtension, Builder};
-use mar::*;
+use mir::*;
 use syntax::ast::{self, ExprKind};
 use syntax::ptr::P;
 

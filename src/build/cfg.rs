@@ -1,5 +1,5 @@
 use build::CFG;
-use mar::*;
+use mir::*;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;

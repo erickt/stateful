@@ -1,5 +1,5 @@
-use mar::Mar;
+use mir::Mir;
 
-pub trait MarPass {
-    fn run_pass(&mut self, mar: &mut Mar);
+pub trait MirPass {
+    fn run_pass(&mut self, mir: &mut Mir);
 }

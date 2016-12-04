@@ -108,7 +108,7 @@ impl fmt::Display for StateMachineKind {
 
 /// Lowered representation of a single function.
 #[derive(Debug)]
-pub struct Mar {
+pub struct Mir {
     pub state_machine_kind: StateMachineKind,
 
     /// List of basic blocks. References to basic block use a newtyped index type `BasicBlock`
@@ -135,7 +135,7 @@ pub struct Mar {
 /// Where execution begins
 pub const START_BLOCK: BasicBlock = BasicBlock(0);
 
-impl Mar {
+impl Mir {
     pub fn new(
         state_machine_kind: StateMachineKind,
         basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
@@ -151,7 +151,7 @@ impl Mar {
         // FIXME: The return pointer's type isn't calculated correctly yet.
         // assert_eq!(local_decls[RETURN_POINTER].ty, Some(return_ty));
 
-        Mar {
+        Mir {
             state_machine_kind: state_machine_kind,
             basic_blocks: basic_blocks,
             visibility_scopes: visibility_scopes,
@@ -176,7 +176,7 @@ impl Mar {
     }
 }
 
-impl Index<BasicBlock> for Mar {
+impl Index<BasicBlock> for Mir {
     type Output = BasicBlockData;
 
     fn index(&self, index: BasicBlock) -> &BasicBlockData {
@@ -184,7 +184,7 @@ impl Index<BasicBlock> for Mar {
     }
 }
 
-impl IndexMut<BasicBlock> for Mar {
+impl IndexMut<BasicBlock> for Mir {
     fn index_mut(&mut self, index: BasicBlock) -> &mut BasicBlockData {
         &mut self.basic_blocks_mut()[index]
     }

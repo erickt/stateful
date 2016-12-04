@@ -9,7 +9,7 @@
 // except according to those terms.
 
 use build::{BlockAnd, BlockAndExtension, Builder};
-use mar::*;
+use mir::*;
 use syntax::ast::{self, StmtKind};
 use syntax::ptr::P;
 

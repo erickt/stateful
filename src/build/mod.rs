@@ -1,6 +1,6 @@
 use build::scope::ConditionalScope;
 use data_structures::indexed_vec::{Idx, IndexVec};
-use mar::*;
+use mir::*;
 use std::collections::{HashMap, HashSet};
 use std::u32;
 use syntax::ast;
@@ -145,7 +145,7 @@ pub fn construct_fn(cx: &ExtCtxt,
                     state_machine_kind: StateMachineKind,
                     span: Span,
                     fn_decl: FunctionDecl,
-                    ast_block: P<ast::Block>) -> Mar {
+                    ast_block: P<ast::Block>) -> Mir {
     let (fn_decl, ast_block) = desugar::desugar_block(
         cx,
         state_machine_kind,
@@ -211,7 +211,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         builder
     }
 
-    fn finish(self, fn_decl: FunctionDecl) -> Mar {
+    fn finish(self, fn_decl: FunctionDecl) -> Mir {
         for (index, block) in self.cfg.basic_blocks.iter().enumerate() {
             if block.terminator.is_none() {
                 span_bug!(self.cx, self.fn_span, "no terminator on block {:?}", index);
@@ -249,7 +249,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("decls: {:#?}", self.local_decls);
         debug!("blocks: {:#?}", self.cfg.basic_blocks);
 
-        Mar::new(
+        Mir::new(
             self.state_machine_kind,
             self.cfg.basic_blocks,
             self.visibility_scopes,

@@ -10,8 +10,8 @@
 
 use bit_vec::BitVec;
 use data_structures::indexed_vec::{Idx, IndexVec};
-use mar::*;
-use transform::pass::MarPass;
+use mir::*;
+use transform::pass::MirPass;
 use traversal;
 
 #[derive(Debug)]
@@ -23,13 +23,13 @@ impl SimplifyCfg {
     }
 }
 
-impl MarPass for SimplifyCfg {
-    fn run_pass(&mut self, mar: &mut Mar) {
-        CfgSimplifier::new(mar).simplify();
-        remove_dead_blocks(mar);
+impl MirPass for SimplifyCfg {
+    fn run_pass(&mut self, mir: &mut Mir) {
+        CfgSimplifier::new(mir).simplify();
+        remove_dead_blocks(mir);
         
         // FIXME: Should probably be moved into some kind of pass manager
-        mar.basic_blocks_mut().raw.shrink_to_fit();
+        mir.basic_blocks_mut().raw.shrink_to_fit();
     }
 }
 
@@ -45,12 +45,12 @@ pub struct CfgSimplifier<'a> {
 }
 
 impl<'a> CfgSimplifier<'a> {
-    fn new(mar: &'a mut Mar) -> Self {
-        let mut pred_count = IndexVec::from_elem(0u32, mar.basic_blocks());
+    fn new(mir: &'a mut Mir) -> Self {
+        let mut pred_count = IndexVec::from_elem(0u32, mir.basic_blocks());
 
-        // we can't use mar.predecessors() here because that counts
+        // we can't use mir.predecessors() here because that counts
         // dead blocks, which we don't want to.
-        for (_, data) in traversal::preorder(mar) {
+        for (_, data) in traversal::preorder(mir) {
             if let Some(ref term) = data.terminator {
                 for tgt in term.successors() {
                     pred_count[tgt] += 1;
@@ -58,7 +58,7 @@ impl<'a> CfgSimplifier<'a> {
             }
         }
 
-        let basic_blocks = mar.basic_blocks_mut();
+        let basic_blocks = mir.basic_blocks_mut();
 
         CfgSimplifier {
             basic_blocks: basic_blocks,
@@ -207,13 +207,13 @@ impl<'a> CfgSimplifier<'a> {
     }
 }
 
-fn remove_dead_blocks(mar: &mut Mar) {
-    let mut seen = BitVec::from_elem(mar.basic_blocks().len(), false);
-    for (bb, _) in traversal::preorder(mar) {
+fn remove_dead_blocks(mir: &mut Mir) {
+    let mut seen = BitVec::from_elem(mir.basic_blocks().len(), false);
+    for (bb, _) in traversal::preorder(mir) {
         seen.set(bb.index(), true);
     }
 
-    let basic_blocks = mar.basic_blocks_mut();
+    let basic_blocks = mir.basic_blocks_mut();
 
     let num_blocks = basic_blocks.len();
     let mut replacements : Vec<_> = (0..num_blocks).map(BasicBlock::new).collect();

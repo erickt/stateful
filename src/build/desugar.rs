@@ -1,6 +1,6 @@
 use aster::AstBuilder;
 use build::transition::{self, Transition};
-use mar::*;
+use mir::*;
 use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::codemap::respan;
 use syntax::ext::base::ExtCtxt;

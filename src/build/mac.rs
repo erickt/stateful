@@ -1,6 +1,6 @@
 use aster::AstBuilder;
 use build::{BlockAnd, Builder, transition};
-use mar::*;
+use mir::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ext::tt::transcribe::new_tt_reader;

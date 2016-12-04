@@ -15,7 +15,7 @@ tracks where a `break` and `continue` should go to.
 
 use build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use data_structures::indexed_vec::Idx;
-use mar::*;
+use mir::*;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::mem;
 use syntax::ast;
