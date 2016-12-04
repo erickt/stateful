@@ -6,11 +6,17 @@ extern crate aster;
 extern crate bit_vec;
 extern crate rustc_plugin;
 extern crate rustc_errors as errors;
-
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;
 
-pub mod mar;
+#[macro_use] mod macros;
+
+mod build;
+mod data_structures;
+mod mar;
+//mod transform;
+mod translate;
+//mod traversal;
 
 use syntax::ast;
 use syntax::codemap::Span;
@@ -20,15 +26,15 @@ use syntax::ext::base::{
     MultiModifier,
 };
 use syntax::print::pprust;
-use mar::indexed_vec::Idx;
-use mar::repr::{Mar, FunctionDecl};
+use data_structures::indexed_vec::Idx;
+use mar::{FunctionDecl, Mar, StateMachineKind};
 
 fn expand_state_machine(cx: &mut ExtCtxt,
                         _sp: Span,
                         meta_item: &ast::MetaItem,
                         annotatable: Annotatable,
                         name: &str,
-                        state_machine_kind: mar::repr::StateMachineKind) -> Annotatable {
+                        state_machine_kind: StateMachineKind) -> Annotatable {
     let item = match annotatable {
         Annotatable::Item(item) => item,
         _ => {
@@ -67,7 +73,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
     };
 
 
-    let mar = mar::build::construct_fn(
+    let mar = build::construct_fn(
         cx,
         state_machine_kind,
         item.span,
@@ -89,7 +95,7 @@ fn expand_state_machine(cx: &mut ExtCtxt,
 
     validate(cx, &mar);
 
-    match mar::translate::translate(cx, &mar) {
+    match translate::translate(cx, &mar) {
         Some(item) => {
             debug!("{}", pprust::item_to_string(&item));
 
@@ -130,7 +136,7 @@ fn expand_generator(cx: &mut ExtCtxt,
         meta_item,
         annotatable,
         "generator",
-        mar::repr::StateMachineKind::Generator)
+        StateMachineKind::Generator)
 }
 
 fn expand_async(cx: &mut ExtCtxt,
@@ -143,7 +149,7 @@ fn expand_async(cx: &mut ExtCtxt,
         meta_item,
         annotatable,
         "async",
-        mar::repr::StateMachineKind::Async)
+        StateMachineKind::Async)
 }
 
 #[plugin_registrar]
