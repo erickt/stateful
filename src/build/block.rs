@@ -94,7 +94,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         }
                     }
                     StmtKind::Item(..) => {
-                        this.cx.span_bug(stmt.span, "Cannot handle item declarations yet");
+                        span_bug!(this.cx, stmt.span, "Cannot handle item declarations yet");
                     }
                 }
             }
