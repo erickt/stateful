@@ -50,6 +50,16 @@ pub struct Scope {
     conditionals: Vec<ConditionalScope>,
 }
 
+impl Scope {
+    /// Given a span and this scope's visibility scope, make a SourceInfo.
+    fn source_info(&self, span: Span) -> SourceInfo {
+        SourceInfo {
+            span: span,
+            scope: self.visibility_scope
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct ConditionalScope {
     initialized_decls: HashSet<Local>,
@@ -269,7 +279,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 //self.cfg.push_declare(block, *local);
             }
 
-            drop_decl(&mut self.cfg, block, &scope, *local);
+            let source_info = scope.source_info(span);
+            drop_decl(&mut self.cfg, block, &scope, source_info, *local);
         }
 
         debug!("pop_scope: remaining scopes={:#?}", self.scopes); 
@@ -348,6 +359,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let scope = &self.scopes[scope_index];
                 debug!("exit_scope: dropping: block={:?} scope={:#?}", block, scope);
+                let source_info = scope.source_info(span);
 
                 for local in &scope.drops {
                     // FIXME: Make sure we aren't double dropping a variable.
@@ -363,7 +375,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     // warning if a variable hasn't been initialized, so just insert the declaration into
                     // our block.
                     if scope.initialized_decls.contains(local) {
-                        drop_decl(&mut self.cfg, block, scope, *local);
+                        drop_decl(&mut self.cfg, block, scope, source_info, *local);
                     }
                 }
             }
@@ -467,9 +479,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         match *lvalue {
             Lvalue::Local(local) => {
+                let source_info = self.source_info(span);
+
                 if !self.is_initialized(local) {
                     self.initialize_decl(local);
-                    self.cfg.push_declare(block, local);
+                    self.cfg.push(block, Statement {
+                        source_info: source_info,
+                        kind: StatementKind::Declare(local),
+                    });
                 }
             }
             _ => {
@@ -487,12 +504,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         match *lvalue {
             Lvalue::Local(local) => {
+                let source_info = self.source_info(span);
+
                 if !self.is_initialized(local) {
                     self.initialize_decl(local);
-                    self.cfg.push_declare(block, local);
+                    self.cfg.push(block, Statement {
+                        source_info: source_info,
+                        kind: StatementKind::Declare(local),
+                    });
                 }
 
-                self.cfg.push_assign(block, span, lvalue, rvalue);
+                self.cfg.push(block, Statement {
+                    source_info: source_info,
+                    kind: StatementKind::Assign {
+                        span: span,
+                        lvalue: lvalue.clone(),
+                        rvalue: rvalue,
+                    }
+                });
             }
             _ => {
                 span_bug!(self.cx, span, "cannot assign yet: {:?}", lvalue)
@@ -835,10 +864,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 }
 
-fn drop_decl(cfg: &mut CFG, block: BasicBlock, scope: &Scope, var: Local) {
+fn drop_decl(cfg: &mut CFG,
+             block: BasicBlock,
+             scope: &Scope,
+             source_info: SourceInfo,
+             var: Local) {
     debug!("drop_decl(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
     let moved = scope.moved_decls.contains(&var);
-    cfg.push_drop(block, var, moved);
+    cfg.push(block, Statement {
+        source_info: source_info,
+        kind: StatementKind::Drop {
+            lvalue: var,
+            moved: moved,
+        }
+    });
 }
 
 /*

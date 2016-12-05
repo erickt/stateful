@@ -146,12 +146,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.initialize(block, span, &Lvalue::Local(*local));
         }
 
-        self.cfg.push(block, Statement::Let {
-            span: span,
-            pat: irrefutable_pat.clone(),
-            ty: self.ty_indices.get(&irrefutable_pat.id).map(|ty| ty.clone()),
-            lvalues: locals,
-            rvalue: Rvalue::Use(Operand::Consume(initializer.clone())),
+        let source_info = self.source_info(span);
+        self.cfg.push(block, Statement {
+            source_info: source_info,
+            kind: StatementKind::Let {
+                span: span,
+                pat: irrefutable_pat.clone(),
+                ty: self.ty_indices.get(&irrefutable_pat.id).map(|ty| ty.clone()),
+                lvalues: locals,
+                rvalue: Rvalue::Use(Operand::Consume(initializer.clone())),
+            }
         });
 
         block.unit()

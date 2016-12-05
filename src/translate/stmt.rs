@@ -4,9 +4,9 @@ use translate::Builder;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
-        match *stmt {
-            Statement::Expr(ref stmt) => vec![stmt.clone()],
-            Statement::Declare(local) => {
+        match stmt.kind {
+            StatementKind::Expr(ref stmt) => vec![stmt.clone()],
+            StatementKind::Declare(local) => {
                 let mut stmts = self.rename_shadowed_local(local).into_iter()
                     .collect::<Vec<_>>();
 
@@ -30,7 +30,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
-            Statement::Let { span, ref pat, ref lvalues, ref ty, ref rvalue } => {
+            StatementKind::Let { span, ref pat, ref lvalues, ref ty, ref rvalue } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
                 // Rename shadowed variables.
@@ -47,7 +47,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
-            Statement::Assign { span, ref lvalue, ref rvalue } => {
+            StatementKind::Assign { span, ref lvalue, ref rvalue } => {
                 let lvalue = lvalue.to_expr(&self.mir.local_decls);
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
@@ -57,7 +57,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            Statement::Call { span, ref lvalue, ref fun, ref args } => {
+            StatementKind::Call { span, ref lvalue, ref fun, ref args } => {
                 let lvalue = lvalue.to_expr(&self.mir.local_decls);
 
                 let fun = fun.to_expr(&self.mir.local_decls);
@@ -75,7 +75,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            Statement::MethodCall { span, ref lvalue, ident, ref tys, ref self_, ref args } => {
+            StatementKind::MethodCall { span, ref lvalue, ident, ref tys, ref self_, ref args } => {
                 let lvalue = lvalue.to_expr(&self.mir.local_decls);
                 let self_ = self_.to_expr(&self.mir.local_decls);
 
@@ -95,7 +95,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            Statement::Drop { lvalue, moved } => {
+            StatementKind::Drop { lvalue, moved } => {
                 let decl = self.mir.local_decl_data(lvalue);
                 let ast_builder = self.ast_builder.span(decl.source_info.span);
 
@@ -127,6 +127,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
+            /*
+            StatementKind::StorageLive(_) |
+            StatementKind::StorageDead(_) |
+            StatementKind::Nop => {
+                vec![]
+            }
+            */
         }
     }
 

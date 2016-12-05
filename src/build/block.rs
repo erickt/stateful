@@ -59,7 +59,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             match this.expr_mac(temp.clone(), block, mac) {
                                 Some(block) => block,
                                 None => {
-                                    this.cfg.push(block, Statement::Expr(stmt.clone()));
+                                    let source_info = this.source_info(stmt.span);
+                                    this.cfg.push(block, Statement {
+                                        source_info: source_info,
+                                        kind: StatementKind::Expr(stmt.clone()),
+                                    });
 
                                     this.push_assign_unit(stmt.span, block, &temp);
                                     block.unit()

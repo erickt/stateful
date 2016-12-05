@@ -77,7 +77,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .collect::<Vec<_>>();
 
                 this.declare(block, expr_span, &destination);
-                this.cfg.push_call(block, expr_span, destination, fun, args);
+                this.cfg.push(block, Statement {
+                    source_info: source_info,
+                    kind: StatementKind::Call {
+                        span: expr_span,
+                        lvalue: destination,
+                        fun: fun,
+                        args: args,
+                    },
+                });
                 block.unit()
             }
             ExprKind::MethodCall(ref ident, ref tys, ref args) => {
@@ -91,14 +99,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .collect::<Vec<_>>();
 
                 this.declare(block, expr_span, &destination);
-                this.cfg.push_method_call(
-                    block,
-                    expr_span,
-                    destination,
-                    *ident,
-                    tys.clone(),
-                    self_,
-                    args);
+                this.cfg.push(block, Statement {
+                    source_info: source_info,
+                    kind: StatementKind::MethodCall {
+                        span: expr_span,
+                        lvalue: destination,
+                        ident: *ident,
+                        tys: tys.clone(),
+                        self_: self_,
+                        args: args,
+                    },
+                });
 
                 block.unit()
             }

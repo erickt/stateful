@@ -657,7 +657,23 @@ impl ToExpr for Constant {
 // Statements
 
 #[derive(Debug)]
-pub enum Statement {
+pub struct Statement {
+    pub source_info: SourceInfo,
+    pub kind: StatementKind,
+}
+
+/*
+impl Statement {
+    /// Changes a statement to a nop. This is both faster than deleting instructions and avoids
+    /// invalidating statement indices in `Location`s.
+    pub fn make_nop(&mut self) {
+        self.kind = StatementKind::Nop
+    }
+}
+*/
+
+#[derive(Debug)]
+pub enum StatementKind {
     Expr(ast::Stmt),
     Declare(Local),
     /// As opposed to MIR, we don't have an easy way breaking up irrefutable patterns, so instead
@@ -692,6 +708,17 @@ pub enum Statement {
         lvalue: Local,
         moved: bool,
     },
+
+    /*
+    /// Start a live range for the storage of the local.
+    StorageLive(Lvalue),
+
+    /// End the current live range for the storage of the local.
+    StorageDead(Lvalue),
+
+    /// No-op. Useful for deleting instructions without affecting statement indices.
+    Nop,
+    */
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -745,3 +772,31 @@ pub struct BlockRemainder {
     pub block: ast::NodeId,
     pub first_statement_index: u32,
 }
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
+pub struct Location {
+    /// the location is within this block
+    pub block: BasicBlock,
+
+    /// the location is the start of the this statement; or, if `statement_index`
+    /// == num-statements, then the start of the terminator.
+    pub statement_index: usize,
+}
+
+impl fmt::Debug for Location {
+    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        write!(fmt, "{:?}[{}]", self.block, self.statement_index)
+    }
+}
+
+/*
+impl Location {
+    pub fn dominates(&self, other: &Location, dominators: &Dominators<BasicBlock>) -> bool {
+        if self.block == other.block {
+            self.statement_index <= other.statement_index
+        } else {
+            dominators.is_dominated_by(other.block, self.block)
+        }
+    }
+}
+*/
