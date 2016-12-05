@@ -259,7 +259,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let shadowed_decl = self.find_local(name);
         let var = self.local_decls.push(LocalDecl {
             mutability: mutability,
-            ident: name,
+            name: name,
             ty: var_ty,
             shadowed_decl: shadowed_decl,
             source_info: source_info,

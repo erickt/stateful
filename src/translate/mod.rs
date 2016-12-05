@@ -172,7 +172,7 @@ pub struct Builder<'a, 'b: 'a> {
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn shadowed_ident(&self, local: Local) -> ast::Ident {
-        let decl_ident = self.mir.local_decls[local].ident;
+        let decl_ident = self.mir.local_decls[local].name;
         self.ast_builder.id(format!("{}_shadowed_{}", decl_ident, local.index()))
     }
 }

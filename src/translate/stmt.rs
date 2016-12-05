@@ -15,10 +15,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let stmt_builder = match local_decl.mutability {
                     ast::Mutability::Mutable => {
-                        ast_builder.stmt().let_().mut_id(local_decl.ident)
+                        ast_builder.stmt().let_().mut_id(local_decl.name)
                     }
                     ast::Mutability::Immutable => {
-                        ast_builder.stmt().let_().id(local_decl.ident)
+                        ast_builder.stmt().let_().id(local_decl.name)
                     }
                 };
 
@@ -112,7 +112,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 .global()
                                 .ids(&["std", "mem", "drop"])
                                 .build()
-                            .arg().id(decl.ident)
+                            .arg().id(decl.name)
                             .build()
                     );
                 }
@@ -121,7 +121,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     let shadowed_ident = self.shadowed_ident(shadowed_decl);
 
                     stmts.push(
-                        ast_builder.stmt().let_id(decl.ident).expr().id(shadowed_ident)
+                        ast_builder.stmt().let_id(decl.name).expr().id(shadowed_ident)
                     );
                 }
 
@@ -145,7 +145,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             let shadowed_ident = self.shadowed_ident(shadowed_decl);
 
             Some(ast_builder.stmt().let_id(shadowed_ident)
-                .expr().id(local_decl.ident)
+                .expr().id(local_decl.name)
             )
         } else {
             None

@@ -39,7 +39,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // Only add active decls to the state.
                 let local = match *live_decl {
                     LiveDecl::Active(local) => {
-                        decls.push((local, self.mir.local_decls[local].ident));
+                        decls.push((local, self.mir.local_decls[local].name));
                         local
                     }
                     LiveDecl::Moved(local) => local,

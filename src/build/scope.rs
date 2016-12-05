@@ -565,7 +565,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     /// Mark a variable initialized.
     fn initialize_decl(&mut self, var: Local) {
-        let ident = self.local_decls[var].ident;
+        let ident = self.local_decls[var].name;
         debug!("initialize_decl: scope={:?} var={:?} ident={:?}", self.scopes.last().unwrap().id, var, ident);
         
         for scope in self.scopes.iter_mut().rev() {
@@ -598,7 +598,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // Check first if the lvalue has been conditionally initialized.
             if let Some(conditional) = scope.conditionals.last() {
                 for var in &conditional.initialized_decls {
-                    if ident == self.local_decls[*var].ident {
+                    if ident == self.local_decls[*var].name {
                         return Some(*var);
                     }
                 }
@@ -606,7 +606,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             // If not, check if we are shadowing another variable.
             for var in scope.drops.iter().rev() {
-                if ident == self.local_decls[*var].ident {
+                if ident == self.local_decls[*var].name {
                     return Some(*var);
                 }
             }

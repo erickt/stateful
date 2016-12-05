@@ -26,7 +26,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let source_info = self.source_info(span);
         let temp = self.local_decls.push(LocalDecl {
             mutability: ast::Mutability::Mutable,
-            ident: ident,
+            name: ident,
             ty: None,
             shadowed_decl: None,
             source_info: source_info,

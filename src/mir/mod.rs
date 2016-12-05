@@ -225,7 +225,7 @@ pub struct LocalDecl {
     ///
     /// Note that function arguments can also have this set to `Some(_)`
     /// to generate better debuginfo.
-    pub ident: ast::Ident,
+    pub name: ast::Ident,
 
     /// For user-declared variables, stores their source information.
     ///
@@ -494,7 +494,7 @@ impl ToExpr for Lvalue {
         match *self {
             Lvalue::Local(ref local) => {
                 let local_decl = &local_decls[*local];
-                AstBuilder::new().span(local_decl.source_info.span).expr().id(local_decl.ident)
+                AstBuilder::new().span(local_decl.source_info.span).expr().id(local_decl.name)
             }
             Lvalue::Static(ref expr) => {
                 expr.clone()
