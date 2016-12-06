@@ -11,6 +11,8 @@ use syntax::codemap::Span;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
+mod tcx;
+
 macro_rules! newtype_index {
     ($name:ident, $debug_name:expr) => (
         #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
