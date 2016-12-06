@@ -666,8 +666,8 @@ pub enum Rvalue {
     Mac(ast::Mac),
     Ref(ast::Mutability, Lvalue),
 
-    Binary(ast::BinOp, Operand, Operand),
-    Unary(ast::UnOp, Operand),
+    BinaryOp(ast::BinOp, Operand, Operand),
+    UnaryOp(ast::UnOp, Operand),
 
     Tuple(Vec<Operand>),
     Struct(ast::Path, Vec<ast::Field>, Vec<Operand>, Option<Operand>),
@@ -691,13 +691,13 @@ impl ToExpr for Rvalue {
             Rvalue::Ref(ast::Mutability::Mutable, ref arg) => {
                 builder.expr().mut_ref().build(arg.to_expr(local_decls))
             }
-            Rvalue::Binary(op, ref lhs, ref rhs) => {
+            Rvalue::BinaryOp(op, ref lhs, ref rhs) => {
                 builder.expr().build_binary(
                     op.node,
                     lhs.to_expr(local_decls),
                     rhs.to_expr(local_decls))
             }
-            Rvalue::Unary(op, ref expr) => {
+            Rvalue::UnaryOp(op, ref expr) => {
                 builder.expr().build_unary(
                     op,
                     expr.to_expr(local_decls))
@@ -745,10 +745,10 @@ impl Debug for Rvalue {
             Use(ref lvalue) => write!(fmt, "{:?}", lvalue),
             Mac(ref mac) => write!(fmt, "{}", pprust::mac_to_string(mac)),
 
-            Binary(binop, ref lhs, ref rhs) => {
+            BinaryOp(binop, ref lhs, ref rhs) => {
                 write!(fmt, "{:?}({:?}, {:?})", binop, lhs, rhs)
             }
-            Unary(unop, ref value) => {
+            UnaryOp(unop, ref value) => {
                 write!(fmt, "{:?}({:?})", unop, value)
             }
 

@@ -49,7 +49,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             ExprKind::Unary(op, ref arg) => {
                 let arg = unpack!(block = this.as_operand(block, arg));
-                block.and(Rvalue::Unary(op, arg))
+                block.and(Rvalue::UnaryOp(op, arg))
             }
             /*
             ExprKind::Box { value, value_extents } => {
@@ -228,6 +228,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                            op: ast::BinOp,
                            lhs: Operand,
                            rhs: Operand) -> BlockAnd<Rvalue> {
-        block.and(Rvalue::Binary(op, lhs, rhs))
+        block.and(Rvalue::BinaryOp(op, lhs, rhs))
     }
 }
