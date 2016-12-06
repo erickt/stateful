@@ -459,7 +459,12 @@ impl TerminatorKind {
             If { .. } => vec!["true".into(), "false".into()],
             Match { ref targets, .. } => {
                 targets.iter()
-                    .map(|arm| Cow::from(format!("{:?}", arm.pats)))
+                    .map(|arm| {
+                        let pats = arm.pats.iter()
+                            .map(|pat| pprust::pat_to_string(pat))
+                            .collect::<Vec<_>>();
+                        Cow::from(pats.join("|"))
+                    })
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
@@ -915,10 +920,10 @@ impl Debug for Statement {
         use self::StatementKind::*;
         match self.kind {
             Expr(ref expr) => {
-                write!(fmt, "{:?}", expr)
+                write!(fmt, "{:?}", pprust::stmt_to_string(expr))
             }
             Declare(local) => {
-                write!(fmt, "declare {:?}", local)
+                write!(fmt, "let {:?}", local)
             }
             Let { ref pat, ty: None, ref rvalue, .. } => {
                 write!(fmt, "let {:?} = {:?}", pat, rvalue)
@@ -930,18 +935,22 @@ impl Debug for Statement {
                 write!(fmt, "{:?} = {:?}", lvalue, rvalue)
             }
             Call { ref lvalue, ref fun, ref args, .. } => {
-                write!(fmt, "{:?} = {:?}({:?})", lvalue, fun, args)
+                write!(fmt, "{:?} = {:?}(", lvalue, fun)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ",")?;
+                    }
+                    write!(fmt, "{:?}", arg)?;
+                }
+                write!(fmt, ")")
             }
             MethodCall { ref lvalue, ref ident, ref tys, ref self_, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}.{:?}", lvalue, self_, ident)?;
 
                 if !tys.is_empty() {
                     write!(fmt, "::<")?;
-                    let mut first = true;
-                    for ty in tys {
-                        if first {
-                            first = false;
-                        } else {
+                    for (i, ty) in tys.iter().enumerate() {
+                        if i != 0 {
                             write!(fmt, ", ")?;
                         }
                         write!(fmt, "{:?}", ty)?;
@@ -951,12 +960,9 @@ impl Debug for Statement {
 
                 write!(fmt, "(")?;
 
-                let mut first = true;
-                for arg in args {
-                    if first {
-                        first = false;
-                    } else {
-                        write!(fmt, ", ")?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ",")?;
                     }
                     write!(fmt, "{:?}", arg)?;
                 }
