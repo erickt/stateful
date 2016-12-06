@@ -516,11 +516,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 self.cfg.push(block, Statement {
                     source_info: source_info,
-                    kind: StatementKind::Assign {
-                        span: span,
-                        lvalue: lvalue.clone(),
-                        rvalue: rvalue,
-                    }
+                    kind: StatementKind::Assign(lvalue.clone(), rvalue),
                 });
             }
             _ => {

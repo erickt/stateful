@@ -869,25 +869,19 @@ pub enum StatementKind {
     /// As opposed to MIR, we don't have an easy way breaking up irrefutable patterns, so instead
     /// we'll add a dedicated statement for them when we are that hides their destructuring.
     Let {
-        span: Span,
         pat: P<ast::Pat>,
         ty: Option<P<ast::Ty>>,
         lvalues: Vec<Local>,
         rvalue: Rvalue,
     },
-    Assign {
-        span: Span,
-        lvalue: Lvalue,
-        rvalue: Rvalue,
-    },
+    /// Write the RHS Rvalue to the LHS Lvalue.
+    Assign(Lvalue, Rvalue),
     Call {
-        span: Span,
         lvalue: Lvalue,
         fun: Operand,
         args: Vec<Rvalue>,
     },
     MethodCall {
-        span: Span,
         lvalue: Lvalue,
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
@@ -927,7 +921,7 @@ impl Debug for Statement {
             Let { ref pat, ty: Some(ref ty), ref rvalue, .. } => {
                 write!(fmt, "let {:?}: {:?} = {:?}", pat, ty, rvalue)
             }
-            Assign { ref lvalue, ref rvalue, .. } => {
+            Assign(ref lvalue, ref rvalue) => {
                 write!(fmt, "{:?} = {:?}", lvalue, rvalue)
             }
             Call { ref lvalue, ref fun, ref args, .. } => {

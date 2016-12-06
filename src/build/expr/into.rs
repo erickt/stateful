@@ -80,7 +80,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.cfg.push(block, Statement {
                     source_info: source_info,
                     kind: StatementKind::Call {
-                        span: expr_span,
                         lvalue: destination,
                         fun: fun,
                         args: args,
@@ -102,7 +101,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.cfg.push(block, Statement {
                     source_info: source_info,
                     kind: StatementKind::MethodCall {
-                        span: expr_span,
                         lvalue: destination,
                         ident: *ident,
                         tys: tys.clone(),

@@ -150,7 +150,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.cfg.push(block, Statement {
             source_info: source_info,
             kind: StatementKind::Let {
-                span: span,
                 pat: irrefutable_pat.clone(),
                 ty: self.ty_indices.get(&irrefutable_pat.id).map(|ty| ty.clone()),
                 lvalues: locals,
