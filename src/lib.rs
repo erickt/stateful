@@ -14,9 +14,11 @@ extern crate rustc_errors as errors;
 mod build;
 mod data_structures;
 mod mir;
-//mod transform;
+mod pretty;
+mod transform;
 mod translate;
-//mod traversal;
+mod ty;
+mod traversal;
 
 use syntax::ast;
 use syntax::codemap::Span;
@@ -25,16 +27,14 @@ use syntax::ext::base::{
     ExtCtxt,
     MultiModifier,
 };
-use syntax::print::pprust;
-use data_structures::indexed_vec::Idx;
-use mir::{FunctionDecl, Mir, StateMachineKind};
+use mir::{FunctionDecl, StateMachineKind};
 
-fn expand_state_machine(cx: &mut ExtCtxt,
-                        _sp: Span,
-                        meta_item: &ast::MetaItem,
-                        annotatable: Annotatable,
-                        name: &str,
-                        state_machine_kind: StateMachineKind) -> Annotatable {
+fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
+                                  _sp: Span,
+                                  meta_item: &ast::MetaItem,
+                                  annotatable: Annotatable,
+                                  name: &str,
+                                  state_machine_kind: StateMachineKind) -> Annotatable {
     let item = match annotatable {
         Annotatable::Item(item) => item,
         _ => {
@@ -72,56 +72,28 @@ fn expand_state_machine(cx: &mut ExtCtxt,
         }
     };
 
+    let tcx = ty::TyCtxt::new(cx);
 
-    let mir = build::construct_fn(
+    let mut mir = build::construct_fn(
         cx,
         state_machine_kind,
         item.span,
         fn_decl,
         ast_block);
 
-    validate(cx, &mir);
-
-    /*
-    if let Some(item) = translate::translate(cx, &mir) {
-        debug!("{}", pprust::item_to_string(&item));
-        debug!("-------");
-    }
-
-    let mut pass_manager = transform::pass_manager::PassManager::new();
-    pass_manager.add_pass(Box::new(mir::transform::simplify_cfg::SimplifyCfg::new()));
-    pass_manager.run(&mut mir);
-    */
-
-    validate(cx, &mir);
+    let mut passes = transform::Passes::new();
+    passes.push_hook(Box::new(transform::dump_mir::DumpMir));
+    passes.push_hook(Box::new(transform::validate::Validate));
+    passes.push_pass(Box::new(transform::simplify_cfg::SimplifyCfg::new()));
+    passes.run_passes(tcx, &mut mir);
 
     match translate::translate(cx, &mir) {
         Some(item) => {
-            debug!("{}", pprust::item_to_string(&item));
-
             Annotatable::Item(item)
         }
         None => {
             // We had an error, so just return the input item for a lack of a better option.
             Annotatable::Item(item.clone())
-        }
-    }
-}
-
-fn validate(cx: &mut ExtCtxt, mir: &Mir) {
-    let basic_blocks = mir.basic_blocks();
-    for (bb, block) in basic_blocks.iter_enumerated() {
-        let terminator = block.terminator();
-
-        for succ in terminator.successors() {
-            if succ.index() >= basic_blocks.len() {
-                cx.span_bug(
-                    mir.span,
-                    &format!("block {:?} terminator does not exist: {:?} len: {:?}",
-                            bb,
-                            terminator.kind,
-                            basic_blocks.len()));
-            }
         }
     }
 }

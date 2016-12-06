@@ -1,12 +1,14 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::{Idx, IndexVec};
+use std::borrow::Cow;
 use std::collections::BTreeMap;
-use std::fmt;
+use std::fmt::{self, Debug, Formatter, Write};
 use std::ops::{Index, IndexMut};
 use std::u32;
 use syntax::abi;
 use syntax::ast;
 use syntax::codemap::Span;
+use syntax::print::pprust;
 use syntax::ptr::P;
 
 macro_rules! newtype_index {
@@ -24,8 +26,8 @@ macro_rules! newtype_index {
             }
         }
 
-        impl fmt::Debug for $name {
-            fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+        impl Debug for $name {
+            fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
                 write!(fmt, "{}{}", $debug_name, self.0)
             }
         }
@@ -100,7 +102,7 @@ pub enum StateMachineKind {
 }
 
 impl fmt::Display for StateMachineKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         match *self {
             StateMachineKind::Generator => write!(f, "generator"),
             StateMachineKind::Async => write!(f, "async"),
@@ -176,6 +178,20 @@ impl Mir {
     pub fn local_decl_data(&self, local: Local) -> &LocalDecl {
         &self.local_decls[local]
     }
+
+    /// Returns an iterator over all user-declared locals.
+    #[inline]
+    pub fn vars_iter<'a>(&'a self) -> Box<Iterator<Item=Local> + 'a> {
+        Box::new((self.fn_decl.inputs().len()+1..self.local_decls.len()).map(move |index| {
+            Local::new(index)
+        }))
+    }
+
+    /// Returns an iterator over all function arguments.
+    pub fn args_iter(&self) -> Box<Iterator<Item=Local>> {
+        let arg_count = self.fn_decl.inputs().len();
+        Box::new((1..arg_count+1).map(Local::new))
+    }
 }
 
 impl Index<BasicBlock> for Mir {
@@ -207,7 +223,7 @@ pub struct SourceInfo {
 ///////////////////////////////////////////////////////////////////////////
 // Variables and temps
 
-newtype_index!(Local, "decl");
+newtype_index!(Local, "_");
 
 pub const RETURN_POINTER: Local = Local(0);
 
@@ -312,11 +328,9 @@ impl BasicBlockData {
         self.terminator.as_ref().expect("invalid terminator state")
     }
 
-    /*
     pub fn terminator_mut(&mut self) -> &mut Terminator {
         self.terminator.as_mut().expect("invalid terminator state")
     }
-    */
 }
 
 #[derive(Debug)]
@@ -325,7 +339,6 @@ pub struct Terminator {
     pub kind: TerminatorKind,
 }
 
-#[derive(Debug)]
 pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
@@ -361,7 +374,44 @@ pub enum TerminatorKind {
 
 impl Terminator {
     pub fn successors(&self) -> Vec<BasicBlock> {
-        match self.kind {
+        self.kind.successors()
+    }
+
+    pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
+        self.kind.successors_mut()
+    }
+}
+
+impl Debug for TerminatorKind {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        self.fmt_head(fmt)?;
+        let successors = self.successors();
+        let labels = self.fmt_successor_labels();
+        assert_eq!(successors.len(), labels.len());
+
+        match successors.len() {
+            0 => Ok(()),
+
+            1 => write!(fmt, " -> {:?}", successors[0]),
+
+            _ => {
+                write!(fmt, " -> [")?;
+                for (i, target) in successors.iter().enumerate() {
+                    if i > 0 {
+                        write!(fmt, ", ")?;
+                    }
+                    write!(fmt, "{}: {:?}", labels[i], target)?;
+                }
+                write!(fmt, "]")
+            }
+
+        }
+    }
+}
+
+impl TerminatorKind {
+    pub fn successors(&self) -> Vec<BasicBlock> {
+        match *self {
             TerminatorKind::Goto { target, .. } => vec![target],
             TerminatorKind::Match { ref targets, .. } => {
                 targets.iter().map(|arm| arm.block).collect()
@@ -372,9 +422,8 @@ impl Terminator {
         }
     }
 
-    /*
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
-        match self.kind {
+        match *self {
             TerminatorKind::Goto { ref mut target, .. } => vec![target],
             TerminatorKind::Match { ref mut targets, .. } => {
                 targets.iter_mut().map(|arm| &mut arm.block).collect()
@@ -386,7 +435,36 @@ impl Terminator {
             TerminatorKind::Suspend { ref mut target, .. } => vec![target],
         }
     }
-    */
+
+    /// Write the "head" part of the terminator; that is, its name and the data it uses to pick the
+    /// successor basic block, if any. The only information not inlcuded is the list of possible
+    /// successors, which may be rendered differently between the text and the graphviz format.
+    pub fn fmt_head<W: Write>(&self, fmt: &mut W) -> fmt::Result {
+        use self::TerminatorKind::*;
+        match *self {
+            Goto { .. } => write!(fmt, "goto"),
+            If { cond: ref lv, .. } => write!(fmt, "if({:?})", lv),
+            Match { discr: ref lv, .. } => write!(fmt, "match({:?})", lv),
+            Return => write!(fmt, "return"),
+            Suspend { ref rvalue, .. } => write!(fmt, "suspend({:?})", rvalue),
+        }
+    }
+
+    /// Return the list of labels for the edges to the successor basic blocks.
+    pub fn fmt_successor_labels(&self) -> Vec<Cow<'static, str>> {
+        use self::TerminatorKind::*;
+        match *self {
+            Return => vec![],
+            Goto { .. } => vec!["".into()],
+            If { .. } => vec!["true".into(), "false".into()],
+            Match { ref targets, .. } => {
+                targets.iter()
+                    .map(|arm| Cow::from(format!("{:?}", arm.pats)))
+                    .collect()
+            }
+            Suspend { .. } => vec!["".into()],
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -401,7 +479,7 @@ pub struct Arm {
 
 /// A path to a value; something that can be evaluated without
 /// changing or disturbing program state.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Lvalue {
     /// local variable
     Local(Local),
@@ -518,6 +596,23 @@ impl<B> ToExpr for Projection<B> where B: ToExpr {
     }
 }
 
+impl Debug for Lvalue {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        use self::Lvalue::*;
+
+        match *self {
+            Local(id) => write!(fmt, "{:?}", id),
+            Static(ref expr) => write!(fmt, "{}", pprust::expr_to_string(expr)),
+            Projection(ref data) => {
+                match data.elem {
+                    ProjectionElem::Deref =>
+                        write!(fmt, "(*{:?})", data.base),
+                }
+            }
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 // Scopes
 
@@ -536,7 +631,7 @@ pub struct VisibilityScopeData {
 /// These are values that can appear inside an rvalue (or an index
 /// lvalue). They are intentionally limited to prevent rvalues from
 /// being nested in one another.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Operand {
     Consume(Lvalue),
     Constant(Constant),
@@ -551,10 +646,20 @@ impl ToExpr for Operand {
     }
 }
 
+impl Debug for Operand {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        use self::Operand::*;
+        match *self {
+            Constant(ref a) => write!(fmt, "{:?}", a),
+            Consume(ref lv) => write!(fmt, "{:?}", lv),
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 /// Rvalues
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum Rvalue {
     /// x (either a move or copy, depending on type of x)
     Use(Operand),
@@ -632,6 +737,88 @@ impl ToExpr for Rvalue {
     }
 }
 
+impl Debug for Rvalue {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        use self::Rvalue::*;
+
+        match *self {
+            Use(ref lvalue) => write!(fmt, "{:?}", lvalue),
+            Mac(ref mac) => write!(fmt, "{}", pprust::mac_to_string(mac)),
+
+            Binary(binop, ref lhs, ref rhs) => {
+                write!(fmt, "{:?}({:?}, {:?})", binop, lhs, rhs)
+            }
+            Unary(unop, ref value) => {
+                write!(fmt, "{:?}({:?})", unop, value)
+            }
+
+            Ref(borrow_kind, ref lv) => {
+                let kind_str = match borrow_kind {
+                    ast::Mutability::Immutable => "",
+                    ast::Mutability::Mutable => "mut ",
+                };
+                write!(fmt, "&{}{:?}", kind_str, lv)
+            }
+
+            Tuple(ref lvs) => {
+                fn fmt_tuple(fmt: &mut Formatter, lvs: &[Operand]) -> fmt::Result {
+                    let mut tuple_fmt = fmt.debug_tuple("");
+                    for lv in lvs {
+                        tuple_fmt.field(lv);
+                    }
+                    tuple_fmt.finish()
+                }
+
+                match lvs.len() {
+                    0 => write!(fmt, "()"),
+                    1 => write!(fmt, "({:?},)", lvs[0]),
+                    _ => fmt_tuple(fmt, lvs),
+                }
+            }
+            Struct(ref path, ref fields, ref items, ref wth) => {
+                write!(fmt, "{:?} {{", path)?;
+
+                let mut first = true;
+                for (field, item) in fields.iter().zip(items.iter()) {
+                    if first {
+                        write!(fmt, ", ")?;
+                    } else {
+                        first = false;
+                    }
+                    if field.is_shorthand {
+                        write!(fmt, "{:?}", item)?;
+                    } else {
+                        write!(fmt, "{:?}: {:?}", field.ident, item)?;
+                    }
+                }
+
+                if let Some(ref wth) = *wth {
+                    write!(fmt, " .. {:?}", wth)?;
+                }
+
+                write!(fmt, "}}")
+            }
+            Range(ref from, ref to, limits) => {
+                if let Some(ref from) = *from {
+                    write!(fmt, "{:?}", from)?;
+                }
+
+                if limits == ast::RangeLimits::HalfOpen {
+                    write!(fmt, "..")?;
+                } else {
+                    write!(fmt, "...")?;
+                }
+
+                if let Some(ref to) = *to {
+                    write!(fmt, "{:?}", to)?;
+                }
+
+                Ok(())
+            }
+        }
+    }
+}
+
 ///////////////////////////////////////////////////////////////////////////
 /// Constants
 ///
@@ -639,12 +826,17 @@ impl ToExpr for Rvalue {
 /// this does not necessarily mean that they are "==" in Rust -- in
 /// particular one must be wary of `NaN`!
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct Constant {
     pub span: Span,
     pub literal: P<ast::Lit>,
 }
 
+impl Debug for Constant {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        write!(fmt, "{}", pprust::lit_to_string(&self.literal))
+    }
+}
 
 impl ToExpr for Constant {
     fn to_expr(&self, _local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
@@ -656,7 +848,6 @@ impl ToExpr for Constant {
 ///////////////////////////////////////////////////////////////////////////
 // Statements
 
-#[derive(Debug)]
 pub struct Statement {
     pub source_info: SourceInfo,
     pub kind: StatementKind,
@@ -672,7 +863,6 @@ impl Statement {
 }
 */
 
-#[derive(Debug)]
 pub enum StatementKind {
     Expr(ast::Stmt),
     Declare(Local),
@@ -719,6 +909,74 @@ pub enum StatementKind {
     /// No-op. Useful for deleting instructions without affecting statement indices.
     Nop,
     */
+}
+
+impl Debug for Statement {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        use self::StatementKind::*;
+        match self.kind {
+            Expr(ref expr) => {
+                write!(fmt, "{:?}", expr)
+            }
+            Declare(local) => {
+                write!(fmt, "declare {:?}", local)
+            }
+            Let { ref pat, ty: None, ref rvalue, .. } => {
+                write!(fmt, "let {:?} = {:?}", pat, rvalue)
+            }
+            Let { ref pat, ty: Some(ref ty), ref rvalue, .. } => {
+                write!(fmt, "let {:?}: {:?} = {:?}", pat, ty, rvalue)
+            }
+            Assign { ref lvalue, ref rvalue, .. } => {
+                write!(fmt, "{:?} = {:?}", lvalue, rvalue)
+            }
+            Call { ref lvalue, ref fun, ref args, .. } => {
+                write!(fmt, "{:?} = {:?}({:?})", lvalue, fun, args)
+            }
+            MethodCall { ref lvalue, ref ident, ref tys, ref self_, ref args, .. } => {
+                write!(fmt, "{:?} = {:?}.{:?}", lvalue, self_, ident)?;
+
+                if !tys.is_empty() {
+                    write!(fmt, "::<")?;
+                    let mut first = true;
+                    for ty in tys {
+                        if first {
+                            first = false;
+                        } else {
+                            write!(fmt, ", ")?;
+                        }
+                        write!(fmt, "{:?}", ty)?;
+                    }
+                    write!(fmt, ">")?;
+                }
+
+                write!(fmt, "(")?;
+
+                let mut first = true;
+                for arg in args {
+                    if first {
+                        first = false;
+                    } else {
+                        write!(fmt, ", ")?;
+                    }
+                    write!(fmt, "{:?}", arg)?;
+                }
+                write!(fmt, ")")
+            }
+            Drop { ref lvalue, .. } => {
+                write!(fmt, "drop {:?}", lvalue)
+            }
+
+            /*
+            StorageLive(ref lv) => write!(fmt, "StorageLive({:?})", lv),
+            StorageDead(ref lv) => write!(fmt, "StorageDead({:?})", lv),
+            SetDiscriminant{lvalue: ref lv, variant_index: index} => {
+                write!(fmt, "discriminant({:?}) = {:?}", lv, index)
+            }
+            Nop => write!(fmt, "nop"),
+            */
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -783,8 +1041,8 @@ pub struct Location {
     pub statement_index: usize,
 }
 
-impl fmt::Debug for Location {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
+impl Debug for Location {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         write!(fmt, "{:?}[{}]", self.block, self.statement_index)
     }
 }

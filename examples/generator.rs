@@ -9,11 +9,19 @@
 
 use std::iter::Iterator;
 
+fn foo() -> usize { 5 }
+
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
+    if true {
+        let x = foo();
+        yield_!(x);
+    }
+    /*
     for item in 1..5 {
         yield_!(item);
     }
+    */
 }
 
 fn main() {

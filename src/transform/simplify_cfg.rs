@@ -11,8 +11,10 @@
 use bit_vec::BitVec;
 use data_structures::indexed_vec::{Idx, IndexVec};
 use mir::*;
-use transform::pass::MirPass;
+use std::borrow::Cow;
+use super::{MirPass, Pass};
 use traversal;
+use ty::TyCtxt;
 
 #[derive(Debug)]
 pub struct SimplifyCfg;
@@ -23,8 +25,16 @@ impl SimplifyCfg {
     }
 }
 
+impl<'b> Pass for SimplifyCfg {
+    fn name(&self) -> Cow<'static, str> { 
+        Cow::from("SimplifyCfg")
+    }
+}
+
 impl MirPass for SimplifyCfg {
-    fn run_pass(&mut self, mir: &mut Mir) {
+    fn run_pass<'a, 'tcx>(&mut self,
+                          _tcx: TyCtxt<'a, 'tcx>,
+                          mir: &mut Mir) {
         CfgSimplifier::new(mir).simplify();
         remove_dead_blocks(mir);
         
