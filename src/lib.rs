@@ -8,11 +8,15 @@ extern crate rustc_plugin;
 extern crate rustc_errors as errors;
 #[macro_use] extern crate log;
 #[macro_use] extern crate syntax;
+extern crate syntax_pos;
 
 #[macro_use] mod macros;
 
+mod analysis;
+//mod borrowck;
 mod build;
 mod data_structures;
+//mod dataflow;
 mod mir;
 mod pretty;
 mod transform;
@@ -86,6 +90,9 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     passes.push_hook(Box::new(transform::validate::Validate));
     passes.push_pass(Box::new(transform::simplify_cfg::SimplifyCfg::new()));
     passes.run_passes(tcx, &mut mir);
+
+    //dataflow::dataflow(tcx, &mir);
+    analysis::analyze(tcx, &mir);
 
     match translate::translate(cx, &mir) {
         Some(item) => {

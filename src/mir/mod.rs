@@ -758,10 +758,10 @@ impl Debug for Rvalue {
             Mac(ref mac) => write!(fmt, "{}", pprust::mac_to_string(mac)),
 
             BinaryOp(binop, ref lhs, ref rhs) => {
-                write!(fmt, "{:?}({:?}, {:?})", binop, lhs, rhs)
+                write!(fmt, "{}({:?}, {:?})", binop.node.to_string(), lhs, rhs)
             }
             UnaryOp(unop, ref value) => {
-                write!(fmt, "{:?}({:?})", unop, value)
+                write!(fmt, "{}({:?})", ast::UnOp::to_string(unop), value)
             }
 
             Ref(borrow_kind, ref lv) => {
