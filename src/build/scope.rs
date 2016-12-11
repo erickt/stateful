@@ -870,7 +870,7 @@ fn drop_decl(cfg: &mut CFG,
     cfg.push(block, Statement {
         source_info: source_info,
         kind: StatementKind::Drop {
-            lvalue: var,
+            location: Lvalue::Local(var),
             moved: moved,
         }
     });

@@ -395,17 +395,30 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.create_move_path(lval);
                 self.gather_rvalue(loc, rval);
             }
-            StatementKind::Call { ref func, ref args, ref destination, cleanup: _ } => {
+            StatementKind::Call { ref func, ref args, ref destination, .. } => {
                 self.gather_operand(loc, func);
                 for arg in args {
-                    self.gather_operand(loc, arg);
+                    self.gather_rvalue(loc, arg);
                 }
-                if let Some((ref destination, _bb)) = *destination {
-                    self.create_move_path(destination);
-                }
+                self.create_move_path(destination);
             }
-            StatementKind::Drop { ref location, target: _, unwind: _ } => {
+            StatementKind::MethodCall { ref destination, ref self_, ref args, .. } => {
+                self.gather_operand(loc, self_);
+                for arg in args {
+                    self.gather_rvalue(loc, arg);
+                }
+                self.create_move_path(destination);
+            }
+            StatementKind::Drop { ref location, .. } => {
                 self.gather_move(loc, location);
+            }
+            StatementKind::Expr(_) => {}
+            StatementKind::Declare(_) => {}
+            StatementKind::Let { ref lvalues, ref rvalue, .. } => {
+                for lvalue in lvalues {
+                    self.create_move_path(&Lvalue::Local(*lvalue));
+                }
+                self.gather_rvalue(loc, rvalue);
             }
             /*
             StatementKind::StorageLive(_) |
@@ -426,6 +439,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             Rvalue::UnaryOp(_, ref operand) => {
                 self.gather_operand(loc, operand)
             }
+            Rvalue::Mac(_) => {}
             /*
             Rvalue::Use(ref operand) |
             Rvalue::Repeat(ref operand, _) |
@@ -448,10 +462,29 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                     self.gather_operand(loc, operand);
                 }
             }
-            Rvalue::Ref(..) |
-            Rvalue::Len(..) |
-            Rvalue::InlineAsm { .. } => {}
-            Rvalue::Box(..) => {
+            */
+            Rvalue::Tuple(ref operands) => {
+                for operand in operands {
+                    self.gather_operand(loc, operand);
+                }
+            }
+            Rvalue::Struct(_, _, ref operands, ref with) => {
+                for operand in operands {
+                    self.gather_operand(loc, operand);
+                }
+                if let Some(ref with) = *with {
+                    self.gather_operand(loc, with);
+                }
+            }
+            Rvalue::Range(ref from, ref to, _) => {
+                if let Some(ref from) = *from {
+                    self.gather_operand(loc, from);
+                }
+                if let Some(ref to) = *to {
+                    self.gather_operand(loc, to);
+                }
+            }
+            Rvalue::Ref(..) => {
                 // This returns an rvalue with uninitialized contents. We can't
                 // move out of it here because it is an rvalue - assignments always
                 // completely initialize their lvalue.
@@ -463,7 +496,6 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 // In any case, if we want to fix this, we have to register a
                 // special move and change the `statement_effect` functions.
             }
-            */
         }
     }
 
@@ -479,6 +511,9 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             TerminatorKind::If { .. } |
             TerminatorKind::Match { .. } => {
                 // branching terminators - these don't move anything
+            }
+            TerminatorKind::Suspend { ref rvalue, .. } => {
+                self.gather_rvalue(loc, rvalue);
             }
         }
     }

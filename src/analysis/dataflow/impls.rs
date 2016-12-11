@@ -351,9 +351,14 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
         let stmt = &block_data.statements[idx];
         println!("uninit statement_effect: bb={:?} stmt={:?}", bb, stmt);
         match stmt.kind {
-            StatementKind::Drop { ref lvalue, .. } => {
-                println!("kill local={:?}", lvalue);
-                sets.kill(&lvalue);
+            StatementKind::Drop { ref location, .. } => {
+                match *location {
+                    Lvalue::Local(local) => {
+                        println!("kill local={:?}", local);
+                        sets.kill(&local);
+                    }
+                    _ => {}
+                }
             }
             _ => {}
         }
@@ -442,9 +447,14 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
                     _ => {}
                 }
             }
-            StatementKind::Drop { ref lvalue, .. } => {
-                println!("kill local={:?}", lvalue);
-                sets.kill(&lvalue);
+            StatementKind::Drop { ref location, .. } => {
+                match *location {
+                    Lvalue::Local(local) => {
+                        println!("kill local={:?}", local);
+                        sets.kill(&local);
+                    }
+                    _ => {}
+                }
             }
             _ => {}
         }

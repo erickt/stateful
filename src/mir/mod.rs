@@ -889,19 +889,19 @@ pub enum StatementKind {
     /// Write the RHS Rvalue to the LHS Lvalue.
     Assign(Lvalue, Rvalue),
     Call {
-        lvalue: Lvalue,
-        fun: Operand,
+        destination: Lvalue,
+        func: Operand,
         args: Vec<Rvalue>,
     },
     MethodCall {
-        lvalue: Lvalue,
+        destination: Lvalue,
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
         self_: Operand,
         args: Vec<Rvalue>,
     },
     Drop {
-        lvalue: Local,
+        location: Lvalue,
         moved: bool,
     },
 
@@ -936,8 +936,8 @@ impl Debug for Statement {
             Assign(ref lvalue, ref rvalue) => {
                 write!(fmt, "{:?} = {:?}", lvalue, rvalue)
             }
-            Call { ref lvalue, ref fun, ref args, .. } => {
-                write!(fmt, "{:?} = {:?}(", lvalue, fun)?;
+            Call { ref destination, ref func, ref args, .. } => {
+                write!(fmt, "{:?} = {:?}(", destination, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i != 0 {
                         write!(fmt, ",")?;
@@ -946,8 +946,8 @@ impl Debug for Statement {
                 }
                 write!(fmt, ")")
             }
-            MethodCall { ref lvalue, ref ident, ref tys, ref self_, ref args, .. } => {
-                write!(fmt, "{:?} = {:?}.{:?}", lvalue, self_, ident)?;
+            MethodCall { ref destination, ref ident, ref tys, ref self_, ref args, .. } => {
+                write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
 
                 if !tys.is_empty() {
                     write!(fmt, "::<")?;
@@ -970,8 +970,8 @@ impl Debug for Statement {
                 }
                 write!(fmt, ")")
             }
-            Drop { ref lvalue, .. } => {
-                write!(fmt, "drop {:?}", lvalue)
+            Drop { ref location, .. } => {
+                write!(fmt, "drop {:?}", location)
             }
 
             /*

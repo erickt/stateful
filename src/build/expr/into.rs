@@ -70,8 +70,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            ExprKind::Call(ref fun, ref args) => {
-                let fun = unpack!(block = this.as_operand(block, fun));
+            ExprKind::Call(ref func, ref args) => {
+                let func = unpack!(block = this.as_operand(block, func));
                 let args = args.into_iter()
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
@@ -80,8 +80,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.cfg.push(block, Statement {
                     source_info: source_info,
                     kind: StatementKind::Call {
-                        lvalue: destination,
-                        fun: fun,
+                        destination: destination,
+                        func: func,
                         args: args,
                     },
                 });
@@ -101,7 +101,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 this.cfg.push(block, Statement {
                     source_info: source_info,
                     kind: StatementKind::MethodCall {
-                        lvalue: destination,
+                        destination: destination,
                         ident: *ident,
                         tys: tys.clone(),
                         self_: self_,

@@ -9,10 +9,8 @@ use self::dataflow::{Dataflow, DataflowAnalysis, DataflowResults};
 use self::dataflow::{MaybeInitializedLvals, MaybeUninitializedLvals};
 use self::dataflow::{DefinitelyInitializedLvals};
 
-/*
 mod abs_domain;
 mod gather_moves;
-*/
 mod dataflow;
 
 pub fn analyze(tcx: TyCtxt, mir: &Mir) {

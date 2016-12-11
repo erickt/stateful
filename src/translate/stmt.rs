@@ -59,15 +59,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            StatementKind::Call { ref lvalue, ref fun, ref args } => {
-                let lvalue = lvalue.to_expr(&self.mir.local_decls);
+            StatementKind::Call { ref destination, ref func, ref args } => {
+                let lvalue = destination.to_expr(&self.mir.local_decls);
 
-                let fun = fun.to_expr(&self.mir.local_decls);
+                let func = func.to_expr(&self.mir.local_decls);
                 let args = args.iter()
                     .map(|arg| arg.to_expr(&self.mir.local_decls));
 
                 let rvalue = ast_builder.expr()
-                    .call().build(fun)
+                    .call().build(func)
                     .with_args(args)
                     .build();
 
@@ -77,8 +77,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            StatementKind::MethodCall { ref lvalue, ident, ref tys, ref self_, ref args } => {
-                let lvalue = lvalue.to_expr(&self.mir.local_decls);
+            StatementKind::MethodCall { ref destination, ident, ref tys, ref self_, ref args } => {
+                let lvalue = destination.to_expr(&self.mir.local_decls);
                 let self_ = self_.to_expr(&self.mir.local_decls);
 
                 let args = args.iter()
@@ -97,36 +97,41 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            StatementKind::Drop { lvalue, moved } => {
-                let decl = self.mir.local_decl_data(lvalue);
+            StatementKind::Drop { ref location, moved } => {
+                match *location {
+                    Lvalue::Local(local) => {
+                        let decl = self.mir.local_decl_data(local);
 
-                // We need an explicit drop here to make sure we drop variables as they go out of
-                // a block scope. Otherwise, they won't be dropped until the next yield point,
-                // which wouldn't match the Rust semantics.
-                let mut stmts = vec![];
+                        // We need an explicit drop here to make sure we drop variables as they go out of
+                        // a block scope. Otherwise, they won't be dropped until the next yield point,
+                        // which wouldn't match the Rust semantics.
+                        let mut stmts = vec![];
 
-                // Only drop if we were not moved.
-                if !moved {
-                    stmts.push(
-                        ast_builder.stmt().semi().call()
-                            .path()
-                                .global()
-                                .ids(&["std", "mem", "drop"])
-                                .build()
-                            .arg().id(decl.name)
-                            .build()
-                    );
+                        // Only drop if we were not moved.
+                        if !moved {
+                            stmts.push(
+                                ast_builder.stmt().semi().call()
+                                    .path()
+                                        .global()
+                                        .ids(&["std", "mem", "drop"])
+                                        .build()
+                                    .arg().id(decl.name)
+                                    .build()
+                            );
+                        }
+
+                        if let Some(shadowed_decl) = decl.shadowed_decl {
+                            let shadowed_ident = self.shadowed_ident(shadowed_decl);
+
+                            stmts.push(
+                                ast_builder.stmt().let_id(decl.name).expr().id(shadowed_ident)
+                            );
+                        }
+
+                        stmts
+                    }
+                    _ => vec![]
                 }
-
-                if let Some(shadowed_decl) = decl.shadowed_decl {
-                    let shadowed_ident = self.shadowed_ident(shadowed_decl);
-
-                    stmts.push(
-                        ast_builder.stmt().let_id(decl.name).expr().id(shadowed_ident)
-                    );
-                }
-
-                stmts
             }
             /*
             StatementKind::StorageLive(_) |
