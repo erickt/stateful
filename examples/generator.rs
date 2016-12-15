@@ -8,30 +8,27 @@
 #![allow(unused_variables)]
 
 use std::iter::Iterator;
+use std::mem;
 
-fn foo() -> usize { 5 }
+struct S;
 
 #[generator]
-fn gen(a: usize) -> Box<Iterator<Item=usize>> {
-    let while_result = while false {
-        let b = 1;
-    };
+fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
+    let a = 1; let mut b = 2; let c; let d;
 
-    let c = 2;
-    /*
-    let result = if a == 0 {
-        let b = 2;
-        b
+    if pred {
+        mem::drop(a);
+        b = 3;
     } else {
-        let c = 3;
-        c
-    };
-    let d = 4;
-    */
+        mem::drop(b);
+        d = 4;
+    }
+
+    c = 5;
 }
 
 fn main() {
-    for value in gen(5) {
+    for value in gen(true) {
         println!("{}", value);
     }
 }

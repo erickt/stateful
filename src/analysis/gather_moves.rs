@@ -395,6 +395,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.create_move_path(lval);
                 self.gather_rvalue(loc, rval);
             }
+            /*
             StatementKind::Call { ref func, ref args, ref destination, .. } => {
                 self.gather_operand(loc, func);
                 for arg in args {
@@ -420,6 +421,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 }
                 self.gather_rvalue(loc, rvalue);
             }
+            */
             /*
             StatementKind::StorageLive(_) |
             StatementKind::StorageDead(_) => {}
@@ -512,6 +514,10 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             TerminatorKind::Match { .. } => {
                 // branching terminators - these don't move anything
             }
+
+            TerminatorKind::Drop { ref location, .. } => {
+                self.gather_move(loc, location);
+            }
             TerminatorKind::Suspend { ref rvalue, .. } => {
                 self.gather_rvalue(loc, rvalue);
             }
@@ -539,23 +545,24 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
         }
         */
 
-        let path = match self.move_path_for(lval) {
-            Ok(path) | Err(MovePathError::UnionMove { path }) => path,
+        match self.move_path_for(lval) {
+            Ok(path) | Err(MovePathError::UnionMove { path }) => {
+                let move_out = self.data.moves.push(MoveOut { path: path, source: loc });
+
+                debug!("gather_move({:?}, {:?}): adding move {:?} of {:?}",
+                       loc, lval, move_out, path);
+
+                self.data.path_map[path].push(move_out);
+                self.data.loc_map[loc].push(move_out);
+            }
             Err(MovePathError::IllegalMove) => {
                 // Moving out of a bad path. Eventually, this should be a MIR
                 // borrowck error instead of a bug.
-                span_bug!(&self.tcx,
+                span_warn!(&self.tcx,
                           self.mir.span,
                           "Broken MIR: moving out of lvalue {:?}: {:?} at {:?}",
                           lval, lv_ty, loc);
             }
         };
-        let move_out = self.data.moves.push(MoveOut { path: path, source: loc });
-
-        debug!("gather_move({:?}, {:?}): adding move {:?} of {:?}",
-               loc, lval, move_out, path);
-
-        self.data.path_map[path].push(move_out);
-        self.data.loc_map[loc].push(move_out);
     }
 }

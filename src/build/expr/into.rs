@@ -77,13 +77,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .collect::<Vec<_>>();
 
                 this.declare(block, expr_span, &destination);
-                this.cfg.push(block, Statement {
-                    source_info: source_info,
-                    kind: StatementKind::Call {
-                        destination: destination,
-                        func: func,
-                        args: args,
-                    },
+                this.cfg.terminate(block, source_info, TerminatorKind::Call {
+                    destination: destination,
+                    func: func,
+                    args: args,
                 });
                 block.unit()
             }
@@ -98,17 +95,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .collect::<Vec<_>>();
 
                 this.declare(block, expr_span, &destination);
-                this.cfg.push(block, Statement {
-                    source_info: source_info,
-                    kind: StatementKind::MethodCall {
-                        destination: destination,
-                        ident: *ident,
-                        tys: tys.clone(),
-                        self_: self_,
-                        args: args,
-                    },
+                this.cfg.terminate(block, source_info, TerminatorKind::MethodCall {
+                    destination: destination,
+                    ident: *ident,
+                    tys: tys.clone(),
+                    self_: self_,
+                    args: args,
                 });
-
                 block.unit()
             }
 

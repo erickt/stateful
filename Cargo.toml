@@ -18,6 +18,7 @@ aster = "0.*"
 bit-vec = "0.4.3"
 clippy = { version = "0.*", optional = true }
 compiletest_rs = { version = "^0.2.1", optional = true }
+dot = { git = "https://github.com/erickt/dot-rust", branch = "develop" }
 futures = "0.1.1"
 futures-cpupool = "0.1.1"
 tokio-timer = { git = "https://github.com/tokio-rs/tokio-timer" }

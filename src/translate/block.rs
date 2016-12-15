@@ -20,11 +20,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
-        let ast_builder = self.ast_builder.span(terminator.source_info.span);
+        let span = terminator.source_info.span;
+        let ast_builder = self.ast_builder.span(span);
 
         match terminator.kind {
             TerminatorKind::Goto { target, .. } => {
-                self.goto(terminator.source_info.span, target)
+                self.goto(span, target)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
                 let cond = cond.to_expr(&self.mir.local_decls);
@@ -32,13 +33,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let then_block = ast_builder
                     .span(self.block_span(then_block))
                     .block()
-                    .with_stmts(self.goto(terminator.source_info.span, then_block))
+                    .with_stmts(self.goto(span, then_block))
                     .build();
 
                 let else_block = ast_builder
                     .span(self.block_span(else_block))
                     .block()
-                    .with_stmts(self.goto(terminator.source_info.span, else_block))
+                    .with_stmts(self.goto(span, else_block))
                     .build();
 
                 vec![
@@ -57,7 +58,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         let block = ast_builder.block()
                             .span(self.mir.span)
-                            .with_stmts(self.goto(terminator.source_info.span, target.block))
+                            .with_stmts(self.goto(span, target.block))
                             .build();
 
                         ast_builder.arm()
@@ -117,7 +118,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             TerminatorKind::Suspend { ref rvalue, target } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
                 let ast_builder = ast_builder.span(rvalue.span);
-                let next_state = self.state_expr(terminator.source_info.span, target);
+                let next_state = self.state_expr(span, target);
 
                 match self.mir.state_machine_kind {
                     StateMachineKind::Generator => {
@@ -156,6 +157,83 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(tuple)
                 ]
                 */
+            }
+            TerminatorKind::Call { ref destination, ref func, ref args } => {
+                let lvalue = destination.to_expr(&self.mir.local_decls);
+
+                let func = func.to_expr(&self.mir.local_decls);
+                let args = args.iter()
+                    .map(|arg| arg.to_expr(&self.mir.local_decls));
+
+                let rvalue = ast_builder.expr()
+                    .call().build(func)
+                    .with_args(args)
+                    .build();
+
+                vec![
+                    ast_builder.stmt().semi()
+                        .assign().build(lvalue)
+                        .build(rvalue)
+                ]
+            }
+            TerminatorKind::MethodCall { ref destination, ident, ref tys, ref self_, ref args } => {
+                let lvalue = destination.to_expr(&self.mir.local_decls);
+                let self_ = self_.to_expr(&self.mir.local_decls);
+
+                let args = args.iter()
+                    .map(|arg| arg.to_expr(&self.mir.local_decls));
+
+                let rvalue = ast_builder.expr()
+                    .span(ident.span).method_call(ident.node)
+                    .span(span).build(self_)
+                    .with_tys(tys.clone())
+                    .with_args(args)
+                    .build();
+
+                vec![
+                    ast_builder.stmt().semi()
+                        .assign().build(lvalue)
+                        .build(rvalue)
+                ]
+            }
+            TerminatorKind::Drop { ref location, target, moved } => {
+                let mut stmts = vec![];
+
+                match *location {
+                    Lvalue::Local(local) => {
+                        let decl = self.mir.local_decl_data(local);
+
+                        // We need an explicit drop here to make sure we drop variables as they go out of
+                        // a block scope. Otherwise, they won't be dropped until the next yield point,
+                        // which wouldn't match the Rust semantics.
+                        let mut stmts = vec![];
+
+                        // Only drop if we were not moved.
+                        if !moved {
+                            stmts.push(
+                                ast_builder.stmt().semi().call()
+                                    .path()
+                                        .global()
+                                        .ids(&["std", "mem", "drop"])
+                                        .build()
+                                    .arg().id(decl.name)
+                                    .build()
+                            );
+                        }
+
+                        if let Some(shadowed_decl) = decl.shadowed_decl {
+                            let shadowed_ident = self.shadowed_ident(shadowed_decl);
+
+                            stmts.push(
+                                ast_builder.stmt().let_id(decl.name).expr().id(shadowed_ident)
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+
+                stmts.extend(self.goto(span, target));
+                stmts
             }
         }
     }

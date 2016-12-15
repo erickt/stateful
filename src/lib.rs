@@ -4,6 +4,7 @@
 
 extern crate aster;
 extern crate bit_vec;
+extern crate dot;
 extern crate rustc_plugin;
 extern crate rustc_errors as errors;
 #[macro_use] extern crate log;
@@ -17,6 +18,7 @@ mod analysis;
 mod build;
 mod data_structures;
 //mod dataflow;
+mod graphviz;
 mod mir;
 mod pretty;
 mod transform;
@@ -91,7 +93,6 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     passes.push_pass(Box::new(transform::simplify_cfg::SimplifyCfg::new()));
     passes.run_passes(tcx, &mut mir);
 
-    //dataflow::dataflow(tcx, &mir);
     analysis::analyze(tcx, &mir);
 
     match translate::translate(cx, &mir) {

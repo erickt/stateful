@@ -194,6 +194,15 @@ impl Mir {
         let arg_count = self.fn_decl.inputs().len();
         Box::new((1..arg_count+1).map(Local::new))
     }
+
+    /// Returns an iterator over all user-defined variables and compiler-generated temporaries (all
+    /// locals that are neither arguments nor the return pointer).
+    #[inline]
+    pub fn vars_and_temps_iter(&self) -> Box<Iterator<Item=Local>> {
+        let arg_count = self.fn_decl.inputs().len();
+        let local_count = self.local_decls.len();
+        Box::new((arg_count+1..local_count).map(Local::new))
+    }
 }
 
 impl Index<BasicBlock> for Mir {
@@ -372,6 +381,27 @@ pub enum TerminatorKind {
         rvalue: Rvalue,
         target: BasicBlock,
     },
+
+    /// Drop the Lvalue
+    Drop {
+        location: Lvalue,
+        target: BasicBlock,
+        moved: bool,
+    },
+
+    /// Block ends with a call of a converging function
+    Call {
+        destination: Lvalue,
+        func: Operand,
+        args: Vec<Rvalue>,
+    },
+    MethodCall {
+        destination: Lvalue,
+        ident: ast::SpannedIdent,
+        tys: Vec<P<ast::Ty>>,
+        self_: Operand,
+        args: Vec<Rvalue>,
+    },
 }
 
 impl Terminator {
@@ -449,6 +479,43 @@ impl TerminatorKind {
             Match { discr: ref lv, .. } => write!(fmt, "match({:?})", lv),
             Return => write!(fmt, "return"),
             Suspend { ref rvalue, .. } => write!(fmt, "suspend({:?})", rvalue),
+            Call { ref destination, ref func, ref args, .. } => {
+                write!(fmt, "{:?} = {:?}(", destination, func)?;
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ",")?;
+                    }
+                    write!(fmt, "{:?}", arg)?;
+                }
+                write!(fmt, ")")
+            }
+            MethodCall { ref destination, ref ident, ref tys, ref self_, ref args, .. } => {
+                write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
+
+                if !tys.is_empty() {
+                    write!(fmt, "::<")?;
+                    for (i, ty) in tys.iter().enumerate() {
+                        if i != 0 {
+                            write!(fmt, ", ")?;
+                        }
+                        write!(fmt, "{:?}", ty)?;
+                    }
+                    write!(fmt, ">")?;
+                }
+
+                write!(fmt, "(")?;
+
+                for (i, arg) in args.iter().enumerate() {
+                    if i != 0 {
+                        write!(fmt, ",")?;
+                    }
+                    write!(fmt, "{:?}", arg)?;
+                }
+                write!(fmt, ")")
+            }
+            Drop { ref location, .. } => {
+                write!(fmt, "drop {:?}", location)
+            }
         }
     }
 
@@ -470,6 +537,9 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
+            Call { .. } => vec![],
+            MethodCall { .. } => vec![],
+            Drop { .. } => vec![],
         }
     }
 }
@@ -888,22 +958,6 @@ pub enum StatementKind {
     },
     /// Write the RHS Rvalue to the LHS Lvalue.
     Assign(Lvalue, Rvalue),
-    Call {
-        destination: Lvalue,
-        func: Operand,
-        args: Vec<Rvalue>,
-    },
-    MethodCall {
-        destination: Lvalue,
-        ident: ast::SpannedIdent,
-        tys: Vec<P<ast::Ty>>,
-        self_: Operand,
-        args: Vec<Rvalue>,
-    },
-    Drop {
-        location: Lvalue,
-        moved: bool,
-    },
 
     /*
     /// Start a live range for the storage of the local.
@@ -936,6 +990,7 @@ impl Debug for Statement {
             Assign(ref lvalue, ref rvalue) => {
                 write!(fmt, "{:?} = {:?}", lvalue, rvalue)
             }
+            /*
             Call { ref destination, ref func, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}(", destination, func)?;
                 for (i, arg) in args.iter().enumerate() {
@@ -973,6 +1028,7 @@ impl Debug for Statement {
             Drop { ref location, .. } => {
                 write!(fmt, "drop {:?}", location)
             }
+            */
 
             /*
             StorageLive(ref lv) => write!(fmt, "StorageLive({:?})", lv),

@@ -59,6 +59,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
+            /*
             StatementKind::Call { ref destination, ref func, ref args } => {
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 
@@ -133,6 +134,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     _ => vec![]
                 }
             }
+            */
             /*
             StatementKind::StorageLive(_) |
             StatementKind::StorageDead(_) |

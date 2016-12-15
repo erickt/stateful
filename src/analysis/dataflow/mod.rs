@@ -22,16 +22,14 @@ use std::path::PathBuf;
 use std::usize;
 
 use super::MirBorrowckCtxtPreDataflow;
-/*
 use super::MoveDataParamEnv;
 
-pub use self::sanity_check::sanity_check_via_rustc_peek;
-*/
+//pub use self::sanity_check::sanity_check_via_rustc_peek;
 pub use self::impls::{MaybeInitializedLvals, MaybeUninitializedLvals};
 pub use self::impls::{DefinitelyInitializedLvals}; //, MovingOutStatements};
 
-/*
 mod graphviz;
+/*
 mod sanity_check;
 */
 mod impls;
@@ -41,7 +39,7 @@ pub trait Dataflow<BD: BitDenotation> {
 }
 
 impl<'a, BD> Dataflow<BD> for MirBorrowckCtxtPreDataflow<'a, BD>
-    where BD: BitDenotation<Ctxt=()> + DataflowOperator
+    where BD: BitDenotation<Ctxt=MoveDataParamEnv> + DataflowOperator
 {
     fn dataflow<P>(&mut self, p: P) where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug {
         self.flow_state.build_sets();
@@ -130,45 +128,41 @@ impl<'b, 'a: 'b, BD> PropagationContext<'b, 'a, BD>
 }
 
 fn dataflow_path(context: &str, prepost: &str, path: &str) -> PathBuf {
-    format!("{}_{}", context, prepost);
+    println!("dataflow_path: {} {} {}", context, prepost, path);
+    let context = format!("{}_{}", context, prepost);
     let mut path = PathBuf::from(path);
     let new_file_name = {
         let orig_file_name = path.file_name().unwrap().to_str().unwrap();
         format!("{}_{}", context, orig_file_name)
     };
     path.set_file_name(new_file_name);
+    println!("path: {:?}", path);
     path
 }
 
 impl<'a, BD> MirBorrowckCtxtPreDataflow<'a, BD>
-    where BD: BitDenotation<Ctxt=()>
+    where BD: BitDenotation<Ctxt=MoveDataParamEnv>
 {
     fn pre_dataflow_instrumentation<P>(&self, p: P) -> io::Result<()>
         where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug
     {
-        /*
         if let Some(ref path_str) = self.print_preflow_to {
             let path = dataflow_path(BD::name(), "preflow", path_str);
             graphviz::print_borrowck_graph_to(self, &path, p)
         } else {
             Ok(())
         }
-        */
-        Ok(())
     }
 
     fn post_dataflow_instrumentation<P>(&self, p: P) -> io::Result<()>
         where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug
     {
-        /*
         if let Some(ref path_str) = self.print_postflow_to {
             let path = dataflow_path(BD::name(), "postflow", path_str);
             graphviz::print_borrowck_graph_to(self, &path, p)
         } else{
             Ok(())
         }
-        */
-        Ok(())
     }
 }
 
@@ -467,10 +461,10 @@ impl<'a, D> DataflowAnalysis<'a, D>
             mir::TerminatorKind::Unreachable => {}
             mir::TerminatorKind::Goto { ref target } |
             mir::TerminatorKind::Assert { ref target, cleanup: None, .. } |
+            */
             mir::TerminatorKind::Drop { ref target, location: _, .. } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
             }
-            */
             /*
             mir::TerminatorKind::DropAndReplace {
                 ref target, value: _, location: _, unwind: None

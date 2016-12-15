@@ -252,7 +252,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn pop_scope(&mut self,
                      extent: CodeExtent,
                      span: Span,
-                     block: BasicBlock) -> BlockAnd<()> {
+                     mut block: BasicBlock)
+                     -> BlockAnd<()> {
         let scope = self.scopes.pop().unwrap();
         debug!("pop_scope: extent={:?} block={:?} scope={:#?}", extent, block, scope);
 
@@ -280,7 +281,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             let source_info = scope.source_info(span);
-            drop_decl(&mut self.cfg, block, &scope, source_info, *local);
+            unpack!(block = self.build_scope_drops(block, &scope, source_info, *local));
         }
 
         debug!("pop_scope: remaining scopes={:#?}", self.scopes); 
@@ -332,6 +333,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
+    /// Given a span and the current visibility scope, make a SourceInfo.
+    pub fn source_info(&self, span: Span) -> SourceInfo {
+        SourceInfo {
+            span: span,
+            scope: self.visibility_scope
+        }
+    }
+
     /// Branch out of `block` to `target`, exiting all scopes up to
     /// and including `extent`.  This will insert whatever drops are
     /// needed, as well as tracking this exit for the SEME region. See
@@ -375,7 +384,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     // warning if a variable hasn't been initialized, so just insert the declaration into
                     // our block.
                     if scope.initialized_decls.contains(local) {
-                        drop_decl(&mut self.cfg, block, scope, source_info, *local);
+                        self.build_scope_drops(block, scope, source_info, *local);
                     }
                 }
             }
@@ -407,7 +416,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         //self.cfg.push_declare(target, *var);
                     }
 
-                    drop_decl(&mut self.cfg, target, scope, *local);
+                    build_scope_drops(&mut self.cfg, target, scope, *local);
                 }
             }
         }
@@ -851,29 +860,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         None
     }
 
-    /// Given a span and this scope's visibility scope, make a SourceInfo.
-    pub fn source_info(&self, span: Span) -> SourceInfo {
-        SourceInfo {
-            span: span,
-            scope: self.visibility_scope
-        }
-    }
-}
-
-fn drop_decl(cfg: &mut CFG,
-             block: BasicBlock,
-             scope: &Scope,
-             source_info: SourceInfo,
-             var: Local) {
-    debug!("drop_decl(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
-    let moved = scope.moved_decls.contains(&var);
-    cfg.push(block, Statement {
-        source_info: source_info,
-        kind: StatementKind::Drop {
+    /// Builds drops for pop_scope and exit_scope.
+    fn build_scope_drops(&mut self,
+                         mut block: BasicBlock,
+                         scope: &Scope,
+                         source_info: SourceInfo,
+                         var: Local) -> BlockAnd<()> {
+        debug!("build_scope_drops(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
+        let moved = scope.moved_decls.contains(&var);
+        let next = self.start_new_block(source_info.span, Some("Drop"));
+        self.terminate(source_info.span, block, TerminatorKind::Drop {
             location: Lvalue::Local(var),
+            target: next,
             moved: moved,
-        }
-    });
+        });
+        block = next;
+
+        block.unit()
+    }
 }
 
 /*
