@@ -76,13 +76,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
+                let success = this.start_new_block(expr_span, Some("AfterCall"));
+
                 this.declare(block, expr_span, &destination);
                 this.cfg.terminate(block, source_info, TerminatorKind::Call {
-                    destination: destination,
+                    destination: (destination, success),
                     func: func,
                     args: args,
                 });
-                block.unit()
+                success.unit()
             }
             ExprKind::MethodCall(ref ident, ref tys, ref args) => {
                 let mut args = args.into_iter();
@@ -94,15 +96,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
+                let success = this.start_new_block(expr_span, Some("AfterMethodCall"));
+
                 this.declare(block, expr_span, &destination);
                 this.cfg.terminate(block, source_info, TerminatorKind::MethodCall {
-                    destination: destination,
+                    destination: (destination, success),
                     ident: *ident,
                     tys: tys.clone(),
                     self_: self_,
                     args: args,
                 });
-                block.unit()
+                success.unit()
             }
 
             // These cases don't actually need a destination

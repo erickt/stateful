@@ -1,4 +1,5 @@
 use aster::AstBuilder;
+use aster::ident::ToIdent;
 use data_structures::indexed_vec::{Idx, IndexVec};
 use std::borrow::Cow;
 use std::collections::BTreeMap;
@@ -265,6 +266,23 @@ pub struct LocalDecl {
     pub shadowed_decl: Option<Local>,
 }
 
+impl LocalDecl {
+    /// Builds a `LocalDecl` for the return pointer.
+    ///
+    /// This must be inserted into the `local_decls` list as the first local.
+    #[inline]
+    pub fn new_return_pointer(source_info: SourceInfo,
+                              return_ty: Option<P<ast::Ty>>) -> LocalDecl {
+        LocalDecl {
+            mutability: ast::Mutability::Mutable,
+            ty: return_ty,
+            source_info: source_info,
+            name: "return_pointer".to_ident(),
+            shadowed_decl: None,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum LiveDecl {
     Active(Local),
@@ -350,6 +368,7 @@ pub struct Terminator {
     pub kind: TerminatorKind,
 }
 
+#[derive(Debug)]
 pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
@@ -374,14 +393,6 @@ pub enum TerminatorKind {
     /// `END_BLOCK`.
     Return,
 
-    /// jump to target on next iteration.
-    Suspend {
-        // FIXME: We don't yet support resuming the coroutine with a value yet.
-        // lvalue: Lvalue,
-        rvalue: Rvalue,
-        target: BasicBlock,
-    },
-
     /// Drop the Lvalue
     Drop {
         location: Lvalue,
@@ -389,18 +400,26 @@ pub enum TerminatorKind {
         moved: bool,
     },
 
-    /// Block ends with a call of a converging function
+    /// Block ends with a call of a function
     Call {
-        destination: Lvalue,
+        destination: (Lvalue, BasicBlock),
         func: Operand,
         args: Vec<Rvalue>,
     },
+
+    /// Block ends with a call of a method
     MethodCall {
-        destination: Lvalue,
+        destination: (Lvalue, BasicBlock),
         ident: ast::SpannedIdent,
         tys: Vec<P<ast::Ty>>,
         self_: Operand,
         args: Vec<Rvalue>,
+    },
+
+    /// jump to target on next iteration.
+    Suspend {
+        target: BasicBlock,
+        rvalue: Rvalue,
     },
 }
 
@@ -414,6 +433,7 @@ impl Terminator {
     }
 }
 
+/*
 impl Debug for TerminatorKind {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         self.fmt_head(fmt)?;
@@ -440,23 +460,35 @@ impl Debug for TerminatorKind {
         }
     }
 }
+*/
 
 impl TerminatorKind {
     pub fn successors(&self) -> Vec<BasicBlock> {
         match *self {
-            TerminatorKind::Goto { target, .. } => vec![target],
+            TerminatorKind::Goto { target, .. } |
+            TerminatorKind::Drop { target, .. } |
+            TerminatorKind::Call { destination: (_, target), .. } |
+            TerminatorKind::MethodCall { destination: (_, target), .. } |
+            TerminatorKind::Suspend { target, .. } => {
+                vec![target]
+            }
             TerminatorKind::Match { ref targets, .. } => {
                 targets.iter().map(|arm| arm.block).collect()
             }
             TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
             TerminatorKind::Return => vec![],
-            TerminatorKind::Suspend { target, .. } => vec![target],
         }
     }
 
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match *self {
-            TerminatorKind::Goto { ref mut target, .. } => vec![target],
+            TerminatorKind::Goto { ref mut target, .. } |
+            TerminatorKind::Drop { ref mut target, .. } |
+            TerminatorKind::Call { destination: (_, ref mut target), .. } |
+            TerminatorKind::MethodCall { destination: (_, ref mut target), .. } |
+            TerminatorKind::Suspend { ref mut target, .. } => {
+                vec![target]
+            }
             TerminatorKind::Match { ref mut targets, .. } => {
                 targets.iter_mut().map(|arm| &mut arm.block).collect()
             }
@@ -464,7 +496,6 @@ impl TerminatorKind {
                 vec![then, else_]
             }
             TerminatorKind::Return => vec![],
-            TerminatorKind::Suspend { ref mut target, .. } => vec![target],
         }
     }
 

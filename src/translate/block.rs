@@ -115,87 +115,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            TerminatorKind::Suspend { ref rvalue, target } => {
-                let rvalue = rvalue.to_expr(&self.mir.local_decls);
-                let ast_builder = ast_builder.span(rvalue.span);
-                let next_state = self.state_expr(span, target);
-
-                match self.mir.state_machine_kind {
-                    StateMachineKind::Generator => {
-                        let tuple = ast_builder.expr().tuple()
-                            .expr().build(rvalue)
-                            .expr().build(next_state)
-                            .build();
-
-                        vec![
-                            ast_builder.stmt().semi().return_expr()
-                                .build(tuple)
-                        ]
-                    }
-                    StateMachineKind::Async => {
-                        let tuple = ast_builder.expr().tuple()
-                            .expr().build(rvalue)
-                            .expr().build(next_state)
-                            .build();
-
-                        vec![
-                            ast_builder.stmt().semi().return_expr().ok()
-                                .build(tuple)
-                        ]
-                    }
-                }
-
-                /*
-                let tuple = ast_builder.expr().tuple()
-                    .expr().build(rvalue.clone())
-                    .expr().build(next_state)
-                    .build();
-
-                vec![
-                    ast_builder.stmt().semi()
-                        .return_expr()
-                        .build(tuple)
-                ]
-                */
-            }
-            TerminatorKind::Call { ref destination, ref func, ref args } => {
-                let lvalue = destination.to_expr(&self.mir.local_decls);
-
-                let func = func.to_expr(&self.mir.local_decls);
-                let args = args.iter()
-                    .map(|arg| arg.to_expr(&self.mir.local_decls));
-
-                let rvalue = ast_builder.expr()
-                    .call().build(func)
-                    .with_args(args)
-                    .build();
-
-                vec![
-                    ast_builder.stmt().semi()
-                        .assign().build(lvalue)
-                        .build(rvalue)
-                ]
-            }
-            TerminatorKind::MethodCall { ref destination, ident, ref tys, ref self_, ref args } => {
-                let lvalue = destination.to_expr(&self.mir.local_decls);
-                let self_ = self_.to_expr(&self.mir.local_decls);
-
-                let args = args.iter()
-                    .map(|arg| arg.to_expr(&self.mir.local_decls));
-
-                let rvalue = ast_builder.expr()
-                    .span(ident.span).method_call(ident.node)
-                    .span(span).build(self_)
-                    .with_tys(tys.clone())
-                    .with_args(args)
-                    .build();
-
-                vec![
-                    ast_builder.stmt().semi()
-                        .assign().build(lvalue)
-                        .build(rvalue)
-                ]
-            }
             TerminatorKind::Drop { ref location, target, moved } => {
                 let mut stmts = vec![];
 
@@ -234,6 +153,131 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts.extend(self.goto(span, target));
                 stmts
+            }
+            TerminatorKind::Call {
+                destination: (ref lvalue, target),
+                ref func,
+                ref args,
+            } => {
+                let lvalue = lvalue.to_expr(&self.mir.local_decls);
+
+                let func = func.to_expr(&self.mir.local_decls);
+                let args = args.iter()
+                    .map(|arg| arg.to_expr(&self.mir.local_decls));
+
+                let rvalue = ast_builder.expr()
+                    .call().build(func)
+                    .with_args(args)
+                    .build();
+
+                let mut stmts = vec![
+                    ast_builder.stmt().semi()
+                        .assign().build(lvalue)
+                        .build(rvalue)
+                ];
+
+                stmts.extend(self.goto(span, target));
+
+                stmts
+            }
+            TerminatorKind::MethodCall {
+                destination: (ref lvalue, target),
+                ident,
+                ref tys,
+                ref self_,
+                ref args,
+            } => {
+                let lvalue = lvalue.to_expr(&self.mir.local_decls);
+                let self_ = self_.to_expr(&self.mir.local_decls);
+
+                let args = args.iter()
+                    .map(|arg| arg.to_expr(&self.mir.local_decls));
+
+                let rvalue = ast_builder.expr()
+                    .span(ident.span).method_call(ident.node)
+                    .span(span).build(self_)
+                    .with_tys(tys.clone())
+                    .with_args(args)
+                    .build();
+
+                let mut stmts = vec![
+                    ast_builder.stmt().semi().assign()
+                        .build(lvalue)
+                        .build(rvalue)
+                ];
+
+                stmts.extend(self.goto(span, target));
+
+                stmts
+            }
+            TerminatorKind::Suspend { target, ref rvalue } => {
+                let rvalue = rvalue.to_expr(&self.mir.local_decls);
+                let ast_builder = ast_builder.span(rvalue.span);
+                let next_state = self.state_expr(span, target);
+
+                let expr = ast_builder.expr().tuple()
+                    .expr().build(rvalue)
+                    .expr().build(next_state)
+                    .build();
+
+                let expr = match self.mir.state_machine_kind {
+                    StateMachineKind::Generator => expr,
+                    StateMachineKind::Async => ast_builder.expr().ok().build(expr),
+                };
+
+                vec![
+                    ast_builder.stmt().semi().return_expr()
+                        .build(expr)
+                ]
+
+                /*
+                    ast_builder.stmt().semi().assign()
+                        .build(lvalue)
+                        .unit()
+                ];
+
+                stmts.extend(self.goto(span, target));
+
+                stmts
+
+                match self.mir.state_machine_kind {
+                    StateMachineKind::Generator => {
+                        let tuple = ast_builder.expr().tuple()
+                            .expr().build(rvalue)
+                            .expr().build(next_state)
+                            .build();
+
+                        vec![
+                            ast_builder.stmt().semi().return_expr()
+                                .build(tuple)
+                        ]
+                    }
+                    StateMachineKind::Async => {
+                        let tuple = ast_builder.expr().tuple()
+                            .expr().build(rvalue)
+                            .expr().build(next_state)
+                            .build();
+
+                        vec![
+                            ast_builder.stmt().semi().return_expr().ok()
+                                .build(tuple)
+                        ]
+                    }
+                }
+                */
+
+                /*
+                let tuple = ast_builder.expr().tuple()
+                    .expr().build(rvalue.clone())
+                    .expr().build(next_state)
+                    .build();
+
+                vec![
+                    ast_builder.stmt().semi()
+                        .return_expr()
+                        .build(tuple)
+                ]
+                */
             }
         }
     }

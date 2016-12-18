@@ -15,7 +15,11 @@ impl CFG {
                            span: Span,
                            name: Option<&'static str>,
                            live_decls: LiveDeclMap) -> BasicBlock {
-        self.basic_blocks.push(BasicBlockData::new(span, name, live_decls))
+        debug!("start_new_block(name={:?}, decls={:?})", name, live_decls); 
+        let block = self.basic_blocks.push(BasicBlockData::new(span, name, live_decls));
+        debug!("start_new_block: block={:?}", block); 
+
+        block
     }
 
     pub fn push(&mut self, block: BasicBlock, statement: Statement) {
@@ -26,10 +30,13 @@ impl CFG {
                      block: BasicBlock,
                      source_info: SourceInfo,
                      kind: TerminatorKind) {
-        assert!(self.block_data(block).terminator.is_none(),
-                "terminate: block {:?} already has a terminator set", block);
+        debug!("terminate(block={:?}, kind={:?}", block, kind);
 
         let block_data = self.block_data_mut(block);
+
+        assert!(block_data.terminator.is_none(),
+                "terminate: block {:?} already has a terminator set: {:?}", block, block_data.terminator);
+
         block_data.terminator = Some(Terminator {
             source_info: source_info,
             kind: kind,

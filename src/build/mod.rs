@@ -149,7 +149,16 @@ pub fn construct_fn(cx: &ExtCtxt,
         fn_decl,
         ast_block);
 
-    let mut builder = Builder::new(cx, span, state_machine_kind);
+    let return_ty = match fn_decl.fn_decl.output {
+        ast::FunctionRetTy::Default(_) => None,
+        ast::FunctionRetTy::Ty(ref ty) => Some(ty.clone()),
+    };
+
+    let mut builder = Builder::new(
+        cx,
+        span,
+        state_machine_kind,
+        return_ty);
 
     let call_site_extent = builder.extents.push(CodeExtentData::CallSiteScope);
     let arg_extent = builder.extents.push(CodeExtentData::ParameterScope);
@@ -157,7 +166,7 @@ pub fn construct_fn(cx: &ExtCtxt,
     let mut block = START_BLOCK;
     unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
         // Declare the return pointer.
-        builder.temp(span, "return_pointer");
+        //builder.temp(span, "return_pointer");
 
         unpack!(block = builder.in_scope(arg_extent, span, block, |builder| {
             builder.args_and_body(block, fn_decl.inputs(), arg_extent, ast_block)
@@ -180,7 +189,8 @@ pub fn construct_fn(cx: &ExtCtxt,
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn new(cx: &'a ExtCtxt<'b>,
            span: Span,
-           state_machine_kind: StateMachineKind) -> Self {
+           state_machine_kind: StateMachineKind,
+           return_ty: Option<P<ast::Ty>>) -> Self {
         let mut builder = Builder {
             cx: cx,
             cfg: CFG { basic_blocks: IndexVec::new() },
@@ -204,6 +214,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
         assert_eq!(builder.new_visibility_scope(span), ARGUMENT_VISIBILITY_SCOPE);
         builder.visibility_scopes[ARGUMENT_VISIBILITY_SCOPE].parent_scope = None;
+
+        let source_info = builder.source_info(span);
+        assert_eq!(
+            builder.local_decls.push(LocalDecl::new_return_pointer(source_info, return_ty)),
+            RETURN_POINTER);
 
         builder
     }
@@ -300,12 +315,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
         let decls = self.find_live_decls();
-        debug!("start_new_block(name={:?}, decls={:?})", name, decls); 
-
-        let block = self.cfg.start_new_block(span, name, decls);
-        debug!("start_new_block: block={:?}", block); 
-
-        block
+        self.cfg.start_new_block(span, name, decls)
     }
 
     pub fn start_new_extent(&mut self) -> CodeExtent {
@@ -321,6 +331,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             None => {
                 let span = self.fn_span;
                 let rb = self.start_new_block(span, Some("End"));
+                debug!("return_block: created {:?}", rb);
                 self.cached_return_block = Some(rb);
                 rb
             }

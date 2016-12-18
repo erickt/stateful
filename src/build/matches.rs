@@ -279,8 +279,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             locals: Vec<Local>,
         }
 
-        impl<'a> Visitor for PatVisitor<'a> {
-            fn visit_pat(&mut self, pat: &ast::Pat) {
+        impl<'a> Visitor<'a> for PatVisitor<'a> {
+            fn visit_pat(&mut self, pat: &'a ast::Pat) {
                 if let Some(&local) = self.var_indices.get(&pat.id) {
                     debug!("locals_from_pat: pat={:?} local={:?}", pat, local);
                     self.locals.push(local);

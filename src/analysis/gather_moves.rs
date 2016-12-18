@@ -39,7 +39,7 @@ mod indexes {
 
             impl Idx for $Index {
                 fn new(idx: usize) -> Self {
-                    unsafe { $Index(idx + 1) }
+                    $Index(idx + 1)
                 }
                 fn index(self) -> usize {
                     self.0 - 1
@@ -391,9 +391,19 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
     fn gather_statement(&mut self, loc: Location, stmt: &Statement) {
         debug!("gather_statement({:?}, {:?})", loc, stmt);
         match stmt.kind {
-            StatementKind::Assign(ref lval, ref rval) => {
-                self.create_move_path(lval);
-                self.gather_rvalue(loc, rval);
+            StatementKind::Expr(_) => {}
+            StatementKind::Declare(_) => {}
+            StatementKind::Let {
+                pat: _,
+                ty: _,
+                lvalues: _,
+                ref rvalue,
+            }=> {
+                self.gather_rvalue(loc, rvalue);
+            }
+            StatementKind::Assign(ref lvalue, ref rvalue) => {
+                self.create_move_path(lvalue);
+                self.gather_rvalue(loc, rvalue);
             }
             /*
             StatementKind::Call { ref func, ref args, ref destination, .. } => {
@@ -517,6 +527,30 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
 
             TerminatorKind::Drop { ref location, .. } => {
                 self.gather_move(loc, location);
+            }
+            TerminatorKind::Call {
+                destination: (ref lvalue, _),
+                ref func,
+                ref args,
+            } => {
+                self.gather_operand(loc, func);
+                for arg in args {
+                    self.gather_rvalue(loc, arg);
+                }
+                self.create_move_path(lvalue);
+            }
+            TerminatorKind::MethodCall {
+                destination: (ref lvalue, _),
+                ident: _,
+                tys: _,
+                ref self_,
+                ref args,
+            } => {
+                self.gather_operand(loc, self_);
+                for arg in args {
+                    self.gather_rvalue(loc, arg);
+                }
+                self.create_move_path(lvalue);
             }
             TerminatorKind::Suspend { ref rvalue, .. } => {
                 self.gather_rvalue(loc, rvalue);

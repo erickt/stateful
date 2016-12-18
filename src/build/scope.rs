@@ -281,7 +281,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             let source_info = scope.source_info(span);
-            unpack!(block = self.build_scope_drops(block, &scope, source_info, *local));
+            unpack!(block = build_scope_drops(&mut self.cfg, block, &scope, source_info, *local));
         }
 
         debug!("pop_scope: remaining scopes={:#?}", self.scopes); 
@@ -384,7 +384,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     // warning if a variable hasn't been initialized, so just insert the declaration into
                     // our block.
                     if scope.initialized_decls.contains(local) {
-                        self.build_scope_drops(block, scope, source_info, *local);
+                        unpack!(block = build_scope_drops(
+                            &mut self.cfg,
+                            block,
+                            scope,
+                            source_info,
+                            *local));
                     }
                 }
             }
@@ -564,8 +569,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        span_bug!(self.cx, self.local_decls[var].source_info.span,
-                  "var {:?} not in any scope?", var);
+        span_warn!(self.cx, self.local_decls[var].source_info.span,
+                   "var {:?} not in any scope?", var);
+
+        true
     }
 
     /// Mark a variable initialized.
@@ -859,25 +866,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         None
     }
+}
 
-    /// Builds drops for pop_scope and exit_scope.
-    fn build_scope_drops(&mut self,
-                         mut block: BasicBlock,
-                         scope: &Scope,
-                         source_info: SourceInfo,
-                         var: Local) -> BlockAnd<()> {
-        debug!("build_scope_drops(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
-        let moved = scope.moved_decls.contains(&var);
-        let next = self.start_new_block(source_info.span, Some("Drop"));
-        self.terminate(source_info.span, block, TerminatorKind::Drop {
-            location: Lvalue::Local(var),
-            target: next,
-            moved: moved,
-        });
-        block = next;
+/// Builds drops for pop_scope and exit_scope.
+fn build_scope_drops(cfg: &mut CFG,
+                     block: BasicBlock,
+                     scope: &Scope,
+                     source_info: SourceInfo,
+                     var: Local) -> BlockAnd<()> {
+    debug!("build_scope_drops(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
+    let next = cfg.start_new_block(source_info.span, Some("Drop"), BTreeMap::new());
+    let moved = scope.moved_decls.contains(&var);
+    cfg.terminate(block, source_info, TerminatorKind::Drop {
+        location: Lvalue::Local(var),
+        target: next,
+        moved: moved,
+    });
 
-        block.unit()
-    }
+    next.unit()
 }
 
 /*
