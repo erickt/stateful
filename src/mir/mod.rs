@@ -947,7 +947,7 @@ pub struct Constant {
 
 impl Debug for Constant {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
-        write!(fmt, "{}", pprust::lit_to_string(&self.literal))
+        write!(fmt, "const {}", pprust::lit_to_string(&self.literal))
     }
 }
 
@@ -990,7 +990,6 @@ pub enum StatementKind {
     /// Write the RHS Rvalue to the LHS Lvalue.
     Assign(Lvalue, Rvalue),
 
-    /*
     /// Start a live range for the storage of the local.
     StorageLive(Lvalue),
 
@@ -999,7 +998,6 @@ pub enum StatementKind {
 
     /// No-op. Useful for deleting instructions without affecting statement indices.
     Nop,
-    */
 }
 
 impl Debug for Statement {
@@ -1007,7 +1005,7 @@ impl Debug for Statement {
         use self::StatementKind::*;
         match self.kind {
             Expr(ref expr) => {
-                write!(fmt, "{:?}", pprust::stmt_to_string(expr))
+                write!(fmt, "expr {:?}", pprust::stmt_to_string(expr))
             }
             Declare(local) => {
                 write!(fmt, "let {:?}", local)
@@ -1061,14 +1059,14 @@ impl Debug for Statement {
             }
             */
 
-            /*
             StorageLive(ref lv) => write!(fmt, "StorageLive({:?})", lv),
             StorageDead(ref lv) => write!(fmt, "StorageDead({:?})", lv),
+            /*
             SetDiscriminant{lvalue: ref lv, variant_index: index} => {
                 write!(fmt, "discriminant({:?}) = {:?}", lv, index)
             }
-            Nop => write!(fmt, "nop"),
             */
+            Nop => write!(fmt, "nop"),
         }
     }
 }

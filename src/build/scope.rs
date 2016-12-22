@@ -877,10 +877,16 @@ fn build_scope_drops(cfg: &mut CFG,
     debug!("build_scope_drops(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
     let next = cfg.start_new_block(source_info.span, Some("Drop"), BTreeMap::new());
     let moved = scope.moved_decls.contains(&var);
+    let location = Lvalue::Local(var);
     cfg.terminate(block, source_info, TerminatorKind::Drop {
-        location: Lvalue::Local(var),
+        location: location.clone(),
         target: next,
         moved: moved,
+    });
+
+    cfg.push(next, Statement {
+        source_info: source_info,
+        kind: StatementKind::StorageDead(location),
     });
 
     next.unit()

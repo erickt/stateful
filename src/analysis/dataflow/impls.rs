@@ -202,8 +202,7 @@ impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
-impl<'a> MaybeUninitializedLvals<'a> {
+impl<'a, 'tcx> MaybeUninitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
                    state: DropFlagState)
     {
@@ -214,7 +213,7 @@ impl<'a> MaybeUninitializedLvals<'a> {
     }
 }
 
-impl<'a> DefinitelyInitializedLvals<'a> {
+impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
                    state: DropFlagState)
     {
@@ -224,7 +223,6 @@ impl<'a> DefinitelyInitializedLvals<'a> {
         }
     }
 }
-*/
 
 impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
@@ -235,11 +233,6 @@ impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
     }
 
     fn start_block_effect(&self, ctxt: &Self::Ctxt, sets: &mut BlockSets<Self::Idx>) {
-        /*
-        for arg in self.mir.args_iter() {
-            sets.on_entry.add(&arg);
-        }
-        */
         drop_flag_effects_for_function_entry(
             self.tcx, self.mir, ctxt,
             |path, s| {
@@ -254,29 +247,6 @@ impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
                         bb: mir::BasicBlock,
                         idx: usize)
     {
-        /*
-        let block_data = &self.mir[bb];
-        let stmt = &block_data.statements[idx];
-        println!("statement_effect: bb={:?} stmt={:?}", bb, stmt);
-        match stmt.kind {
-            StatementKind::Assign(ref lvalue, ref _rvalue) => {
-                match *lvalue {
-                    Lvalue::Local(local) => {
-                        println!("gen local={:?}", local);
-                        sets.gen(&local);
-                    }
-                    _ => {}
-                }
-            }
-            /*
-            StatementKind::Drop { ref lvalue, .. } => {
-                println!("kill local={:?}", lvalue);
-                sets.kill(&lvalue);
-            }
-            */
-            _ => {}
-        }
-        */
         drop_flag_effects_for_location(
             self.tcx, self.mir, ctxt,
             Location { block: bb, statement_index: idx },
@@ -312,8 +282,8 @@ impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
 }
 
 impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
-    type Idx = mir::Local; //MovePathIndex;
-    type Ctxt = (); //MoveDataParamEnv;
+    type Idx = MovePathIndex;
+    type Ctxt = MoveDataParamEnv;
     fn name() -> &'static str { "maybe_uninit" }
     fn bits_per_block(&self, ctxt: &Self::Ctxt) -> usize {
         self.mir.local_decls.len()
@@ -324,18 +294,12 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
         // set all bits to 1 (uninit) before gathering counterevidence
         for e in sets.on_entry.words_mut() { *e = !0; }
 
-        for arg in self.mir.args_iter() {
-            sets.on_entry.remove(&arg);
-        }
-
-        /*
         drop_flag_effects_for_function_entry(
             self.tcx, self.mir, ctxt,
             |path, s| {
                 assert!(s == DropFlagState::Present);
                 sets.on_entry.remove(&path);
             });
-            */
     }
 
     fn statement_effect(&self,
@@ -344,30 +308,11 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                         bb: mir::BasicBlock,
                         idx: usize)
     {
-        /*
-        let block_data = &self.mir[bb];
-        let stmt = &block_data.statements[idx];
-        println!("uninit statement_effect: bb={:?} stmt={:?}", bb, stmt);
-        match stmt.kind {
-            StatementKind::Drop { ref location, .. } => {
-                match *location {
-                    Lvalue::Local(local) => {
-                        println!("kill local={:?}", local);
-                        sets.kill(&local);
-                    }
-                    _ => {}
-                }
-            }
-            _ => {}
-        }
-        */
-        /*
         drop_flag_effects_for_location(
             self.tcx, self.mir, ctxt,
             Location { block: bb, statement_index: idx },
             |path, s| Self::update_bits(sets, path, s)
         )
-        */
     }
 
     fn terminator_effect(&self,
@@ -376,13 +321,11 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                          bb: mir::BasicBlock,
                          statements_len: usize)
     {
-        /*
         drop_flag_effects_for_location(
             self.tcx, self.mir, ctxt,
             Location { block: bb, statement_index: statements_len },
             |path, s| Self::update_bits(sets, path, s)
         )
-        */
     }
 
     fn propagate_call_return(&self,
@@ -391,19 +334,17 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                              _call_bb: mir::BasicBlock,
                              _dest_bb: mir::BasicBlock,
                              dest_lval: &mir::Lvalue) {
-        /*
         // when a call returns successfully, that means we need to set
         // the bits for that dest_lval to 0 (initialized).
         on_lookup_result_bits(self.tcx, self.mir, &ctxt.move_data,
                               ctxt.move_data.rev_lookup.find(dest_lval),
                               |mpi| { in_out.remove(&mpi); });
-                              */
     }
 }
 
 impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
-    type Idx = mir::Local; //MovePathIndex;
-    type Ctxt = (); //MoveDataParamEnv;
+    type Idx = MovePathIndex;
+    type Ctxt = MoveDataParamEnv;
     fn name() -> &'static str { "definite_init" }
     fn bits_per_block(&self, ctxt: &Self::Ctxt) -> usize {
         self.mir.local_decls.len()
@@ -413,18 +354,12 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
     fn start_block_effect(&self, ctxt: &Self::Ctxt, sets: &mut BlockSets<Self::Idx>) {
         for e in sets.on_entry.words_mut() { *e = 0; }
 
-        for arg in self.mir.args_iter() {
-            sets.on_entry.add(&arg);
-        }
-
-        /*
         drop_flag_effects_for_function_entry(
             self.tcx, self.mir, ctxt,
             |path, s| {
                 assert!(s == DropFlagState::Present);
                 sets.on_entry.add(&path);
             });
-            */
     }
 
     fn statement_effect(&self,
@@ -433,40 +368,11 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
                         bb: mir::BasicBlock,
                         idx: usize)
     {
-        let block_data = &self.mir[bb];
-        let stmt = &block_data.statements[idx];
-        println!("statement_effect: bb={:?} stmt={:?}", bb, stmt);
-        match stmt.kind {
-            StatementKind::Assign(ref lvalue, ref _rvalue) => {
-                match *lvalue {
-                    Lvalue::Local(local) => {
-                        println!("gen local={:?}", local);
-                        sets.gen(&local);
-                    }
-                    _ => {}
-                }
-            }
-            /*
-            StatementKind::Drop { ref location, .. } => {
-                match *location {
-                    Lvalue::Local(local) => {
-                        println!("kill local={:?}", local);
-                        sets.kill(&local);
-                    }
-                    _ => {}
-                }
-            }
-            */
-            _ => {}
-        }
-
-        /*
         drop_flag_effects_for_location(
             self.tcx, self.mir, ctxt,
             Location { block: bb, statement_index: idx },
             |path, s| Self::update_bits(sets, path, s)
         )
-        */
     }
 
     fn terminator_effect(&self,
@@ -475,13 +381,11 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
                          bb: mir::BasicBlock,
                          statements_len: usize)
     {
-        /*
         drop_flag_effects_for_location(
             self.tcx, self.mir, ctxt,
             Location { block: bb, statement_index: statements_len },
             |path, s| Self::update_bits(sets, path, s)
         )
-        */
     }
 
     fn propagate_call_return(&self,
@@ -490,13 +394,11 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
                              _call_bb: mir::BasicBlock,
                              _dest_bb: mir::BasicBlock,
                              dest_lval: &mir::Lvalue) {
-        /*
         // when a call returns successfully, that means we need to set
         // the bits for that dest_lval to 1 (initialized).
         on_lookup_result_bits(self.tcx, self.mir, &ctxt.move_data,
                               ctxt.move_data.rev_lookup.find(dest_lval),
                               |mpi| { in_out.add(&mpi); });
-                              */
     }
 }
 

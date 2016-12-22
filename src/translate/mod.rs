@@ -1,12 +1,15 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
 use mir::*;
+use std::collections::BTreeMap;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::fold;
 use syntax::ptr::P;
 
-pub fn translate(cx: &ExtCtxt, mir: &Mir) -> Option<P<ast::Item>> {
+pub fn translate(cx: &ExtCtxt,
+                 mir: &Mir,
+                 assignments: &BTreeMap<BasicBlock, Vec<Local>>) -> Option<P<ast::Item>> {
     let ast_builder = AstBuilder::new().span(mir.span);
 
     let return_ty = mir.fn_decl.return_ty();
@@ -21,6 +24,7 @@ pub fn translate(cx: &ExtCtxt, mir: &Mir) -> Option<P<ast::Item>> {
         cx: cx,
         ast_builder: ast_builder,
         mir: mir,
+        assignments: assignments,
     };
 
     let start_state_expr = builder.state_expr(mir.span, START_BLOCK);
@@ -168,6 +172,7 @@ pub struct Builder<'a, 'b: 'a> {
     cx: &'a ExtCtxt<'b>,
     ast_builder: AstBuilder,
     mir: &'a Mir,
+    assignments: &'a BTreeMap<BasicBlock, Vec<Local>>,
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {

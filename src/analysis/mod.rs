@@ -1,8 +1,9 @@
-use mir::{self, Mir, Location};
+use data_structures::indexed_vec::Idx;
+use mir::{self, BasicBlock, Local, Location, Mir};
+use std::collections::BTreeMap;
 use std::env;
 use std::fmt::Debug;
 use ty::TyCtxt;
-use data_structures::indexed_vec::Idx;
 
 use self::dataflow::{BitDenotation};
 use self::dataflow::{DataflowOperator};
@@ -16,59 +17,43 @@ mod dataflow;
 mod gather_moves;
 //mod move_data;
 
-pub fn analyze(tcx: TyCtxt, mir: &Mir) {
+pub fn analyze<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
+                         mir: &'a Mir) -> BTreeMap<BasicBlock, Vec<Local>> {
     let move_data = MoveData::gather_moves(mir, tcx);
     let mdpe = MoveDataParamEnv { move_data: move_data };
 
-    let flow_inits = do_dataflow(tcx, mir, &mdpe, MaybeInitializedLvals::new(tcx, mir));
-    /*
-    let flow_uninits = do_dataflow(tcx, mir, &(), MaybeUninitializedLvals::new(tcx, mir));
-    let flow_def_inits=  do_dataflow(tcx, mir, &(), DefinitelyInitializedLvals::new(tcx, mir));
-    */
+    // Figure out what variables are initialized.
+    let flow_inits = do_dataflow(tcx, mir, &mdpe, DefinitelyInitializedLvals::new(tcx, mir));
 
-    for bb in mir.basic_blocks().indices() {
-        let live = flow_inits.sets().on_entry_set_for(bb.index());
-        println!("live: {:?}", live);
-        /*
-        let dead = flow_uninits.sets().on_entry_set_for(bb.index());
-        let def_live = flow_def_inits.sets().on_entry_set_for(bb.index());
-        */
+    // Lookup up move indices for each lvalues.
+    let move_indices = mir.local_decls.indices()
+        .filter_map(|local| {
+            let lvalue = mir::Lvalue::Local(local);
 
-        /*
-        println!("maybe live: {:?} => {:?}",
-                 bb,
-                 mir.local_decls.iter_enumerated()
-                    .filter(|&(local, _)| live.contains(&local))
-                    .map(|(_, local_data)| local_data.name)
-                    .collect::<Vec<_>>());
-                    */
+            match mdpe.move_data.rev_lookup.find(&lvalue) {
+                LookupResult::Exact(idx) | LookupResult::Parent(Some(idx)) => {
+                    Some((idx, local))
+                }
+                LookupResult::Parent(None) => {
+                    span_bug!(tcx, mir.span, "Found a static for {:?}?", local)
+                }
+            }
+        })
+        .collect::<Vec<_>>();
 
-        /*
-        println!("maybe dead: {:?} => {:?}",
-                 bb,
-                 mir.local_decls.iter_enumerated()
-                    .filter(|&(local, _)| dead.contains(&local))
-                    .map(|(_, local_data)| local_data.name)
-                    .collect::<Vec<_>>());
+    // Finally, map
+    mir.basic_blocks().indices()
+        .map(|bb| {
+            let live = flow_inits.sets().on_entry_set_for(bb.index());
 
-        println!("live: {:?} => {:?}",
-                 bb,
-                 mir.local_decls.iter_enumerated()
-                    .filter(|&(local, _)| live.contains(&local) && dead.contains(&local))
-                    .map(|(_, local_data)| local_data.name)
-                    .collect::<Vec<_>>());
+            let initialized = move_indices.iter()
+                .filter(|&&(idx, _)| live.contains(&idx))
+                .map(|&(_, local)| local)
+                .collect();
 
-        println!("def live: {:?} => {:?}",
-                 bb,
-                 mir.local_decls.iter_enumerated()
-                    .filter(|&(local, _)| def_live.contains(&local))
-                    .map(|(_, local_data)| local_data.name)
-                    .collect::<Vec<_>>());
-        */
-
-        println!("");
-    }
-    panic!("analysis done");
+            (bb, initialized)
+        })
+        .collect()
 }
 
 fn do_dataflow<BD>(tcx: TyCtxt,

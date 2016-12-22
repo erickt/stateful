@@ -432,16 +432,16 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.gather_rvalue(loc, rvalue);
             }
             */
-            /*
             StatementKind::StorageLive(_) |
             StatementKind::StorageDead(_) => {}
+            /*
             StatementKind::SetDiscriminant{ .. } => {
                 span_bug!(&self.tcx,
                           stmt.source_info.span,
                           "SetDiscriminant should not exist during borrowck");
             }
-            StatementKind::Nop => {}
             */
+            StatementKind::Nop => {}
         }
     }
 

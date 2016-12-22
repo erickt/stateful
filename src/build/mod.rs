@@ -165,9 +165,6 @@ pub fn construct_fn(cx: &ExtCtxt,
 
     let mut block = START_BLOCK;
     unpack!(block = builder.in_scope(call_site_extent, span, block, |builder| {
-        // Declare the return pointer.
-        //builder.temp(span, "return_pointer");
-
         unpack!(block = builder.in_scope(arg_extent, span, block, |builder| {
             builder.args_and_body(block, fn_decl.inputs(), arg_extent, ast_block)
         }));

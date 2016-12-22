@@ -37,6 +37,7 @@ use syntax::ext::base::{
     ExtCtxt,
     MultiModifier,
 };
+use syntax::print::pprust;
 use mir::{FunctionDecl, StateMachineKind};
 
 fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
@@ -97,10 +98,12 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     passes.push_pass(Box::new(transform::simplify_cfg::SimplifyCfg::new()));
     passes.run_passes(tcx, &mut mir);
 
-    analysis::analyze(tcx, &mir);
+    let assignments = analysis::analyze(tcx, &mir);
 
-    match translate::translate(cx, &mir) {
+    match translate::translate(cx, &mir, &assignments) {
         Some(item) => {
+            debug!("{}", pprust::item_to_string(&item));
+
             Annotatable::Item(item)
         }
         None => {

@@ -10,21 +10,27 @@
 use std::iter::Iterator;
 use std::mem;
 
-struct S;
+struct S(u32);
+
+fn foo() {}
 
 #[generator]
 fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
-    let a = 1; let mut b = 2; let c; let d;
+    let a = S(1); let mut b = S(2); let c; let d;
 
     if pred {
-        mem::drop(a);
-        b = 3;
+        //mem::drop(a);
+        b = S(3);
+        c = S(40);
     } else {
-        mem::drop(b);
-        d = 4;
+        //mem::drop(b);
+        b = S(30);
+        c = S(4);
     }
 
-    c = 5;
+    d = S(5);
+
+    foo();
 }
 
 fn main() {

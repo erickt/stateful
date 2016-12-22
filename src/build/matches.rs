@@ -114,8 +114,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // optimize the case of `let x = ...`
         match irrefutable_pat.node {
             PatKind::Ident(ast::BindingMode::ByValue(_mutability), id, _) if self.is_local(id) => {
-                let local = self.var_indices[&irrefutable_pat.id];
-                let lvalue = Lvalue::Local(local);
+                self.storage_live_for_bindings(block, &irrefutable_pat);
+                let lvalue = Lvalue::Local(self.var_indices[&irrefutable_pat.id]);
 
                 return self.into(lvalue, block, initializer);
             }
@@ -173,24 +173,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         match pat.node {
-            PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) => {
-                // Consider only lower case identities as a variable.
-                if self.is_local(id) {
-                    if var_scope.is_none() {
-                        var_scope = Some(self.new_visibility_scope(pat.span));
-                    }
-                    let source_info = SourceInfo {
-                        span: pat.span,
-                        scope: var_scope.unwrap()
-                    };
-                    self.declare_binding(
-                        source_info,
-                        mutability,
-                        id.node,
-                        pat.id,
-                        ty.clone());
+            // Consider only lower case identities as a variable.
+            PatKind::Ident(ast::BindingMode::ByValue(mutability), id, _) if self.is_local(id) => {
+                if var_scope.is_none() {
+                    var_scope = Some(self.new_visibility_scope(pat.span));
                 }
+                let source_info = SourceInfo {
+                    span: pat.span,
+                    scope: var_scope.unwrap()
+                };
+                self.declare_binding(
+                    source_info,
+                    mutability,
+                    id.node,
+                    pat.id,
+                    ty.clone());
             }
+            PatKind::Ident(ast::BindingMode::ByValue(_), _, _) => { }
 
             PatKind::Struct(_, ref subpatterns, _) => {
                 for field in subpatterns {
@@ -238,6 +237,81 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         var_scope
+    }
+
+    /// Emit `StorageLive` for every binding in the pattern.
+    pub fn storage_live_for_bindings(&mut self,
+                                     block: BasicBlock,
+                                     pattern: &P<ast::Pat>) {
+        match pattern.node {
+            PatKind::Ident(_, id, _) if self.is_local(id) => {
+                let lvalue = Lvalue::Local(self.var_indices[&pattern.id]);
+                let source_info = self.source_info(pattern.span);
+                self.cfg.push(block, Statement {
+                    source_info: source_info,
+                    kind: StatementKind::StorageLive(lvalue)
+                });
+
+                /*
+                if let Some(subpattern) = subpattern.as_ref() {
+                    self.storage_live_for_bindings(block, subpattern);
+                }
+                */
+            }
+            PatKind::Ident(ast::BindingMode::ByValue(_), _, _) => { }
+
+            PatKind::Struct(_, ref subpatterns, _) => {
+                for field in subpatterns {
+                    self.storage_live_for_bindings(block, &field.node.pat);
+                }
+            }
+
+            PatKind::TupleStruct(_, ref subpatterns, _) |
+            PatKind::Tuple(ref subpatterns, _) => {
+                for subpattern in subpatterns {
+                    self.storage_live_for_bindings(block, subpattern);
+                }
+            }
+
+            PatKind::Slice(ref prefix, ref slice, ref suffix) => {
+                for subpattern in prefix.iter().chain(slice).chain(suffix) {
+                    self.storage_live_for_bindings(block, subpattern);
+                }
+            }
+
+            // These patterns don't contain any bindings
+            PatKind::Lit(_) |
+            PatKind::Path(_, _) |
+            PatKind::Range(_, _) |
+            PatKind::Wild => { }
+
+            PatKind::Ident(ast::BindingMode::ByRef(_), _, _) |
+            PatKind::Box(_) |
+            PatKind::Ref(_, _) |
+            PatKind::Mac(_) => {
+                span_bug!(self.cx, pattern.span, "Cannot handle pat {:?}", pattern)
+            }
+
+            /*
+            PatternKind::Array { ref prefix, ref slice, ref suffix } |
+            PatternKind::Slice { ref prefix, ref slice, ref suffix } => {
+                for subpattern in prefix.iter().chain(slice).chain(suffix) {
+                    self.storage_live_for_bindings(block, subpattern);
+                }
+            }
+            PatternKind::Constant { .. } | PatternKind::Range { .. } | PatternKind::Wild => {
+            }
+            PatternKind::Deref { ref subpattern } => {
+                self.storage_live_for_bindings(block, subpattern);
+            }
+            PatternKind::Leaf { ref subpatterns } |
+            PatternKind::Variant { ref subpatterns, .. } => {
+                for subpattern in subpatterns {
+                    self.storage_live_for_bindings(block, &subpattern.pattern);
+                }
+            }
+            */
+        }
     }
 
     fn declare_binding<T>(&mut self,

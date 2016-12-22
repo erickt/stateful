@@ -1,6 +1,6 @@
 use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ptr::P;
@@ -30,28 +30,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         &self,
         block: BasicBlock
     ) -> Vec<(VisibilityScope, Vec<(Local, ast::Ident)>)> {
-        let mut scope_decls = vec![];
+        let mut map = BTreeMap::new();
 
-        for (scope, live_decls) in self.mir[block].incoming_decls.iter() {
-            let mut decls = vec![];
+        for &local in self.assignments[&block].iter() {
+            let local_data = &self.mir.local_decls[local];
+            let decls = map
+                .entry(local_data.source_info.scope)
+                .or_insert_with(Vec::new);
 
-            for live_decl in live_decls {
-                // Only add active decls to the state.
-                let local = match *live_decl {
-                    LiveDecl::Active(local) => {
-                        decls.push((local, self.mir.local_decls[local].name));
-                        local
-                    }
-                    LiveDecl::Moved(local) => local,
-                };
-
-                self.get_shadowed_decls(&mut decls, local);
-            }
-
-            scope_decls.push((*scope, decls));
+            decls.push((local, local_data.name));
         }
 
-        scope_decls
+        map.into_iter().collect::<Vec<_>>()
     }
 
     fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
