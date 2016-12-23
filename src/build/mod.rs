@@ -149,16 +149,10 @@ pub fn construct_fn(cx: &ExtCtxt,
         fn_decl,
         ast_block);
 
-    let return_ty = match fn_decl.fn_decl.output {
-        ast::FunctionRetTy::Default(_) => None,
-        ast::FunctionRetTy::Ty(ref ty) => Some(ty.clone()),
-    };
-
     let mut builder = Builder::new(
         cx,
         span,
-        state_machine_kind,
-        return_ty);
+        state_machine_kind);
 
     let call_site_extent = builder.extents.push(CodeExtentData::CallSiteScope);
     let arg_extent = builder.extents.push(CodeExtentData::ParameterScope);
@@ -186,8 +180,7 @@ pub fn construct_fn(cx: &ExtCtxt,
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn new(cx: &'a ExtCtxt<'b>,
            span: Span,
-           state_machine_kind: StateMachineKind,
-           return_ty: Option<P<ast::Ty>>) -> Self {
+           state_machine_kind: StateMachineKind) -> Self {
         let mut builder = Builder {
             cx: cx,
             cfg: CFG { basic_blocks: IndexVec::new() },
@@ -214,7 +207,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let source_info = builder.source_info(span);
         assert_eq!(
-            builder.local_decls.push(LocalDecl::new_return_pointer(source_info, return_ty)),
+            builder.local_decls.push(LocalDecl::new_return_pointer(source_info, None)),
             RETURN_POINTER);
 
         builder
@@ -254,9 +247,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 uninitialized_vars);
         }
 
-
+        /*
         debug!("decls: {:#?}", self.local_decls);
         debug!("blocks: {:#?}", self.cfg.basic_blocks);
+        */
 
         Mir::new(
             self.state_machine_kind,

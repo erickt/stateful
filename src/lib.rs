@@ -32,12 +32,10 @@ mod traversal;
 
 use syntax::ast;
 use syntax::codemap::Span;
-use syntax::ext::base::{
-    Annotatable,
-    ExtCtxt,
-    MultiModifier,
-};
+use syntax::ext::base::{Annotatable, ExtCtxt, MultiModifier};
+use syntax::fold;
 use syntax::print::pprust;
+use syntax::ptr::P;
 use mir::{FunctionDecl, StateMachineKind};
 
 fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
@@ -98,19 +96,31 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     passes.push_pass(Box::new(transform::simplify_cfg::SimplifyCfg::new()));
     passes.run_passes(tcx, &mut mir);
 
-    let assignments = analysis::analyze(tcx, &mir);
+    let assignments = analysis::analyze_assignments(tcx, &mir);
 
-    match translate::translate(cx, &mir, &assignments) {
-        Some(item) => {
-            debug!("{}", pprust::item_to_string(&item));
+    let item = translate::translate(cx, &mir, &assignments);
+    debug!("{}", pprust::item_to_string(&item));
 
-            Annotatable::Item(item)
+    Annotatable::Item(strip_node_ids(item))
+}
+
+/// Syntax extensions are not allowed to have `ast::NodeId`s, so this just strips them out.
+fn strip_node_ids(item: P<ast::Item>) -> P<ast::Item> {
+    struct Stripper;
+
+    impl fold::Folder for Stripper {
+        fn new_id(&mut self, _old_id: ast::NodeId) -> ast::NodeId {
+            ast::DUMMY_NODE_ID
         }
-        None => {
-            // We had an error, so just return the input item for a lack of a better option.
-            Annotatable::Item(item.clone())
+
+        fn fold_mac(&mut self, mac: ast::Mac) -> ast::Mac {
+            fold::noop_fold_mac(mac, self)
         }
     }
+
+    let mut items = fold::Folder::fold_item(&mut Stripper, item);
+    assert_eq!(items.len(), 1);
+    items.pop().unwrap()
 }
 
 fn expand_generator(cx: &mut ExtCtxt,

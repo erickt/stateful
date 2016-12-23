@@ -451,35 +451,12 @@ impl<'a, D> DataflowAnalysis<'a, D>
     {
         match bb_data.terminator().kind {
             mir::TerminatorKind::Return => {}
-            mir::TerminatorKind::Suspend { ref target, rvalue: _ } |
             mir::TerminatorKind::Goto { ref target, end_scope: _ } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
             }
-            /*
-            mir::TerminatorKind::Return |
-            mir::TerminatorKind::Resume |
-            mir::TerminatorKind::Unreachable => {}
-            mir::TerminatorKind::Goto { ref target } |
-            mir::TerminatorKind::Assert { ref target, cleanup: None, .. } |
-            */
             mir::TerminatorKind::Drop { ref target, location: _, .. } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
             }
-            /*
-            mir::TerminatorKind::DropAndReplace {
-                ref target, value: _, location: _, unwind: None
-            } => {
-                self.propagate_bits_into_entry_set_for(in_out, changed, target);
-            }
-            mir::TerminatorKind::Assert { ref target, cleanup: Some(ref unwind), .. } |
-            mir::TerminatorKind::Drop { ref target, location: _, unwind: Some(ref unwind) } |
-            mir::TerminatorKind::DropAndReplace {
-                ref target, value: _, location: _, unwind: Some(ref unwind)
-            } => {
-                self.propagate_bits_into_entry_set_for(in_out, changed, target);
-                self.propagate_bits_into_entry_set_for(in_out, changed, unwind);
-            }
-            */
             mir::TerminatorKind::If { ref targets, .. } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.0);
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.1);
@@ -489,14 +466,6 @@ impl<'a, D> DataflowAnalysis<'a, D>
                     self.propagate_bits_into_entry_set_for(in_out, changed, &target.block);
                 }
             }
-            /*
-            mir::TerminatorKind::Switch { ref targets, .. } |
-            mir::TerminatorKind::SwitchInt { ref targets, .. } => {
-                for target in targets {
-                    self.propagate_bits_into_entry_set_for(in_out, changed, target);
-                }
-            }
-            */
             mir::TerminatorKind::Call {
                 ref destination,
                 func: _,
@@ -515,6 +484,17 @@ impl<'a, D> DataflowAnalysis<'a, D>
                 tys: _,
                 self_: _,
                 args: _,
+            } => {
+                let (ref dest_lval, ref dest_bb) = *destination;
+                // N.B.: This must be done *last*, after all other
+                // propagation, as documented in comment above.
+                self.flow_state.operator.propagate_call_return(
+                    &self.ctxt, in_out, bb, *dest_bb, dest_lval);
+                self.propagate_bits_into_entry_set_for(in_out, changed, dest_bb);
+            }
+            mir::TerminatorKind::Suspend {
+                ref destination,
+                rvalue: _,
             } => {
                 let (ref dest_lval, ref dest_bb) = *destination;
                 // N.B.: This must be done *last*, after all other

@@ -391,14 +391,19 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
     fn gather_statement(&mut self, loc: Location, stmt: &Statement) {
         debug!("gather_statement({:?}, {:?})", loc, stmt);
         match stmt.kind {
-            StatementKind::Expr(_) => {}
+            StatementKind::Stmt(_) => {}
+            /*
             StatementKind::Declare(_) => {}
+            */
             StatementKind::Let {
                 pat: _,
                 ty: _,
-                lvalues: _,
-                ref rvalue,
+                ref lvalues,
+                ref rvalue
             }=> {
+                for lvalue in lvalues {
+                    self.create_move_path(&Lvalue::Local(*lvalue));
+                }
                 self.gather_rvalue(loc, rvalue);
             }
             StatementKind::Assign(ref lvalue, ref rvalue) => {

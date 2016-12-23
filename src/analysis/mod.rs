@@ -17,50 +17,97 @@ mod dataflow;
 mod gather_moves;
 //mod move_data;
 
-pub fn analyze<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
-                         mir: &'a Mir) -> BTreeMap<BasicBlock, Vec<Local>> {
+/// Use the definite-assignment algorithm to find all the locations where a local
+pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
+                                     mir: &'a Mir) -> DefiniteAssignment {
     let move_data = MoveData::gather_moves(mir, tcx);
     let mdpe = MoveDataParamEnv { move_data: move_data };
 
-    // Figure out what variables are initialized.
+    // Figure out when variables are initialized or assigned.
     let flow_inits = do_dataflow(tcx, mir, &mdpe, DefinitelyInitializedLvals::new(tcx, mir));
 
-    // Lookup up move indices for each lvalues.
-    let move_indices = mir.local_decls.indices()
+    // `flow_inits` works with `MoveIndex`s not locals, so we need a mapping from one to the other.
+    let move_indices = mir.local_decls
+        .indices()
         .filter_map(|local| {
             let lvalue = mir::Lvalue::Local(local);
 
             match mdpe.move_data.rev_lookup.find(&lvalue) {
-                LookupResult::Exact(idx) | LookupResult::Parent(Some(idx)) => {
-                    Some((idx, local))
-                }
+                LookupResult::Exact(idx) |
+                LookupResult::Parent(Some(idx)) => Some((idx, local)),
                 LookupResult::Parent(None) => {
-                    span_bug!(tcx, mir.span, "Found a static for {:?}?", local)
+                    span_bug!(tcx, mir.span, "analysis thinks {:?} is a static?", local);
                 }
             }
         })
         .collect::<Vec<_>>();
 
-    // Finally, map
-    mir.basic_blocks().indices()
-        .map(|bb| {
-            let live = flow_inits.sets().on_entry_set_for(bb.index());
+    // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
+    // the blocks for which it is alive. In order to figure this out, we need the ENTRY set and the
+    // GEN set from the dataflow. In our case, for a given block:
+    //
+    // * ENTRY has a bit set for each local that was initialized in a parent block.
+    // * GEN has a bit set for each local initialized in this block.
+    let mut entry = BTreeMap::new();
+    let mut gen = BTreeMap::new();
+    let mut kill = BTreeMap::new();
 
-            let initialized = move_indices.iter()
-                .filter(|&&(idx, _)| live.contains(&idx))
-                .map(|&(_, local)| local)
-                .collect();
+    for block in mir.basic_blocks().indices() {
+        let entry_set = flow_inits.sets().on_entry_set_for(block.index());
+        let gen_set = flow_inits.sets().gen_set_for(block.index());
+        let kill_set = flow_inits.sets().kill_set_for(block.index());
 
-            (bb, initialized)
-        })
-        .collect()
+        for &(idx, local) in &move_indices {
+            if entry_set.contains(&idx) {
+                entry.entry(block).or_insert_with(Vec::new).push(local);
+            }
+
+            if gen_set.contains(&idx) {
+                gen.entry(block).or_insert_with(Vec::new).push(local);
+            }
+
+            if kill_set.contains(&idx) {
+                kill.entry(block).or_insert_with(Vec::new).push(local);
+            }
+        }
+    }
+
+    println!("entry: {:#?}", entry);
+    println!("gen:   {:#?}", gen);
+    println!("kill:  {:#?}", kill);
+    // panic!();
+
+    DefiniteAssignment {
+        initialized: gen,
+        assigned_on_entry: entry,
+    }
 }
 
-fn do_dataflow<BD>(tcx: TyCtxt,
-                   mir: &Mir,
-                   ctxt: &BD::Ctxt,
-                   bd: BD) -> DataflowResults<BD>
-    where BD: BitDenotation<Idx=MovePathIndex, Ctxt=MoveDataParamEnv> + DataflowOperator
+pub struct DefiniteAssignment {
+    initialized: BTreeMap<BasicBlock, Vec<Local>>,
+    assigned_on_entry: BTreeMap<BasicBlock, Vec<Local>>,
+}
+
+impl DefiniteAssignment {
+    /// Return all the locals that were initialized in this block.
+    pub fn initialized(&self, block: BasicBlock) -> &[Local] {
+        match self.initialized.get(&block) {
+            Some(ref locals) => &**locals,
+            None => &[],
+        }
+    }
+
+    /// Return all the locals that were alive on entry to this block.
+    pub fn on_entry(&self, block: BasicBlock) -> &[Local] {
+        match self.assigned_on_entry.get(&block) {
+            Some(ref locals) => &**locals,
+            None => &[],
+        }
+    }
+}
+
+fn do_dataflow<BD>(tcx: TyCtxt, mir: &Mir, ctxt: &BD::Ctxt, bd: BD) -> DataflowResults<BD>
+    where BD: BitDenotation<Idx = MovePathIndex, Ctxt = MoveDataParamEnv> + DataflowOperator
 {
     let print_preflow_to = env::var("STATEFUL_BORROWCK_GRAPHVIZ_PREFLOW").ok();
     let print_postflow_to = env::var("STATEFUL_BORROWCK_GRAPHVIZ_POSTFLOW").ok();
@@ -76,17 +123,16 @@ fn do_dataflow<BD>(tcx: TyCtxt,
 }
 
 pub struct MirBorrowckCtxtPreDataflow<'a, BD>
-    where BD: BitDenotation, BD::Ctxt: 'a
+    where BD: BitDenotation,
+          BD::Ctxt: 'a
 {
-
     flow_state: DataflowAnalysis<'a, BD>,
     print_preflow_to: Option<String>,
     print_postflow_to: Option<String>,
 }
 
 pub struct MoveDataParamEnv {
-    move_data: MoveData,
-    //param_env: ty::ParameterEnvironment<'tcx>,
+    move_data: MoveData, // param_env: ty::ParameterEnvironment<'tcx>,
 }
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
@@ -99,23 +145,24 @@ impl DropFlagState {
     fn value(self) -> bool {
         match self {
             DropFlagState::Present => true,
-            DropFlagState::Absent => false
+            DropFlagState::Absent => false,
         }
     }
 }
 
-fn drop_flag_effects_for_function_entry<'a, 'tcx, F>(
-    tcx: TyCtxt<'a, 'tcx>,
-    mir: &Mir,
-    ctxt: &MoveDataParamEnv,
-    mut callback: F)
+fn drop_flag_effects_for_function_entry<'a, 'tcx, F>(tcx: TyCtxt<'a, 'tcx>,
+                                                     mir: &Mir,
+                                                     ctxt: &MoveDataParamEnv,
+                                                     mut callback: F)
     where F: FnMut(MovePathIndex, DropFlagState)
 {
     let move_data = &ctxt.move_data;
     for arg in mir.args_iter() {
         let lvalue = mir::Lvalue::Local(arg);
         let lookup_result = move_data.rev_lookup.find(&lvalue);
-        on_lookup_result_bits(tcx, mir, move_data,
+        on_lookup_result_bits(tcx,
+                              mir,
+                              move_data,
                               lookup_result,
                               |moi| callback(moi, DropFlagState::Present));
     }

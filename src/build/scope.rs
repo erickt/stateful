@@ -489,6 +489,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                    block: BasicBlock,
                    span: Span,
                    lvalue: &Lvalue) {
+        /*
         debug!("push_assign: block={:?} lvalue={:?}", block, lvalue);
 
         match *lvalue {
@@ -507,6 +508,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 span_bug!(self.cx, span, "cannot assign yet: {:?}", lvalue)
             }
         }
+        */
     }
 
     pub fn push_assign(&mut self,
@@ -520,6 +522,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             Lvalue::Local(local) => {
                 let source_info = self.source_info(span);
 
+                /*
                 if !self.is_initialized(local) {
                     self.initialize_decl(local);
                     self.cfg.push(block, Statement {
@@ -527,6 +530,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         kind: StatementKind::Declare(local),
                     });
                 }
+                */
 
                 self.cfg.push(block, Statement {
                     source_info: source_info,
@@ -804,11 +808,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn schedule_move(&mut self, span: Span, local: Local) {
+        /*
         if !self.is_initialized(local) {
             self.cx.span_err(
                 span,
                 &format!("trying to move an uninitialized local {:?}?", local));
         }
+        */
 
         for scope in self.scopes.iter_mut().rev() {
             scope.moved_decls.insert(local);

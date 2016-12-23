@@ -8,7 +8,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(stmt.source_info.span);
 
         match stmt.kind {
-            StatementKind::Expr(ref stmt) => vec![stmt.clone()],
+            StatementKind::Stmt(ref stmt) => vec![stmt.clone()],
+            /*
             StatementKind::Declare(local) => {
                 let mut stmts = self.rename_shadowed_local(&ast_builder, local).into_iter()
                     .collect::<Vec<_>>();
@@ -32,6 +33,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
+            */
             StatementKind::Let { ref pat, ref lvalues, ref ty, ref rvalue } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
@@ -141,6 +143,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 vec![]
             }
         }
+    }
+
+    pub fn declare(&self, block: BasicBlock, local: Local) -> Vec<ast::Stmt> {
+        let local_decl = self.mir.local_decl_data(local);
+
+        let ast_builder = self.ast_builder.span(local_decl.source_info.span);
+
+        let mut stmts = self.rename_shadowed_local(&ast_builder, local)
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let stmt_builder = match local_decl.mutability {
+            ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
+            ast::Mutability::Immutable => ast_builder.stmt().let_().id(local_decl.name),
+        };
+
+        stmts.push(stmt_builder.build_option_ty(local_decl.ty.clone())
+            .build());
+
+        stmts
     }
 
     fn rename_shadowed_local(&self, ast_builder: &AstBuilder, local: Local) -> Option<ast::Stmt> {

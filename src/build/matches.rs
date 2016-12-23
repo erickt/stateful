@@ -31,6 +31,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       discriminant: P<ast::Expr>,
                       arms: &[ast::Arm])
                       -> BlockAnd<()> {
+        debug!("match_expr(destination={:?}, block={:?} discriminant={:?} arms={:?}",
+               destination,
+               block,
+               discriminant,
+               arms);
+
         let discriminant_lvalue = unpack!(block = self.as_operand(block, &discriminant));
 
         let targets = arms.iter()
@@ -135,6 +141,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("lvalue_into_pattern(pat={:?}, init={:?})", irrefutable_pat, initializer);
 
         let span = irrefutable_pat.span;
+        let source_info = self.source_info(span);
         let locals = self.locals_from_pat(irrefutable_pat);
 
         if locals.is_empty() {
@@ -143,7 +150,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Initialize all the locals.
         for local in &locals {
-            self.initialize(block, span, &Lvalue::Local(*local));
+            let lvalue = Lvalue::Local(*local);
+
+            self.cfg.push(block,
+                          Statement {
+                              source_info: source_info,
+                              kind: StatementKind::StorageLive(lvalue.clone()),
+                          });
+
+            self.initialize(block, span, &lvalue);
         }
 
         let source_info = self.source_info(span);

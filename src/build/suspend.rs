@@ -12,16 +12,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let rvalue_span = rvalue.span;
 
         let rvalue = unpack!(block = self.as_rvalue(block, &rvalue));
-        let next_block = self.start_new_block(rvalue_span, Some("AfterSuspend"));
+        let next_block = self.start_new_block(rvalue_span, Some("Suspend"));
 
         self.terminate(rvalue_span, block, TerminatorKind::Suspend {
+            destination: (destination, next_block),
             rvalue: rvalue,
-            target: next_block,
         });
-
-        // We don't yet support receiving values into the coroutine yet, so just store a `()` in
-        // the destination.
-        self.push_assign_unit(rvalue_span, next_block, &destination);
 
         next_block.unit()
     }

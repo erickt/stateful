@@ -62,7 +62,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                     let source_info = this.source_info(stmt.span);
                                     this.cfg.push(block, Statement {
                                         source_info: source_info,
-                                        kind: StatementKind::Expr(stmt.clone()),
+                                        kind: StatementKind::Stmt(stmt.clone()),
                                     });
 
                                     this.push_assign_unit(stmt.span, block, &temp);
@@ -90,6 +90,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             unpack!(block = this.in_scope(init_scope, stmt.span, block, |this| {
                                 this.expr_into_pattern(block, &local.pat, init)
                             }));
+                        } else {
+                            this.storage_live_for_bindings(block, &local.pat);
                         }
 
                         // Enter the visibility scope, after evaluating the initializer.

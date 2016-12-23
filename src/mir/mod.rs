@@ -368,7 +368,6 @@ pub struct Terminator {
     pub kind: TerminatorKind,
 }
 
-#[derive(Debug)]
 pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
@@ -418,7 +417,7 @@ pub enum TerminatorKind {
 
     /// jump to target on next iteration.
     Suspend {
-        target: BasicBlock,
+        destination: (Lvalue, BasicBlock),
         rvalue: Rvalue,
     },
 }
@@ -433,7 +432,6 @@ impl Terminator {
     }
 }
 
-/*
 impl Debug for TerminatorKind {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         self.fmt_head(fmt)?;
@@ -460,7 +458,6 @@ impl Debug for TerminatorKind {
         }
     }
 }
-*/
 
 impl TerminatorKind {
     pub fn successors(&self) -> Vec<BasicBlock> {
@@ -469,7 +466,7 @@ impl TerminatorKind {
             TerminatorKind::Drop { target, .. } |
             TerminatorKind::Call { destination: (_, target), .. } |
             TerminatorKind::MethodCall { destination: (_, target), .. } |
-            TerminatorKind::Suspend { target, .. } => {
+            TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
             }
             TerminatorKind::Match { ref targets, .. } => {
@@ -486,7 +483,7 @@ impl TerminatorKind {
             TerminatorKind::Drop { ref mut target, .. } |
             TerminatorKind::Call { destination: (_, ref mut target), .. } |
             TerminatorKind::MethodCall { destination: (_, ref mut target), .. } |
-            TerminatorKind::Suspend { ref mut target, .. } => {
+            TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
             }
             TerminatorKind::Match { ref mut targets, .. } => {
@@ -509,8 +506,10 @@ impl TerminatorKind {
             If { cond: ref lv, .. } => write!(fmt, "if({:?})", lv),
             Match { discr: ref lv, .. } => write!(fmt, "match({:?})", lv),
             Return => write!(fmt, "return"),
-            Suspend { ref rvalue, .. } => write!(fmt, "suspend({:?})", rvalue),
-            Call { ref destination, ref func, ref args, .. } => {
+            Suspend { destination: (ref destination, _), ref rvalue, .. } => {
+                write!(fmt, "{:?} = suspend({:?})", destination, rvalue)
+            }
+            Call { destination: (ref destination, _), ref func, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}(", destination, func)?;
                 for (i, arg) in args.iter().enumerate() {
                     if i != 0 {
@@ -520,7 +519,14 @@ impl TerminatorKind {
                 }
                 write!(fmt, ")")
             }
-            MethodCall { ref destination, ref ident, ref tys, ref self_, ref args, .. } => {
+            MethodCall {
+                destination: (ref destination, _),
+                ref ident,
+                ref tys,
+                ref self_,
+                ref args,
+                ..
+            } => {
                 write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
 
                 if !tys.is_empty() {
@@ -568,9 +574,9 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
-            Call { .. } => vec![],
-            MethodCall { .. } => vec![],
-            Drop { .. } => vec![],
+            Call { .. } => vec!["return".into()],
+            MethodCall { .. } => vec!["return".into()],
+            Drop { .. } => vec!["return".into()],
         }
     }
 }
@@ -953,7 +959,8 @@ impl Debug for Constant {
 
 impl ToExpr for Constant {
     fn to_expr(&self, _local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
-        AstBuilder::new().span(self.span).expr()
+        AstBuilder::new().span(self.span)
+            .expr()
             .build_lit(self.literal.clone())
     }
 }
@@ -977,16 +984,19 @@ impl Statement {
 */
 
 pub enum StatementKind {
-    Expr(ast::Stmt),
-    Declare(Local),
+    Stmt(ast::Stmt),
+
+    // Declare(Local),
+
     /// As opposed to MIR, we don't have an easy way breaking up irrefutable patterns, so instead
-    /// we'll add a dedicated statement for them when we are that hides their destructuring.
+    /// we'll add a dedicated statement for that hides their destructuring.
     Let {
         pat: P<ast::Pat>,
         ty: Option<P<ast::Ty>>,
         lvalues: Vec<Local>,
         rvalue: Rvalue,
     },
+
     /// Write the RHS Rvalue to the LHS Lvalue.
     Assign(Lvalue, Rvalue),
 
@@ -1004,12 +1014,14 @@ impl Debug for Statement {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         use self::StatementKind::*;
         match self.kind {
-            Expr(ref expr) => {
-                write!(fmt, "expr {:?}", pprust::stmt_to_string(expr))
+            Stmt(ref stmt) => {
+                write!(fmt, "stmt {:?}", pprust::stmt_to_string(stmt))
             }
+            /*
             Declare(local) => {
                 write!(fmt, "let {:?}", local)
             }
+            */
             Let { ref pat, ty: None, ref rvalue, .. } => {
                 write!(fmt, "let {:?} = {:?}", pat, rvalue)
             }

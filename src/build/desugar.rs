@@ -399,7 +399,9 @@ fn parse_mac_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
 
     let mut parser = Parser::new(
         cx.parse_sess(),
-        Box::new(rdr.clone()));
+        Box::new(rdr.clone()),
+        None,
+        false);
 
     let expr = panictry!(parser.parse_expr());
     panictry!(parser.expect(&Token::Eof));

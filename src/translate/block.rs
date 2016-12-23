@@ -3,6 +3,8 @@ use syntax::ast;
 use syntax::codemap::Span;
 use translate::Builder;
 
+use super::state::StateKind;
+
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
         let block_data = &self.mir[block];
@@ -10,13 +12,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        block_data.statements().iter()
-            .flat_map(|statement| self.stmt(block, statement))
-            .chain(
-                block_data.terminator.iter()
-                    .flat_map(|terminator| self.terminator(terminator))
-            )
-            .collect()
+        let decls = self.assignments
+            .initialized(block)
+            .into_iter()
+            .flat_map(|local| self.declare(block, *local));
+
+        let stmts = block_data.statements()
+            .iter()
+            .flat_map(|statement| self.stmt(block, statement));
+
+        let terminator = block_data.terminator
+            .iter()
+            .flat_map(|terminator| self.terminator(terminator));
+
+        decls.chain(stmts).chain(terminator).collect()
     }
 
     fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
@@ -77,7 +86,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             TerminatorKind::Return => {
                 let next_state = ast_builder.expr().path()
                     .span(self.mir.span)
-                    .ids(&["State", "Illegal"])
+                    .ids(&["CoroutineState", "Illegal"])
                     .build();
 
                 match self.mir.state_machine_kind {
@@ -210,11 +219,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
-            TerminatorKind::Suspend { target, ref rvalue } => {
+            TerminatorKind::Suspend {
+                destination: (_, target),
+                ref rvalue,
+            } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
-                let ast_builder = ast_builder.span(rvalue.span);
-                let next_state = self.state_expr(span, target);
+                let next_state = self.coroutine_state_expr(target);
 
+                let ast_builder = ast_builder.span(rvalue.span);
                 let expr = ast_builder.expr().tuple()
                     .expr().build(rvalue)
                     .expr().build(next_state)
@@ -229,62 +241,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     ast_builder.stmt().semi().return_expr()
                         .build(expr)
                 ]
-
-                /*
-                    ast_builder.stmt().semi().assign()
-                        .build(lvalue)
-                        .unit()
-                ];
-
-                stmts.extend(self.goto(span, target));
-
-                stmts
-
-                match self.mir.state_machine_kind {
-                    StateMachineKind::Generator => {
-                        let tuple = ast_builder.expr().tuple()
-                            .expr().build(rvalue)
-                            .expr().build(next_state)
-                            .build();
-
-                        vec![
-                            ast_builder.stmt().semi().return_expr()
-                                .build(tuple)
-                        ]
-                    }
-                    StateMachineKind::Async => {
-                        let tuple = ast_builder.expr().tuple()
-                            .expr().build(rvalue)
-                            .expr().build(next_state)
-                            .build();
-
-                        vec![
-                            ast_builder.stmt().semi().return_expr().ok()
-                                .build(tuple)
-                        ]
-                    }
-                }
-                */
-
-                /*
-                let tuple = ast_builder.expr().tuple()
-                    .expr().build(rvalue.clone())
-                    .expr().build(next_state)
-                    .build();
-
-                vec![
-                    ast_builder.stmt().semi()
-                        .return_expr()
-                        .build(tuple)
-                ]
-                */
             }
         }
     }
 
     fn goto(&self, span: Span, target: BasicBlock) -> Vec<ast::Stmt> {
+        let next_state = self.internal_state_expr(target);
+
         let ast_builder = self.ast_builder.span(span);
-        let next_state = self.state_expr(span, target);
         let next_expr = ast_builder.expr()
             .assign()
             .id("state")
