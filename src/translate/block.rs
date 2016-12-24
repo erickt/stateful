@@ -1,7 +1,7 @@
 use mir::*;
 use syntax::ast;
 use syntax::codemap::Span;
-use translate::Builder;
+use super::builder::Builder;
 
 use super::state::StateKind;
 
@@ -258,9 +258,5 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ast_builder.stmt().semi().build(next_expr),
             ast_builder.stmt().semi().continue_(),
         ]
-    }
-
-    pub fn block_span(&self, block: BasicBlock) -> Span {
-        self.mir[block].span
     }
 }

@@ -30,6 +30,9 @@ mod translate;
 mod ty;
 mod traversal;
 
+use std::env;
+use std::fs;
+use std::io::Write;
 use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::{Annotatable, ExtCtxt, MultiModifier};
@@ -99,7 +102,11 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     let assignments = analysis::analyze_assignments(tcx, &mir);
 
     let item = translate::translate(cx, &mir, &assignments);
-    debug!("{}", pprust::item_to_string(&item));
+
+    if let Some(path) = env::var("STATEFUL_DUMP_SOURCE").ok() {
+        let mut file = fs::File::create(path).unwrap();
+        file.write_all(pprust::item_to_string(&item).as_bytes()).unwrap();
+    }
 
     Annotatable::Item(strip_node_ids(item))
 }

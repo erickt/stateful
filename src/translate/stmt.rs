@@ -1,7 +1,7 @@
 use aster::AstBuilder;
 use mir::*;
 use syntax::ast;
-use translate::Builder;
+use super::builder::Builder;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
