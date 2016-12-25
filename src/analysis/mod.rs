@@ -72,7 +72,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         // Make sure the target of a call is marked initialized.
         if let Some(ref terminator) = block_data.terminator {
             match terminator.kind {
-                TerminatorKind::Call { destination: (Lvalue::Local(local), block), .. } |
+                //TerminatorKind::Call { destination: (Lvalue::Local(local), block), .. } |
                 TerminatorKind::MethodCall { destination: (Lvalue::Local(local), block), .. } |
                 TerminatorKind::Suspend { destination: (Lvalue::Local(local), block), .. } => {
                     initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);

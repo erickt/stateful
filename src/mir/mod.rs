@@ -399,13 +399,6 @@ pub enum TerminatorKind {
         moved: bool,
     },
 
-    /// Block ends with a call of a function
-    Call {
-        destination: (Lvalue, BasicBlock),
-        func: Operand,
-        args: Vec<Rvalue>,
-    },
-
     /// Block ends with a call of a method
     MethodCall {
         destination: (Lvalue, BasicBlock),
@@ -464,7 +457,7 @@ impl TerminatorKind {
         match *self {
             TerminatorKind::Goto { target, .. } |
             TerminatorKind::Drop { target, .. } |
-            TerminatorKind::Call { destination: (_, target), .. } |
+            //TerminatorKind::Call { destination: (_, target), .. } |
             TerminatorKind::MethodCall { destination: (_, target), .. } |
             TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
@@ -481,7 +474,7 @@ impl TerminatorKind {
         match *self {
             TerminatorKind::Goto { ref mut target, .. } |
             TerminatorKind::Drop { ref mut target, .. } |
-            TerminatorKind::Call { destination: (_, ref mut target), .. } |
+            //TerminatorKind::Call { destination: (_, ref mut target), .. } |
             TerminatorKind::MethodCall { destination: (_, ref mut target), .. } |
             TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
@@ -509,6 +502,7 @@ impl TerminatorKind {
             Suspend { destination: (ref destination, _), ref rvalue, .. } => {
                 write!(fmt, "{:?} = suspend({:?})", destination, rvalue)
             }
+            /*
             Call { destination: (ref destination, _), ref func, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}(", destination, func)?;
                 for (i, arg) in args.iter().enumerate() {
@@ -519,6 +513,7 @@ impl TerminatorKind {
                 }
                 write!(fmt, ")")
             }
+            */
             MethodCall {
                 destination: (ref destination, _),
                 ref ident,
@@ -574,7 +569,7 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
-            Call { .. } => vec!["return".into()],
+            //Call { .. } => vec!["return".into()],
             MethodCall { .. } => vec!["return".into()],
             Drop { .. } => vec!["return".into()],
         }
@@ -1000,6 +995,13 @@ pub enum StatementKind {
     /// Write the RHS Rvalue to the LHS Lvalue.
     Assign(Lvalue, Rvalue),
 
+    /// Block ends with a call of a function
+    Call {
+        destination: Lvalue,
+        func: Operand,
+        args: Vec<Rvalue>,
+    },
+
     /// Start a live range for the storage of the local.
     StorageLive(Lvalue),
 
@@ -1031,7 +1033,6 @@ impl Debug for Statement {
             Assign(ref lvalue, ref rvalue) => {
                 write!(fmt, "{:?} = {:?}", lvalue, rvalue)
             }
-            /*
             Call { ref destination, ref func, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}(", destination, func)?;
                 for (i, arg) in args.iter().enumerate() {
@@ -1042,6 +1043,7 @@ impl Debug for Statement {
                 }
                 write!(fmt, ")")
             }
+            /*
             MethodCall { ref destination, ref ident, ref tys, ref self_, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
 

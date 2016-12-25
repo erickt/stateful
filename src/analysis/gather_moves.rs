@@ -410,14 +410,14 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.create_move_path(lvalue);
                 self.gather_rvalue(loc, rvalue);
             }
-            /*
-            StatementKind::Call { ref func, ref args, ref destination, .. } => {
+            StatementKind::Call { ref destination, ref func, ref args, .. } => {
                 self.gather_operand(loc, func);
                 for arg in args {
                     self.gather_rvalue(loc, arg);
                 }
                 self.create_move_path(destination);
             }
+            /*
             StatementKind::MethodCall { ref destination, ref self_, ref args, .. } => {
                 self.gather_operand(loc, self_);
                 for arg in args {
@@ -533,6 +533,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             TerminatorKind::Drop { ref location, .. } => {
                 self.gather_move(loc, location);
             }
+            /*
             TerminatorKind::Call {
                 destination: (ref lvalue, _),
                 ref func,
@@ -544,6 +545,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 }
                 self.create_move_path(lvalue);
             }
+            */
             TerminatorKind::MethodCall {
                 destination: (ref lvalue, _),
                 ident: _,

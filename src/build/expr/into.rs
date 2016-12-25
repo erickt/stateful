@@ -76,15 +76,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
-                let success = this.start_new_block(expr_span, Some("AfterCall"));
-
                 this.declare(block, expr_span, &destination);
-                this.cfg.terminate(block, source_info, TerminatorKind::Call {
-                    destination: (destination, success),
-                    func: func,
-                    args: args,
+                this.cfg.push(block, Statement {
+                    source_info: source_info,
+                    kind: StatementKind::Call {
+                        destination: destination,
+                        func: func,
+                        args: args,
+                    },
                 });
-                success.unit()
+                block.unit()
             }
             ExprKind::MethodCall(ref ident, ref tys, ref args) => {
                 let mut args = args.into_iter();

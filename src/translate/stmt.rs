@@ -61,8 +61,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            /*
-            StatementKind::Call { ref destination, ref func, ref args } => {
+            StatementKind::Call {
+                ref destination,
+                ref func,
+                ref args,
+            } => {
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 
                 let func = func.to_expr(&self.mir.local_decls);
@@ -80,8 +83,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(rvalue)
                 ]
             }
-            StatementKind::MethodCall { ref destination, ident, ref tys, ref self_, ref args } => {
-                let lvalue = destination.to_expr(&self.mir.local_decls);
+            /*
+            StatementKind::MethodCall {
+                ref lvalue,
+                ident,
+                ref tys,
+                ref self_,
+                ref args,
+            } => {
+                let lvalue = lvalue.to_expr(&self.mir.local_decls);
                 let self_ = self_.to_expr(&self.mir.local_decls);
 
                 let args = args.iter()
@@ -89,18 +99,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let rvalue = ast_builder.expr()
                     .span(ident.span).method_call(ident.node)
-                    .span(stmt.source_info.span).build(self_)
+                    .span(span).build(self_)
                     .with_tys(tys.clone())
                     .with_args(args)
                     .build();
 
-                vec![
-                    ast_builder.stmt().semi()
-                        .assign().build(lvalue)
+                let mut stmts = vec![
+                    ast_builder.stmt().semi().assign()
+                        .build(lvalue)
                         .build(rvalue)
-                ]
+                ];
+
+                stmts.extend(self.goto(span, target));
+
+                stmts
             }
-            StatementKind::Drop { ref location, moved } => {
+            StatementKind::Drop { ref location, target, moved } => {
+                let mut stmts = vec![];
+
                 match *location {
                     Lvalue::Local(local) => {
                         let decl = self.mir.local_decl_data(local);
@@ -130,11 +146,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 ast_builder.stmt().let_id(decl.name).expr().id(shadowed_ident)
                             );
                         }
-
-                        stmts
                     }
-                    _ => vec![]
+                    _ => {}
                 }
+
+                stmts.extend(self.goto(span, target));
+                stmts
             }
             */
             StatementKind::StorageLive(_) |

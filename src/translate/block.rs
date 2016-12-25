@@ -163,6 +163,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts.extend(self.goto(span, target));
                 stmts
             }
+            /*
             TerminatorKind::Call {
                 destination: (ref lvalue, target),
                 ref func,
@@ -189,6 +190,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
+            */
             TerminatorKind::MethodCall {
                 destination: (ref lvalue, target),
                 ident,

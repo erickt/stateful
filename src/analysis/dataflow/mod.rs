@@ -466,6 +466,7 @@ impl<'a, D> DataflowAnalysis<'a, D>
                     self.propagate_bits_into_entry_set_for(in_out, changed, &target.block);
                 }
             }
+            /*
             mir::TerminatorKind::Call {
                 ref destination,
                 func: _,
@@ -478,6 +479,7 @@ impl<'a, D> DataflowAnalysis<'a, D>
                     &self.ctxt, in_out, bb, *dest_bb, dest_lval);
                 self.propagate_bits_into_entry_set_for(in_out, changed, dest_bb);
             }
+            */
             mir::TerminatorKind::MethodCall {
                 ref destination,
                 ident: _,
