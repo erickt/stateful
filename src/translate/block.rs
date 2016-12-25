@@ -124,45 +124,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             }
-            TerminatorKind::Drop { ref location, target, moved } => {
-                let mut stmts = vec![];
-
-                match *location {
-                    Lvalue::Local(local) => {
-                        let decl = self.mir.local_decl_data(local);
-
-                        // We need an explicit drop here to make sure we drop variables as they go out of
-                        // a block scope. Otherwise, they won't be dropped until the next yield point,
-                        // which wouldn't match the Rust semantics.
-                        let mut stmts = vec![];
-
-                        // Only drop if we were not moved.
-                        if !moved {
-                            stmts.push(
-                                ast_builder.stmt().semi().call()
-                                    .path()
-                                        .global()
-                                        .ids(&["std", "mem", "drop"])
-                                        .build()
-                                    .arg().id(decl.name)
-                                    .build()
-                            );
-                        }
-
-                        if let Some(shadowed_decl) = decl.shadowed_decl {
-                            let shadowed_ident = self.shadowed_ident(shadowed_decl);
-
-                            stmts.push(
-                                ast_builder.stmt().let_id(decl.name).expr().id(shadowed_ident)
-                            );
-                        }
-                    }
-                    _ => {}
-                }
-
-                stmts.extend(self.goto(span, target));
-                stmts
-            }
             TerminatorKind::Suspend {
                 destination: (_, target),
                 ref rvalue,

@@ -454,9 +454,6 @@ impl<'a, D> DataflowAnalysis<'a, D>
             mir::TerminatorKind::Goto { ref target, end_scope: _ } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
             }
-            mir::TerminatorKind::Drop { ref target, location: _, .. } => {
-                self.propagate_bits_into_entry_set_for(in_out, changed, target);
-            }
             mir::TerminatorKind::If { ref targets, .. } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.0);
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.1);

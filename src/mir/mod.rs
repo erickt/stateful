@@ -392,13 +392,6 @@ pub enum TerminatorKind {
     /// `END_BLOCK`.
     Return,
 
-    /// Drop the Lvalue
-    Drop {
-        location: Lvalue,
-        target: BasicBlock,
-        moved: bool,
-    },
-
     /// jump to target on next iteration.
     Suspend {
         destination: (Lvalue, BasicBlock),
@@ -447,7 +440,6 @@ impl TerminatorKind {
     pub fn successors(&self) -> Vec<BasicBlock> {
         match *self {
             TerminatorKind::Goto { target, .. } |
-            TerminatorKind::Drop { target, .. } |
             TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
             }
@@ -462,7 +454,6 @@ impl TerminatorKind {
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match *self {
             TerminatorKind::Goto { ref mut target, .. } |
-            TerminatorKind::Drop { ref mut target, .. } |
             TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
             }
@@ -489,9 +480,6 @@ impl TerminatorKind {
             Suspend { destination: (ref destination, _), ref rvalue, .. } => {
                 write!(fmt, "{:?} = suspend({:?})", destination, rvalue)
             }
-            Drop { ref location, .. } => {
-                write!(fmt, "drop {:?}", location)
-            }
         }
     }
 
@@ -513,7 +501,6 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
-            Drop { .. } => vec!["return".into()],
         }
     }
 }
