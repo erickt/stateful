@@ -19,6 +19,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             rvalue: rvalue,
         });
 
+        // We don't yet support receiving values into the coroutine yet, so just store a `()` in
+        // the destination.
+        self.push_assign_unit(rvalue_span, block, &destination);
+
         next_block.unit()
     }
 }

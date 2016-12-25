@@ -71,7 +71,7 @@ pub fn dump_mir<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                             node_path, pass_name, disambiguator);
     file_path.push(&file_name);
     let _ = fs::File::create(&file_path).and_then(|mut file| {
-        writeln!(file, "// MAR for `{}`", node_path)?;
+        writeln!(file, "// MIR for `{}`", node_path)?;
         writeln!(file, "// pass_name = {}", pass_name)?;
         writeln!(file, "// disambiguator = {}", disambiguator)?;
         writeln!(file, "")?;

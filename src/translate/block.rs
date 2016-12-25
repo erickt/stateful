@@ -12,20 +12,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        let decls = self.assignments
-            .initialized(block)
-            .into_iter()
-            .flat_map(|local| self.declare(block, *local));
+        let stmts = block_data.statements().iter()
+            .flat_map(|statement| self.stmt(block, statement))
+            .chain(
+                block_data.terminator.iter()
+                    .flat_map(|terminator| self.terminator(terminator))
+            );
 
-        let stmts = block_data.statements()
-            .iter()
-            .flat_map(|statement| self.stmt(block, statement));
-
-        let terminator = block_data.terminator
-            .iter()
-            .flat_map(|terminator| self.terminator(terminator));
-
-        decls.chain(stmts).chain(terminator).collect()
+        if let Some(initialized) = self.assignments.initialized(block) {
+            initialized.iter()
+                .flat_map(|local| self.declare(block, *local))
+                .chain(stmts).collect()
+        } else {
+            stmts.collect()
+        }
     }
 
     fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {

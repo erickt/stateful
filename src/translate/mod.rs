@@ -12,23 +12,7 @@ pub fn translate(cx: &ExtCtxt,
                  assignments: &DefiniteAssignment)
                  -> P<ast::Item> {
     let builder = builder::Builder::new(cx, mir, assignments);
-
-    let state_machine_impl = builder.state_machine_impl();
-    let state_machine_impl_driver = builder.state_machine_impl_driver();
-    let (state_machine_state, state_machine_closure) = builder.state_machine_closure();
-
-    let block = quote_block!(cx, {
-        struct StateMachine<S, F> {
-            state: S,
-            resume: F,
-        }
-
-        $state_machine_impl
-        $state_machine_impl_driver
-
-        $state_machine_state
-        $state_machine_closure
-    });
+    let block = builder.state_machine();
 
     let ast_builder = AstBuilder::new().span(mir.span);
         

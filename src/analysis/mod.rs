@@ -1,6 +1,6 @@
 use data_structures::indexed_vec::Idx;
 use mir::{self, BasicBlock, Local, Location, Mir};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
 use std::fmt::Debug;
 use ty::TyCtxt;
@@ -15,7 +15,6 @@ use self::gather_moves::{MoveData, MovePathIndex, LookupResult};
 mod abs_domain;
 mod dataflow;
 mod gather_moves;
-//mod move_data;
 
 /// Use the definite-assignment algorithm to find all the locations where a local
 pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
@@ -48,9 +47,8 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     //
     // * ENTRY has a bit set for each local that was initialized in a parent block.
     // * GEN has a bit set for each local initialized in this block.
-    let mut entry = BTreeMap::new();
-    let mut gen = BTreeMap::new();
-    let mut kill = BTreeMap::new();
+    let mut initialized = HashMap::new();
+    let mut assigned = HashMap::new();
 
     for block in mir.basic_blocks().indices() {
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
@@ -59,50 +57,67 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
 
         for &(idx, local) in &move_indices {
             if entry_set.contains(&idx) {
-                entry.entry(block).or_insert_with(Vec::new).push(local);
+                assigned.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
 
             if gen_set.contains(&idx) {
-                gen.entry(block).or_insert_with(Vec::new).push(local);
+                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
 
-            if kill_set.contains(&idx) {
-                kill.entry(block).or_insert_with(Vec::new).push(local);
+            if !entry_set.contains(&idx) && kill_set.contains(&idx) {
+                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
         }
+
+        println!("entry: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if entry_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("gen: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if gen_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("kill: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if kill_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+        println!();
     }
 
-    println!("entry: {:#?}", entry);
-    println!("gen:   {:#?}", gen);
-    println!("kill:  {:#?}", kill);
-    // panic!();
+    println!("initialized: {:#?}", initialized);
+    println!("assigned: {:#?}", assigned);
 
     DefiniteAssignment {
-        initialized: gen,
-        assigned_on_entry: entry,
+        initialized: initialized,
+        assigned_on_entry: assigned,
     }
 }
 
 pub struct DefiniteAssignment {
-    initialized: BTreeMap<BasicBlock, Vec<Local>>,
-    assigned_on_entry: BTreeMap<BasicBlock, Vec<Local>>,
+    initialized: HashMap<BasicBlock, BTreeSet<Local>>,
+    assigned_on_entry: HashMap<BasicBlock, BTreeSet<Local>>,
 }
 
 impl DefiniteAssignment {
     /// Return all the locals that were initialized in this block.
-    pub fn initialized(&self, block: BasicBlock) -> &[Local] {
-        match self.initialized.get(&block) {
-            Some(ref locals) => &**locals,
-            None => &[],
-        }
+    pub fn initialized(&self, block: BasicBlock) -> Option<&BTreeSet<Local>> {
+        self.initialized.get(&block)
     }
 
     /// Return all the locals that were alive on entry to this block.
-    pub fn on_entry(&self, block: BasicBlock) -> &[Local] {
-        match self.assigned_on_entry.get(&block) {
-            Some(ref locals) => &**locals,
-            None => &[],
-        }
+    pub fn on_entry(&self, block: BasicBlock) -> Option<&BTreeSet<Local>> {
+        self.assigned_on_entry.get(&block)
     }
 }
 
