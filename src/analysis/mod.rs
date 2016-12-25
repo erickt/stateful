@@ -1,5 +1,5 @@
 use data_structures::indexed_vec::Idx;
-use mir::{self, BasicBlock, Local, Location, Mir};
+use mir::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::env;
 use std::fmt::Debug;
@@ -29,7 +29,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let move_indices = mir.local_decls
         .indices()
         .filter_map(|local| {
-            let lvalue = mir::Lvalue::Local(local);
+            let lvalue = Lvalue::Local(local);
 
             match mdpe.move_data.rev_lookup.find(&lvalue) {
                 LookupResult::Exact(idx) |
@@ -50,7 +50,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let mut initialized = HashMap::new();
     let mut assigned = HashMap::new();
 
-    for block in mir.basic_blocks().indices() {
+    for (block, block_data) in mir.basic_blocks().iter_enumerated() {
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
         let gen_set = flow_inits.sets().gen_set_for(block.index());
         let kill_set = flow_inits.sets().kill_set_for(block.index());
@@ -66,6 +66,18 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
 
             if !entry_set.contains(&idx) && kill_set.contains(&idx) {
                 initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
+            }
+        }
+
+        // Make sure the target of a call is marked initialized.
+        if let Some(ref terminator) = block_data.terminator {
+            match terminator.kind {
+                TerminatorKind::Call { destination: (Lvalue::Local(local), block), .. } |
+                TerminatorKind::MethodCall { destination: (Lvalue::Local(local), block), .. } |
+                TerminatorKind::Suspend { destination: (Lvalue::Local(local), block), .. } => {
+                    initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
+                }
+                _ => {}
             }
         }
 
@@ -173,7 +185,7 @@ fn drop_flag_effects_for_function_entry<'a, 'tcx, F>(tcx: TyCtxt<'a, 'tcx>,
 {
     let move_data = &ctxt.move_data;
     for arg in mir.args_iter() {
-        let lvalue = mir::Lvalue::Local(arg);
+        let lvalue = Lvalue::Local(arg);
         let lookup_result = move_data.rev_lookup.find(&lvalue);
         on_lookup_result_bits(tcx,
                               mir,
@@ -203,7 +215,7 @@ fn drop_flag_effects_for_function_entry<'a, 'tcx, F>(tcx: TyCtxt<'a, 'tcx>,
 /// FIXME: we have to do something for moving slice patterns.
 fn lvalue_contents_drop_state_cannot_differ<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                                                       mir: &Mir,
-                                                      lv: &mir::Lvalue) -> bool {
+                                                      lv: &Lvalue) -> bool {
     false
     /*
     let ty = lv.ty(mir, tcx).to_ty(tcx);
@@ -319,22 +331,22 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
     match block.statements.get(loc.statement_index) {
         Some(stmt) => match stmt.kind {
             /*
-            mir::StatementKind::SetDiscriminant{ .. } => {
+            StatementKind::SetDiscriminant{ .. } => {
                 span_bug!(&self.tcx,
                           stmt.source_info.span,
                           "SetDiscrimant should not exist during borrowck");
             }
             */
-            mir::StatementKind::Assign(ref lvalue, _) => {
+            StatementKind::Assign(ref lvalue, _) => {
                 debug!("drop_flag_effects: assignment {:?}", stmt);
                  on_lookup_result_bits(tcx, mir, move_data,
                                        move_data.rev_lookup.find(lvalue),
                                        |moi| callback(moi, DropFlagState::Present))
             }
             /*
-            mir::StatementKind::StorageLive(_) |
-            mir::StatementKind::StorageDead(_) |
-            mir::StatementKind::Nop => {}
+            StatementKind::StorageLive(_) |
+            StatementKind::StorageDead(_) |
+            StatementKind::Nop => {}
             */
             _ => {}
         },
@@ -342,7 +354,7 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
             debug!("drop_flag_effects: replace {:?}", block.terminator());
             /*
             match block.terminator().kind {
-                mir::TerminatorKind::DropAndReplace { ref location, .. } => {
+                TerminatorKind::DropAndReplace { ref location, .. } => {
                     on_lookup_result_bits(tcx, mir, move_data,
                                           move_data.rev_lookup.find(location),
                                           |moi| callback(moi, DropFlagState::Present))

@@ -15,7 +15,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let next_block = self.start_new_block(rvalue_span, Some("Suspend"));
 
         self.terminate(rvalue_span, block, TerminatorKind::Suspend {
-            destination: (destination, next_block),
+            destination: (destination.clone(), next_block),
             rvalue: rvalue,
         });
 

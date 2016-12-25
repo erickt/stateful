@@ -11,7 +11,7 @@ use std::iter::Iterator;
 
 #[generator]
 fn gen() -> Box<Iterator<Item = usize>> {
-    yield_!(1);
+    let x = Some(1);
 }
 
 

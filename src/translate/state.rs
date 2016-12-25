@@ -103,6 +103,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Create type parameters for each alive local in this block.
         let scope_locals = &self.scope_locals[&block];
+        println!("state_variant: {:?} => {:?}", block, scope_locals);
 
         // Internal states get an extra `Args` typaram if the block is a resume block.
         let args_param = if kind == StateKind::Internal && self.resume_blocks.contains(&block) {
@@ -117,7 +118,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .chain(args_param)
             .collect::<Vec<_>>();
 
-        let variant = {
+        let variant = if ty_param_ids.is_empty() {
+            ast_builder.variant(state_id).unit()
+        } else {
             let mut tys = ty_param_ids.iter()
                 .map(|ty_param| ast_builder.ty().id(ty_param));
 
