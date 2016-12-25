@@ -97,17 +97,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .map(|arg| unpack!(block = this.as_rvalue(block, arg)))
                     .collect::<Vec<_>>();
 
-                let success = this.start_new_block(expr_span, Some("AfterMethodCall"));
-
                 this.declare(block, expr_span, &destination);
-                this.cfg.terminate(block, source_info, TerminatorKind::MethodCall {
-                    destination: (destination, success),
-                    ident: *ident,
-                    tys: tys.clone(),
-                    self_: self_,
-                    args: args,
+                this.cfg.push(block, Statement {
+                    source_info: source_info,
+                    kind: StatementKind::MethodCall {
+                        destination: destination,
+                        ident: *ident,
+                        tys: tys.clone(),
+                        self_: self_,
+                        args: args,
+                    }
                 });
-                success.unit()
+                block.unit()
             }
 
             // These cases don't actually need a destination

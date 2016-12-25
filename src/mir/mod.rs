@@ -399,15 +399,6 @@ pub enum TerminatorKind {
         moved: bool,
     },
 
-    /// Block ends with a call of a method
-    MethodCall {
-        destination: (Lvalue, BasicBlock),
-        ident: ast::SpannedIdent,
-        tys: Vec<P<ast::Ty>>,
-        self_: Operand,
-        args: Vec<Rvalue>,
-    },
-
     /// jump to target on next iteration.
     Suspend {
         destination: (Lvalue, BasicBlock),
@@ -457,8 +448,6 @@ impl TerminatorKind {
         match *self {
             TerminatorKind::Goto { target, .. } |
             TerminatorKind::Drop { target, .. } |
-            //TerminatorKind::Call { destination: (_, target), .. } |
-            TerminatorKind::MethodCall { destination: (_, target), .. } |
             TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
             }
@@ -474,8 +463,6 @@ impl TerminatorKind {
         match *self {
             TerminatorKind::Goto { ref mut target, .. } |
             TerminatorKind::Drop { ref mut target, .. } |
-            //TerminatorKind::Call { destination: (_, ref mut target), .. } |
-            TerminatorKind::MethodCall { destination: (_, ref mut target), .. } |
             TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
             }
@@ -502,49 +489,6 @@ impl TerminatorKind {
             Suspend { destination: (ref destination, _), ref rvalue, .. } => {
                 write!(fmt, "{:?} = suspend({:?})", destination, rvalue)
             }
-            /*
-            Call { destination: (ref destination, _), ref func, ref args, .. } => {
-                write!(fmt, "{:?} = {:?}(", destination, func)?;
-                for (i, arg) in args.iter().enumerate() {
-                    if i != 0 {
-                        write!(fmt, ",")?;
-                    }
-                    write!(fmt, "{:?}", arg)?;
-                }
-                write!(fmt, ")")
-            }
-            */
-            MethodCall {
-                destination: (ref destination, _),
-                ref ident,
-                ref tys,
-                ref self_,
-                ref args,
-                ..
-            } => {
-                write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
-
-                if !tys.is_empty() {
-                    write!(fmt, "::<")?;
-                    for (i, ty) in tys.iter().enumerate() {
-                        if i != 0 {
-                            write!(fmt, ", ")?;
-                        }
-                        write!(fmt, "{:?}", ty)?;
-                    }
-                    write!(fmt, ">")?;
-                }
-
-                write!(fmt, "(")?;
-
-                for (i, arg) in args.iter().enumerate() {
-                    if i != 0 {
-                        write!(fmt, ",")?;
-                    }
-                    write!(fmt, "{:?}", arg)?;
-                }
-                write!(fmt, ")")
-            }
             Drop { ref location, .. } => {
                 write!(fmt, "drop {:?}", location)
             }
@@ -569,8 +513,6 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
-            //Call { .. } => vec!["return".into()],
-            MethodCall { .. } => vec!["return".into()],
             Drop { .. } => vec!["return".into()],
         }
     }
@@ -981,8 +923,6 @@ impl Statement {
 pub enum StatementKind {
     Stmt(ast::Stmt),
 
-    // Declare(Local),
-
     /// As opposed to MIR, we don't have an easy way breaking up irrefutable patterns, so instead
     /// we'll add a dedicated statement for that hides their destructuring.
     Let {
@@ -999,6 +939,15 @@ pub enum StatementKind {
     Call {
         destination: Lvalue,
         func: Operand,
+        args: Vec<Rvalue>,
+    },
+
+    /// Block ends with a call of a method
+    MethodCall {
+        destination: Lvalue,
+        ident: ast::SpannedIdent,
+        tys: Vec<P<ast::Ty>>,
+        self_: Operand,
         args: Vec<Rvalue>,
     },
 
@@ -1019,11 +968,6 @@ impl Debug for Statement {
             Stmt(ref stmt) => {
                 write!(fmt, "stmt {:?}", pprust::stmt_to_string(stmt))
             }
-            /*
-            Declare(local) => {
-                write!(fmt, "let {:?}", local)
-            }
-            */
             Let { ref pat, ty: None, ref rvalue, .. } => {
                 write!(fmt, "let {:?} = {:?}", pat, rvalue)
             }
@@ -1043,7 +987,6 @@ impl Debug for Statement {
                 }
                 write!(fmt, ")")
             }
-            /*
             MethodCall { ref destination, ref ident, ref tys, ref self_, ref args, .. } => {
                 write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
 
@@ -1068,10 +1011,6 @@ impl Debug for Statement {
                 }
                 write!(fmt, ")")
             }
-            Drop { ref location, .. } => {
-                write!(fmt, "drop {:?}", location)
-            }
-            */
 
             StorageLive(ref lv) => write!(fmt, "StorageLive({:?})", lv),
             StorageDead(ref lv) => write!(fmt, "StorageDead({:?})", lv),

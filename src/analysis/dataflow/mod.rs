@@ -466,34 +466,6 @@ impl<'a, D> DataflowAnalysis<'a, D>
                     self.propagate_bits_into_entry_set_for(in_out, changed, &target.block);
                 }
             }
-            /*
-            mir::TerminatorKind::Call {
-                ref destination,
-                func: _,
-                args: _,
-            } => {
-                let (ref dest_lval, ref dest_bb) = *destination;
-                // N.B.: This must be done *last*, after all other
-                // propagation, as documented in comment above.
-                self.flow_state.operator.propagate_call_return(
-                    &self.ctxt, in_out, bb, *dest_bb, dest_lval);
-                self.propagate_bits_into_entry_set_for(in_out, changed, dest_bb);
-            }
-            */
-            mir::TerminatorKind::MethodCall {
-                ref destination,
-                ident: _,
-                tys: _,
-                self_: _,
-                args: _,
-            } => {
-                let (ref dest_lval, ref dest_bb) = *destination;
-                // N.B.: This must be done *last*, after all other
-                // propagation, as documented in comment above.
-                self.flow_state.operator.propagate_call_return(
-                    &self.ctxt, in_out, bb, *dest_bb, dest_lval);
-                self.propagate_bits_into_entry_set_for(in_out, changed, dest_bb);
-            }
             mir::TerminatorKind::Suspend {
                 ref destination,
                 rvalue: _,

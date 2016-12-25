@@ -163,64 +163,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts.extend(self.goto(span, target));
                 stmts
             }
-            /*
-            TerminatorKind::Call {
-                destination: (ref lvalue, target),
-                ref func,
-                ref args,
-            } => {
-                let lvalue = lvalue.to_expr(&self.mir.local_decls);
-
-                let func = func.to_expr(&self.mir.local_decls);
-                let args = args.iter()
-                    .map(|arg| arg.to_expr(&self.mir.local_decls));
-
-                let rvalue = ast_builder.expr()
-                    .call().build(func)
-                    .with_args(args)
-                    .build();
-
-                let mut stmts = vec![
-                    ast_builder.stmt().semi()
-                        .assign().build(lvalue)
-                        .build(rvalue)
-                ];
-
-                stmts.extend(self.goto(span, target));
-
-                stmts
-            }
-            */
-            TerminatorKind::MethodCall {
-                destination: (ref lvalue, target),
-                ident,
-                ref tys,
-                ref self_,
-                ref args,
-            } => {
-                let lvalue = lvalue.to_expr(&self.mir.local_decls);
-                let self_ = self_.to_expr(&self.mir.local_decls);
-
-                let args = args.iter()
-                    .map(|arg| arg.to_expr(&self.mir.local_decls));
-
-                let rvalue = ast_builder.expr()
-                    .span(ident.span).method_call(ident.node)
-                    .span(span).build(self_)
-                    .with_tys(tys.clone())
-                    .with_args(args)
-                    .build();
-
-                let mut stmts = vec![
-                    ast_builder.stmt().semi().assign()
-                        .build(lvalue)
-                        .build(rvalue)
-                ];
-
-                stmts.extend(self.goto(span, target));
-
-                stmts
-            }
             TerminatorKind::Suspend {
                 destination: (_, target),
                 ref rvalue,
