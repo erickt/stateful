@@ -8,7 +8,7 @@ use syntax::codemap::Span;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn coroutine_state(&self) -> CoroutineState {
+    pub fn resume_state(&self) -> ResumeState {
         let blocks = &self.resume_blocks;
 
         let mut variants = Vec::with_capacity(blocks.len());
@@ -17,7 +17,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut arms = Vec::with_capacity(blocks.len());
         
         for &block in blocks.iter() {
-            let (variant, tp) = self.state_variant(block, StateKind::Coroutine);
+            let (variant, tp) = self.state_variant(block, StateKind::Resume);
             variants.push(variant);
 
             // It's possible for a declaration to be created but not actually get used in the state
@@ -30,14 +30,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
 
-            arms.push(self.coroutine_arm(block));
+            arms.push(self.resume_arm(block));
         }
 
         let generics = self.ast_builder.generics()
             .with_ty_param_ids(ty_param_ids.iter())
             .build();
 
-        let enum_item = self.ast_builder.item().enum_("CoroutineState")
+        let enum_item = self.ast_builder.item().enum_("ResumeState")
             .generics().with(generics.clone()).build()
             .id("Illegal")
             .with_variants(variants)
@@ -45,7 +45,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let state_path = self.ast_builder
             .path()
-                .segment("CoroutineState")
+                .segment("ResumeState")
                 .with_tys(
                     ty_param_ids.iter().map(|variable| self.ast_builder.ty().id(variable))
                 )
@@ -55,7 +55,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let default_item = quote_item!(self.cx,
             impl $generics ::std::default::Default for $state_path {
                 fn default() -> Self {
-                    CoroutineState::Illegal
+                    ResumeState::Illegal
                 }
             }
         ).expect("state default item");
@@ -66,32 +66,32 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         ];
 
         let expr = quote_expr!(self.cx,
-            match coroutine_state {
+            match resume_state {
                 $arms
-                CoroutineState::Illegal => { panic!("illegal state") }
+                ResumeState::Illegal => { panic!("illegal state") }
             }
         );
 
-        CoroutineState {
+        ResumeState {
             stmts: stmts,
             expr: expr,
         }
     }
 
-    pub fn coroutine_state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
-        self.state_expr(block, StateKind::Coroutine)
+    pub fn resume_state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
+        self.state_expr(block, StateKind::Resume)
     }
 
-    /// Build up an `ast::Arm` for a coroutine state variant. This arm's role is to lift up the
-    /// coroutine arguments into the state machine, which is simply generating a conversion like
+    /// Build up an `ast::Arm` for a resume state variant. This arm's role is to lift up the
+    /// resume arguments into the state machine, which is simply generating a conversion like
     /// this:
     ///
     /// ```rust
-    /// CoroutineInternal::State1(scope1, scope2) => {
+    /// ResumeInternal::State1(scope1, scope2) => {
     ///     InternalState::State1(scope1, scope2, args)
     /// }
     /// ```
-    fn coroutine_arm(&self, block: BasicBlock) -> ast::Arm {
+    fn resume_arm(&self, block: BasicBlock) -> ast::Arm {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
@@ -99,8 +99,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .map(|&(scope, _)| ast_builder.id(format!("scope{}", scope.index())))
             .collect::<Vec<_>>();
 
-        let coroutine_path = self.state_path(block, StateKind::Coroutine);
-        let coroutine_pat = ast_builder.pat().enum_().build(coroutine_path)
+        let resume_path = self.state_path(block, StateKind::Resume);
+        let resume_pat = ast_builder.pat().enum_().build(resume_path)
             .with_ids(&ids)
             .build();
 
@@ -112,12 +112,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .build();
 
         ast_builder.arm()
-            .with_pat(coroutine_pat)
+            .with_pat(resume_pat)
             .body().build(internal_expr)
     }
 }
 
-pub struct CoroutineState {
+pub struct ResumeState {
     pub stmts: Vec<ast::Stmt>,
     pub expr: P<ast::Expr>,
 }

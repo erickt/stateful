@@ -94,27 +94,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn declare(&self, block: BasicBlock, local: Local) -> Vec<ast::Stmt> {
-        let local_decl = self.mir.local_decl_data(local);
-
-        let ast_builder = self.ast_builder.span(local_decl.source_info.span);
-
-        let mut stmts = self.rename_shadowed_local(&ast_builder, local)
-            .into_iter()
-            .collect::<Vec<_>>();
-
-        let stmt_builder = match local_decl.mutability {
-            ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
-            ast::Mutability::Immutable => ast_builder.stmt().let_().id(local_decl.name),
-        };
-
-        stmts.push(stmt_builder.build_option_ty(local_decl.ty.clone())
-            .build());
-
-        stmts
-    }
-
-    fn rename_shadowed_local(&self, ast_builder: &AstBuilder, local: Local) -> Option<ast::Stmt> {
+    pub fn rename_shadowed_local(&self, ast_builder: &AstBuilder, local: Local) -> Option<ast::Stmt> {
         let local_decl = self.mir.local_decl_data(local);
 
         if let Some(shadowed_decl) = local_decl.shadowed_decl {

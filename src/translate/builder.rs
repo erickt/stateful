@@ -4,7 +4,7 @@ use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use super::internal_state::InternalState;
-use super::resume_state::CoroutineState;
+use super::resume_state::ResumeState;
 use super::state::StateKind;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -51,15 +51,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn state_machine(&self) -> P<ast::Block> {
-        let start_state_expr = self.coroutine_state_expr(START_BLOCK);
+        let start_state_expr = self.resume_state_expr(START_BLOCK);
 
         let state_machine_impl = self.state_machine_impl();
         let state_machine_impl_driver = self.state_machine_impl_driver();
 
-        let CoroutineState {
-            stmts: coroutine_state_stmts,
-            expr: coroutine_state_expr,
-        } = self.coroutine_state();
+        let ResumeState {
+            stmts: resume_state_stmts,
+            expr: resume_state_expr,
+        } = self.resume_state();
 
         let InternalState {
             stmts: internal_state_stmts,
@@ -67,7 +67,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         } = self.internal_state();
 
         let expr = quote_expr!(self.cx,
-            StateMachine::new($start_state_expr, coroutine)
+            StateMachine::new($start_state_expr, resume)
         );
 
         // If we're not using impl trait, we need to wrap the closure in a box.
@@ -85,11 +85,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             $state_machine_impl
             $state_machine_impl_driver
 
-            $coroutine_state_stmts
+            $resume_state_stmts
             $internal_state_stmts
 
-            let coroutine = |mut coroutine_state, args| {
-                let mut state = $coroutine_state_expr;
+            let resume = |mut resume_state, args| {
+                let mut state = $resume_state_expr;
                 $internal_state_expr
             };
 
@@ -182,7 +182,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
 /// Find all the blocks that could be resumed into.
 ///
-/// In order properly lift any coroutine arguments into the state machine, we need to first
+/// In order properly lift any resume arguments into the state machine, we need to first
 /// identify all the blocks that can be resumed into.
 fn find_resume_blocks(mir: &Mir) -> HashSet<BasicBlock> {
     let mut blocks = HashSet::new();

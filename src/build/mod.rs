@@ -247,10 +247,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 uninitialized_vars);
         }
 
-        /*
+        debug!("scopes: {:#?}", self.visibility_scopes);
         debug!("decls: {:#?}", self.local_decls);
         debug!("blocks: {:#?}", self.cfg.basic_blocks);
-        */
 
         Mir::new(
             self.state_machine_kind,

@@ -87,15 +87,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // ```rust
         // InternalState::State2(scope1, scope2, ...)
         // ```
-        let pat = ast_builder.pat().enum_().build(state_path)
-            .with_pats(
-                scope_locals.iter()
-                    .map(|&(scope, _)| {
-                        ast_builder.pat().id(format!("scope{}", scope.index()))
-                    })
-                    .chain(args_pat)
-            )
-            .build();
+        let pat = if scope_locals.is_empty() {
+            ast_builder.pat().build_path(state_path)
+        } else {
+            ast_builder.pat().enum_().build(state_path)
+                .with_pats(
+                    scope_locals.iter()
+                        .map(|&(scope, _)| {
+                            ast_builder.pat().id(format!("scope{}", scope.index()))
+                        })
+                        .chain(args_pat)
+                )
+                .build()
+        };
 
         // Next, setup the arm body.
         let mut body = ast_builder.block()

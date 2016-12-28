@@ -11,6 +11,20 @@ use std::iter::Iterator;
 
 #[generator]
 fn gen() -> Box<Iterator<Item = usize>> {
+    let a;
+    if true {
+        a = 1;
+        {
+            let b = 3;
+            {
+                let c = 4;
+            };
+        };
+    } else {
+        a = 2;
+    }
+
+    /*
     let a = 1;
     {
         let b = 2;
@@ -19,6 +33,7 @@ fn gen() -> Box<Iterator<Item = usize>> {
     {
         let d = 4;
     }
+    */
 }
 
 

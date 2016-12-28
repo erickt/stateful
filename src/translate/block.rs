@@ -1,9 +1,9 @@
 use mir::*;
+use std::collections::HashMap;
+use super::builder::Builder;
+use super::state::StateKind;
 use syntax::ast;
 use syntax::codemap::Span;
-use super::builder::Builder;
-
-use super::state::StateKind;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
@@ -12,13 +12,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        let stmts = self.group_statements_by_scope(block).into_iter()
-            .flat_map(|stmt| self.stmt_scope(block, stmt))
-            .chain(
-                block_data.terminator.iter()
-                    .flat_map(|terminator| self.terminator(terminator))
-            );
+        let scope_block = self.build_scope_block(block);
+        let mut stmts = self.scope_block(block, scope_block);
 
+        stmts.extend(
+            block_data.terminator.iter()
+                .flat_map(|terminator| self.terminator(terminator))
+        );
+
+        /*
         if let Some(initialized) = self.assignments.initialized(block) {
             initialized.iter()
                 .flat_map(|local| self.declare(block, *local))
@@ -26,38 +28,77 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         } else {
             stmts.collect()
         }
+        */
+
+        stmts
     }
 
-    fn stmt_scope(&self, block: BasicBlock, stmt: StatementScope) -> Vec<ast::Stmt> {
-        match stmt {
-            StatementScope::Statement(stmt) => {
-                self.stmt(block, stmt)
-            }
-            StatementScope::Vec(stmts) => {
-                let stmts = stmts.into_iter()
-                    .flat_map(|stmt| self.stmt_scope(block, stmt));
+    /// Rebuild an AST block from a MIR block.
+    ///
+    /// Stateful doesn't need to care about drops because that's automatically handled by the
+    /// compiler when we raise MIR back into the AST. Unfortunately, MIR flattens out all of our
+    /// scopes, so we need to rebuild this from the visibility scope information we parsed out
+    /// during MIR construction.
+    fn build_scope_block(&self, block: BasicBlock) -> ScopeBlock<'a> {
+        println!("-------------");
+        // First, we need to group all our declarations by their scope.
+        let mut scope_decls = HashMap::new();
 
-                vec![
-                    self.ast_builder.stmt().semi().block()
-                        .with_stmts(stmts)
-                        .build(),
-                ]
+        if let Some(initialized) = self.assignments.initialized(block) {
+            for &local in initialized {
+                let mut scope = self.mir.local_decls[local].source_info.scope;
+
+                // In AST, non-argument variables are actually defined in their parent scope.
+                if scope != ARGUMENT_VISIBILITY_SCOPE {
+                    scope = self.mir.visibility_scopes[scope].parent_scope.unwrap();
+                }
+
+                scope_decls.entry(scope).or_insert_with(Vec::new).push(local);
             }
         }
-    }
 
-    /// Group all the statements together by their scope. This lets us reconstruct proper blocks to
-    /// make sure we correctly trigger drops.
-    fn group_statements_by_scope(&self, block: BasicBlock) -> Vec<StatementScope<'a>> {
+        println!("scope_decls: {:#?}", scope_decls);
+
+        // Next, we'll start rebuilding the scope stack. We'll start with the root block, and work
+        // our ways up. Each time we build a block, we pull all the associated declarations and
+        // move them into this block.
+        let mut stack = vec![
+            ScopeBlock::new(
+                ARGUMENT_VISIBILITY_SCOPE,
+                scope_decls.remove(&ARGUMENT_VISIBILITY_SCOPE),
+            ),
+        ];
+
         let block_data = &self.mir[block];
-        let mut stack = vec![(ARGUMENT_VISIBILITY_SCOPE, vec![])];
 
+        // Next, loop through the statements and insert them into the right block. If they have a
+        // different scope, we'll push and pop the scopes until.
         for stmt in block_data.statements() {
+            let last_scope = stack.last().unwrap().scope;
             let current_scope = stmt.source_info.scope;
-            let stmt = StatementScope::Statement(stmt);
 
-            let last_scope = stack.last().expect("no stack?").0;
+            println!("last_scope: {:?} stmt: {:#?}",
+                     last_scope,
+                     stmt);
 
+            // Things are a little tricky when this statement's scope is different from the prior
+            // statement. Consider:
+            //
+            // ```rust
+            // {
+            //     {
+            //         a;
+            //     }
+            // }
+            // {
+            //     {
+            //         b;
+            //     }
+            // }
+            // ```
+            //
+            // In MIR, we'll just have two statements, `a;` and `b;` with different scopes. We need
+            // to pop and push on scopes in order to get to the right level.
             if current_scope != last_scope {
                 let last_scope_path = &self.scope_paths[&last_scope];
                 let current_scope_path = &self.scope_paths[&current_scope];
@@ -71,23 +112,82 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // Walk down the scope tree to the last common point. We'll commit all the scopes
                 // along the way.
                 for i in common .. last_scope_path.len() {
-                    let (_, stmts) = stack.pop().expect("no stack while popping?");
-                    let stmt = StatementScope::Vec(stmts);
-                    stack.last_mut().expect("no stack while pushing scope?").1.push(stmt);
+                    let scope_block = stack.pop().unwrap();
+                    stack.last_mut().unwrap().push_block(scope_block);
                 }
 
-                // Walk up the scope tree to the current scope point.
+                // Walk up the scope tree to the current scope point, pushing new blocks along the
+                // way.
                 for i in common .. current_scope_path.len() {
-                    stack.push((current_scope, vec![]));
+                    stack.push(
+                        ScopeBlock::new(
+                            current_scope,
+                            scope_decls.remove(&current_scope)));
                 }
             }
 
-            // Finally, push the statement onto the stack.
-            stack.last_mut().expect("no stack while pushing stmt?").1.push(stmt);
+            stack.last_mut().unwrap().push_stmt(stmt);
         }
 
-        let (_, stmts) = stack.pop().expect("no final stack?");
-        assert!(stack.is_empty(), "unpopped statements? {:?}", stack);
+        // Pop off the remaining scopes.
+        while stack.len() != 1 {
+            let scope_block = stack.pop().unwrap();
+            stack.last_mut().unwrap().push_block(scope_block);
+        }
+
+        let scope_block = stack.pop().unwrap();
+
+        assert!(stack.is_empty(), "stack is not empty: {:#?}", stack);
+        assert_eq!(scope_block.scope,
+                   ARGUMENT_VISIBILITY_SCOPE,
+                   "block is not root scope: {:?}",
+                   scope_block);
+
+        println!("+++++++++++++++");
+
+        scope_block
+    }
+
+    fn scope_block(&self, block: BasicBlock, scope_block: ScopeBlock) -> Vec<ast::Stmt> {
+        scope_block.stmts.into_iter()
+            .flat_map(|stmt| {
+                match stmt {
+                    ScopeStatement::Declare(local) => {
+                        self.declare(block, local)
+                    }
+                    ScopeStatement::Statement(stmt) => {
+                        self.stmt(block, stmt)
+                    }
+                    ScopeStatement::Block(scope_block) => {
+                        let stmts = self.scope_block(block, scope_block);
+
+                        vec![
+                            self.ast_builder.stmt().semi().block()
+                                .with_stmts(stmts)
+                                .build()
+                        ]
+                    }
+                }
+            })
+            .collect()
+    }
+
+    fn declare(&self, block: BasicBlock, local: Local) -> Vec<ast::Stmt> {
+        let local_decl = self.mir.local_decl_data(local);
+
+        let ast_builder = self.ast_builder.span(local_decl.source_info.span);
+
+        let mut stmts = self.rename_shadowed_local(&ast_builder, local)
+            .into_iter()
+            .collect::<Vec<_>>();
+
+        let stmt_builder = match local_decl.mutability {
+            ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
+            ast::Mutability::Immutable => ast_builder.stmt().let_().id(local_decl.name),
+        };
+
+        stmts.push(stmt_builder.build_option_ty(local_decl.ty.clone())
+            .build());
 
         stmts
     }
@@ -150,7 +250,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             TerminatorKind::Return => {
                 let next_state = ast_builder.expr().path()
                     .span(self.mir.span)
-                    .ids(&["CoroutineState", "Illegal"])
+                    .ids(&["ResumeState", "Illegal"])
                     .build();
 
                 match self.mir.state_machine_kind {
@@ -193,7 +293,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref rvalue,
             } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
-                let next_state = self.coroutine_state_expr(target);
+                let next_state = self.resume_state_expr(target);
 
                 let ast_builder = ast_builder.span(rvalue.span);
                 let expr = ast_builder.expr().tuple()
@@ -231,7 +331,33 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 }
 
 #[derive(Debug)]
-enum StatementScope<'a> {
+struct ScopeBlock<'a> {
+    scope: VisibilityScope,
+    stmts: Vec<ScopeStatement<'a>>,
+}
+
+#[derive(Debug)]
+enum ScopeStatement<'a> {
+    Declare(Local),
     Statement(&'a Statement),
-    Vec(Vec<StatementScope<'a>>),
+    Block(ScopeBlock<'a>),
+}
+
+impl<'a> ScopeBlock<'a> {
+    fn new(scope: VisibilityScope, locals: Option<Vec<Local>>) -> Self {
+        ScopeBlock {
+            scope: scope,
+            stmts: locals.unwrap_or_else(Vec::new).into_iter()
+                .map(ScopeStatement::Declare)
+                .collect(),
+        }
+    }
+
+    fn push_stmt(&mut self, stmt: &'a Statement) {
+        self.stmts.push(ScopeStatement::Statement(stmt));
+    }
+
+    fn push_block(&mut self, block: ScopeBlock<'a>) {
+        self.stmts.push(ScopeStatement::Block(block));
+    }
 }

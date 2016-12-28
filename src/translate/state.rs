@@ -8,7 +8,7 @@ use syntax::ptr::P;
 
 #[derive(Copy, Clone, PartialEq)]
 pub enum StateKind {
-    Coroutine,
+    Resume,
     Internal,
 }
 
@@ -38,24 +38,29 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         let state_path = self.state_path(block, kind);
+        let locals = &self.scope_locals[&block];
 
-        // Pack up all the locals back into scope tuples.
-        let exprs = self.scope_locals[&block].iter()
-            .map(|&(_, ref locals)| {
-                ast_builder.expr().tuple()
-                    .with_exprs(
-                        locals.iter().map(|local| {
-                            let name = &self.mir.local_decls[*local].name;
-                            ast_builder.expr().id(name)
-                        })
-                    )
-                    .build()
-            });
+        if locals.is_empty() {
+            ast_builder.expr().build_path(state_path)
+        } else {
+            // Pack up all the locals back into scope tuples.
+            let exprs = locals.iter()
+                .map(|&(_, ref locals)| {
+                    ast_builder.expr().tuple()
+                        .with_exprs(
+                            locals.iter().map(|local| {
+                                let name = &self.mir.local_decls[*local].name;
+                                ast_builder.expr().id(name)
+                            })
+                        )
+                        .build()
+                });
 
-        ast_builder.expr().call()
-            .build_path(state_path)
-            .with_args(exprs)
-            .build()
+            ast_builder.expr().call()
+                .build_path(state_path)
+                .with_args(exprs)
+                .build()
+        }
     }
 
     pub fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
@@ -81,7 +86,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     pub fn state_path(&self, block: BasicBlock, kind: StateKind) -> ast::Path {
         let enum_name = match kind {
-            StateKind::Coroutine => "CoroutineState",
+            StateKind::Resume => "ResumeState",
             StateKind::Internal => "InternalState",
         };
 
