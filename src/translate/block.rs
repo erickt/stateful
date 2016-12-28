@@ -12,8 +12,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        let stmts = block_data.statements().iter()
-            .flat_map(|statement| self.stmt(block, statement))
+        let stmts = self.group_statements_by_scope(block).into_iter()
+            .flat_map(|stmt| self.stmt_scope(block, stmt))
             .chain(
                 block_data.terminator.iter()
                     .flat_map(|terminator| self.terminator(terminator))
@@ -26,6 +26,70 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         } else {
             stmts.collect()
         }
+    }
+
+    fn stmt_scope(&self, block: BasicBlock, stmt: StatementScope) -> Vec<ast::Stmt> {
+        match stmt {
+            StatementScope::Statement(stmt) => {
+                self.stmt(block, stmt)
+            }
+            StatementScope::Vec(stmts) => {
+                let stmts = stmts.into_iter()
+                    .flat_map(|stmt| self.stmt_scope(block, stmt));
+
+                vec![
+                    self.ast_builder.stmt().semi().block()
+                        .with_stmts(stmts)
+                        .build(),
+                ]
+            }
+        }
+    }
+
+    /// Group all the statements together by their scope. This lets us reconstruct proper blocks to
+    /// make sure we correctly trigger drops.
+    fn group_statements_by_scope(&self, block: BasicBlock) -> Vec<StatementScope<'a>> {
+        let block_data = &self.mir[block];
+        let mut stack = vec![(ARGUMENT_VISIBILITY_SCOPE, vec![])];
+
+        for stmt in block_data.statements() {
+            let current_scope = stmt.source_info.scope;
+            let stmt = StatementScope::Statement(stmt);
+
+            let last_scope = stack.last().expect("no stack?").0;
+
+            if current_scope != last_scope {
+                let last_scope_path = &self.scope_paths[&last_scope];
+                let current_scope_path = &self.scope_paths[&current_scope];
+
+                // Find the last common anscestor between the paths.
+                let common = last_scope_path.iter()
+                    .zip(current_scope_path.iter())
+                    .take_while(|&(lhs, rhs)| lhs == rhs)
+                    .count();
+
+                // Walk down the scope tree to the last common point. We'll commit all the scopes
+                // along the way.
+                for i in common .. last_scope_path.len() {
+                    let (_, stmts) = stack.pop().expect("no stack while popping?");
+                    let stmt = StatementScope::Vec(stmts);
+                    stack.last_mut().expect("no stack while pushing scope?").1.push(stmt);
+                }
+
+                // Walk up the scope tree to the current scope point.
+                for i in common .. current_scope_path.len() {
+                    stack.push((current_scope, vec![]));
+                }
+            }
+
+            // Finally, push the statement onto the stack.
+            stack.last_mut().expect("no stack while pushing stmt?").1.push(stmt);
+        }
+
+        let (_, stmts) = stack.pop().expect("no final stack?");
+        assert!(stack.is_empty(), "unpopped statements? {:?}", stack);
+
+        stmts
     }
 
     fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
@@ -164,4 +228,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ast_builder.stmt().semi().continue_(),
         ]
     }
+}
+
+#[derive(Debug)]
+enum StatementScope<'a> {
+    Statement(&'a Statement),
+    Vec(Vec<StatementScope<'a>>),
 }

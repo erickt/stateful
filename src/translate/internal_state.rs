@@ -75,8 +75,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let state_path = self.state_path(block, StateKind::Internal);
         let scope_locals = &self.scope_locals[&block];
 
-        println!("scope_locals: {:?}", scope_locals);
-
         // If this is a resume block, it also gets the `args` argument.
         let args_pat = if self.resume_blocks.contains(&block) {
             Some(ast_builder.pat().id("args"))

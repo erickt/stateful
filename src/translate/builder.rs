@@ -11,6 +11,9 @@ use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
 
+type ScopeLocals = HashMap<BasicBlock, Vec<(VisibilityScope, Vec<Local>)>>;
+type ScopePaths = BTreeMap<VisibilityScope, Vec<VisibilityScope>>;
+
 pub struct Builder<'a, 'b: 'a> {
     pub cx: &'a ExtCtxt<'b>,
     pub ast_builder: AstBuilder,
@@ -22,9 +25,10 @@ pub struct Builder<'a, 'b: 'a> {
 
     /// A map of basic blocks to their locals, grouped by scope.
     pub scope_locals: ScopeLocals,
-}
 
-type ScopeLocals = HashMap<BasicBlock, Vec<(VisibilityScope, Vec<Local>)>>;
+    /// A map of a scope to their path to the root scope.
+    pub scope_paths: ScopePaths,
+}
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn new(cx: &'a ExtCtxt<'b>,
@@ -37,6 +41,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             assignments: assignments,
             resume_blocks: find_resume_blocks(mir),
             scope_locals: group_locals_by_scope(mir, assignments),
+            scope_paths: compute_scope_paths(mir),
         }
     }
 
@@ -218,4 +223,22 @@ fn group_locals_by_scope(mir: &Mir, assignments: &DefiniteAssignment) -> ScopeLo
     }
 
     map
+}
+
+/// Compute the path from a scope to the root scope.
+pub fn compute_scope_paths(mir: &Mir) -> ScopePaths {
+    let mut scope_paths = BTreeMap::new();
+
+    for scope in mir.visibility_scopes.indices() {
+        let mut path = vec![scope];
+        let mut s = scope;
+        while let Some(parent) = mir.visibility_scopes[s].parent_scope {
+            path.push(parent);
+            s = parent;
+        }
+        path.reverse();
+        scope_paths.insert(scope, path);
+    }
+
+    scope_paths
 }

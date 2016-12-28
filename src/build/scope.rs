@@ -881,16 +881,14 @@ fn build_scope_drops(cfg: &mut CFG,
                      source_info: SourceInfo,
                      var: Local) -> BlockAnd<()> {
     debug!("build_scope_drops(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
-    let next = cfg.start_new_block(source_info.span, Some("Drop"), BTreeMap::new());
-    let moved = scope.moved_decls.contains(&var);
     let location = Lvalue::Local(var);
 
-    cfg.push(next, Statement {
+    cfg.push(block, Statement {
         source_info: source_info,
         kind: StatementKind::StorageDead(location),
     });
 
-    next.unit()
+    block.unit()
 }
 
 /*
