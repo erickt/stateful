@@ -40,8 +40,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // First we build all the statements in the block.
             let mut let_extent_stack = Vec::with_capacity(8);
             let outer_visibility_scope = this.visibility_scope;
-            //this.visibility_scope = this.new_visibility_scope(ast_block.span);
-
             for stmt in stmts {
                 match stmt.node {
                     StmtKind::Expr(ref expr) | StmtKind::Semi(ref expr) => {

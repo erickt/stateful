@@ -40,7 +40,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// scopes, so we need to rebuild this from the visibility scope information we parsed out
     /// during MIR construction.
     fn build_scope_block(&self, block: BasicBlock) -> ScopeBlock<'a> {
-        println!("-------------");
         // First, we need to group all our declarations by their scope.
         let mut scope_decls = HashMap::new();
 
@@ -56,8 +55,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 scope_decls.entry(scope).or_insert_with(Vec::new).push(local);
             }
         }
-
-        println!("scope_decls: {:#?}", scope_decls);
 
         // Next, we'll start rebuilding the scope stack. We'll start with the root block, and work
         // our ways up. Each time we build a block, we pull all the associated declarations and
@@ -76,10 +73,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         for stmt in block_data.statements() {
             let last_scope = stack.last().unwrap().scope;
             let current_scope = stmt.source_info.scope;
-
-            println!("last_scope: {:?} stmt: {:#?}",
-                     last_scope,
-                     stmt);
 
             // Things are a little tricky when this statement's scope is different from the prior
             // statement. Consider:
@@ -142,8 +135,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                    ARGUMENT_VISIBILITY_SCOPE,
                    "block is not root scope: {:?}",
                    scope_block);
-
-        println!("+++++++++++++++");
 
         scope_block
     }

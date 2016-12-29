@@ -13,25 +13,6 @@ pub enum StateKind {
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    /*
-    pub fn get_incoming_scope_decls(
-        &self,
-        block: BasicBlock
-    ) -> Vec<(VisibilityScope, Vec<(Local, ast::Ident)>)> {
-        let mut map = BTreeMap::new();
-
-        for &local in self.assignments.on_entry(block) {
-            let local_data = &self.mir.local_decls[local];
-            let decls = map.entry(local_data.source_info.scope)
-                .or_insert_with(Vec::new);
-
-            decls.push((local, local_data.name));
-        }
-
-        map.into_iter().collect::<Vec<_>>()
-    }
-    */
-
     /// Construct a `P<ast::Expr>` to represent the state expression for a given basic block.
     pub fn state_expr(&self, block: BasicBlock, kind: StateKind) -> P<ast::Expr> {
         let span = self.block_span(block);
@@ -108,7 +89,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Create type parameters for each alive local in this block.
         let scope_locals = &self.scope_locals[&block];
-        println!("state_variant: {:?} => {:?}", block, scope_locals);
 
         // Internal states get an extra `Args` typaram if the block is a resume block.
         let args_param = if kind == StateKind::Internal && self.resume_blocks.contains(&block) {
