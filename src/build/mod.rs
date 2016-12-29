@@ -205,6 +205,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert_eq!(builder.new_visibility_scope(span), ARGUMENT_VISIBILITY_SCOPE);
         builder.visibility_scopes[ARGUMENT_VISIBILITY_SCOPE].parent_scope = None;
 
+        // FIXME: Stateful doesn't currently have real temporaries, they're just have unique names.
+        // The way things work right now, a temporary gets the visibility of the top of the stack,
+        // which would be ARGUMENT_VISIBILITY_SCOPE. That confuses the pretty printer, so we'll
+        // just add on a new visibility scope to get that to work.
+        builder.visibility_scope = builder.new_visibility_scope(span);
+
         let source_info = builder.source_info(span);
         assert_eq!(
             builder.local_decls.push(LocalDecl::new_return_pointer(source_info, None)),
