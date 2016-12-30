@@ -392,12 +392,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
         debug!("gather_statement({:?}, {:?})", loc, stmt);
         match stmt.kind {
             StatementKind::Stmt(_) => {}
-            StatementKind::Let {
-                pat: _,
-                ty: _,
-                ref lvalues,
-                ref rvalue
-            }=> {
+            StatementKind::Let { pat: _, ty: _, ref lvalues, ref rvalue }=> {
                 for lvalue in lvalues {
                     self.create_move_path(&Lvalue::Local(*lvalue));
                 }
@@ -407,14 +402,20 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.create_move_path(lvalue);
                 self.gather_rvalue(loc, rvalue);
             }
-            StatementKind::Call { ref destination, ref func, ref args, .. } => {
+            StatementKind::Call { ref destination, ref func, ref args } => {
                 self.gather_operand(loc, func);
                 for arg in args {
                     self.gather_rvalue(loc, arg);
                 }
                 self.create_move_path(destination);
             }
-            StatementKind::MethodCall { ref destination, ref self_, ref args, .. } => {
+            StatementKind::MethodCall {
+                ref destination,
+                ident: _,
+                tys: _,
+                ref self_,
+                ref args,
+            } => {
                 self.gather_operand(loc, self_);
                 for arg in args {
                     self.gather_rvalue(loc, arg);
