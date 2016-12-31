@@ -75,29 +75,30 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let state_path = self.state_path(block, StateKind::Internal);
         let scope_locals = &self.scope_locals[&block];
 
-        // If this is a resume block, it also gets the `args` argument.
-        let args_pat = if self.resume_blocks.contains(&block) {
-            Some(ast_builder.pat().id("args"))
-        } else {
-            None
-        };
+        let pats = scope_locals.iter()
+            .map(|&(scope, _)| {
+                ast_builder.pat().id(format!("scope{}", scope.index()))
+            })
+            .chain(
+                // If this is a resume block, it also gets the `coroutine_args` argument.
+                if self.resume_blocks.contains(&block) {
+                    Some(ast_builder.pat().id("coroutine_args"))
+                } else {
+                    None
+                }
+            )
+            .collect::<Vec<_>>();
 
         // Construct the pattern, which looks like:
         //
         // ```rust
         // InternalState::State2(scope1, scope2, ...)
         // ```
-        let pat = if scope_locals.is_empty() {
+        let pat = if pats.is_empty() {
             ast_builder.pat().build_path(state_path)
         } else {
             ast_builder.pat().enum_().build(state_path)
-                .with_pats(
-                    scope_locals.iter()
-                        .map(|&(scope, _)| {
-                            ast_builder.pat().id(format!("scope{}", scope.index()))
-                        })
-                        .chain(args_pat)
-                )
+                .with_pats(pats)
                 .build()
         };
 

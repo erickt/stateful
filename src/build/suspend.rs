@@ -12,16 +12,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let rvalue_span = rvalue.span;
 
         let rvalue = unpack!(block = self.as_rvalue(block, &rvalue));
-        let next_block = self.start_new_block(rvalue_span, Some("Suspend"));
+        let next_block = self.start_new_block(rvalue_span, Some("Resume"));
 
         self.terminate(rvalue_span, block, TerminatorKind::Suspend {
             destination: (destination.clone(), next_block),
             rvalue: rvalue,
         });
 
-        // We don't yet support receiving values into the coroutine yet, so just store a `()` in
-        // the destination.
-        self.push_assign_unit(rvalue_span, block, &destination);
+        let coroutine_args_lvalue = Lvalue::Local(COROUTINE_ARGS);
+        let coroutine_args_operand = Operand::Consume(coroutine_args_lvalue);
+        let coroutine_args_rvalue = Rvalue::Use(coroutine_args_operand);
+        self.push_assign(next_block, rvalue_span, &destination, coroutine_args_rvalue);
 
         next_block.unit()
     }

@@ -133,6 +133,14 @@ pub struct Mir {
     /// variables and temporaries.
     pub local_decls: IndexVec<Local, LocalDecl>,
 
+    /// Number of arguments this function takes.
+    ///
+    /// Starting at local 2, `arg_count` locals will be provided by the caller
+    /// and can be assumed to be initialized.
+    ///
+    /// If this MIR was built for a constant, this will be 0.
+    pub arg_count: usize,
+
     /// A span representing this MIR, for error reporting
     pub span: Span,
 
@@ -153,8 +161,8 @@ impl Mir {
     {
         // We need `arg_count` locals, and one for the return pointer
         let arg_count = fn_decl.inputs().len();
-        assert!(local_decls.len() >= arg_count + 1,
-            "expected at least {} locals, got {}", arg_count + 1, local_decls.len());
+        assert!(local_decls.len() >= arg_count + 2,
+            "expected at least {} locals, got {}", arg_count + 2, local_decls.len());
         // FIXME: The return pointer's type isn't calculated correctly yet.
         // assert_eq!(local_decls[RETURN_POINTER].ty, Some(return_ty));
 
@@ -163,6 +171,7 @@ impl Mir {
             basic_blocks: basic_blocks,
             visibility_scopes: visibility_scopes,
             local_decls: local_decls,
+            arg_count: arg_count,
             span: span,
             fn_decl: fn_decl,
         }
@@ -185,24 +194,21 @@ impl Mir {
     /// Returns an iterator over all user-declared locals.
     #[inline]
     pub fn vars_iter<'a>(&'a self) -> Box<Iterator<Item=Local> + 'a> {
-        Box::new((self.fn_decl.inputs().len()+1..self.local_decls.len()).map(move |index| {
-            Local::new(index)
-        }))
+        let local_count = self.local_decls.len();
+        Box::new((self.arg_count + 2..local_count).map(Local::new))
     }
 
     /// Returns an iterator over all function arguments.
     pub fn args_iter(&self) -> Box<Iterator<Item=Local>> {
-        let arg_count = self.fn_decl.inputs().len();
-        Box::new((1..arg_count+1).map(Local::new))
+        Box::new((2 .. self.arg_count + 2).map(Local::new))
     }
 
     /// Returns an iterator over all user-defined variables and compiler-generated temporaries (all
     /// locals that are neither arguments nor the return pointer).
     #[inline]
     pub fn vars_and_temps_iter(&self) -> Box<Iterator<Item=Local>> {
-        let arg_count = self.fn_decl.inputs().len();
         let local_count = self.local_decls.len();
-        Box::new((arg_count+1..local_count).map(Local::new))
+        Box::new((self.arg_count + 2 .. local_count).map(Local::new))
     }
 }
 
@@ -238,6 +244,7 @@ pub struct SourceInfo {
 newtype_index!(Local, "_");
 
 pub const RETURN_POINTER: Local = Local(0);
+pub const COROUTINE_ARGS: Local = Local(1);
 
 #[derive(Debug, PartialEq)]
 pub struct LocalDecl {
@@ -278,6 +285,21 @@ impl LocalDecl {
             ty: return_ty,
             source_info: source_info,
             name: "return_pointer".to_ident(),
+            shadowed_decl: None,
+        }
+    }
+
+    /// Builds a `LocalDecl` for the coroutine arguments.
+    ///
+    /// This must be inserted into the `local_decls` list as the second local.
+    #[inline]
+    pub fn new_coroutine_args(source_info: SourceInfo,
+                              return_ty: Option<P<ast::Ty>>) -> LocalDecl {
+        LocalDecl {
+            mutability: ast::Mutability::Immutable,
+            ty: return_ty,
+            source_info: source_info,
+            name: "coroutine_args".to_ident(),
             shadowed_decl: None,
         }
     }

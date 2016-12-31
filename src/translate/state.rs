@@ -106,8 +106,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let variant = if ty_param_ids.is_empty() {
             ast_builder.variant(state_id).unit()
         } else {
-            let mut tys = ty_param_ids.iter()
-                .map(|ty_param| ast_builder.ty().id(ty_param));
+            let mut tys = scope_locals.iter()
+                .map(|&(_, ref locals)| {
+                    ast_builder.ty().tuple()
+                        .with_tys(
+                            locals.iter()
+                                .map(|local| {
+                                    ast_builder.ty().id(format!("T{}", local.index()))
+                                })
+                        )
+                        .build()
+                })
+                .chain(
+                    args_param.iter().map(|id| ast_builder.ty().id(id))
+                );
 
             let ty = tys.next().unwrap();
 

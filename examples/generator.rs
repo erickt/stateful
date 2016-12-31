@@ -10,36 +10,13 @@
 use std::iter::Iterator;
 
 #[generator]
-fn gen() -> Box<Iterator<Item = usize>> {
-    let a;
-    if true {
-        a = 1;
-        {
-            let b = 3;
-            {
-                let c = 4;
-            };
-        };
-    } else {
-        a = 2;
-    }
-
-    /*
-    let a = 1;
-    {
-        let b = 2;
-    }
-    let c = 3;
-    {
-        let d = 4;
-    }
-    */
+fn gen(item: usize) -> Box<Iterator<Item = usize>> {
+    Some(item);
+    //yield_!(item);
 }
 
-
-
 fn main() {
-    for value in gen() {
+    for value in gen(5) {
         println!("{}", value);
     }
 }

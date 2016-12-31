@@ -216,6 +216,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             builder.local_decls.push(LocalDecl::new_return_pointer(source_info, None)),
             RETURN_POINTER);
 
+        assert_eq!(
+            builder.local_decls.push(LocalDecl::new_coroutine_args(source_info, None)),
+            COROUTINE_ARGS);
+
         builder
     }
 

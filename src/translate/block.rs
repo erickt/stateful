@@ -13,24 +13,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 "block does not have a terminator");
 
         let scope_block = self.build_scope_block(block);
-        let mut stmts = self.scope_block(block, scope_block);
-
-        stmts.extend(
-            block_data.terminator.iter()
-                .flat_map(|terminator| self.terminator(terminator))
-        );
-
-        /*
-        if let Some(initialized) = self.assignments.initialized(block) {
-            initialized.iter()
-                .flat_map(|local| self.declare(block, *local))
-                .chain(stmts).collect()
-        } else {
-            stmts.collect()
-        }
-        */
-
-        stmts
+        self.scope_block(block, scope_block)
     }
 
     /// Rebuild an AST block from a MIR block.
@@ -52,7 +35,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     scope = self.mir.visibility_scopes[scope].parent_scope.unwrap();
                 }
 
-                scope_decls.entry(scope).or_insert_with(Vec::new).push(local);
+                if local != COROUTINE_ARGS {
+                    scope_decls.entry(scope).or_insert_with(Vec::new).push(local);
+                }
             }
         }
 
@@ -106,7 +91,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // along the way.
                 for i in common .. last_scope_path.len() {
                     let scope_block = stack.pop().unwrap();
-                    stack.last_mut().unwrap().push_block(scope_block);
+                    let scope_block = ScopeStatement::Block(scope_block);
+                    stack.last_mut().unwrap().push(scope_block);
                 }
 
                 // Walk up the scope tree to the current scope point, pushing new blocks along the
@@ -119,13 +105,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
 
-            stack.last_mut().unwrap().push_stmt(stmt);
+            let stmt = ScopeStatement::Statement(stmt);
+            stack.last_mut().unwrap().push(stmt);
+        }
+
+        // Finally, push the terminator if we have one.
+        if let Some(ref terminator) = block_data.terminator {
+            let terminator = ScopeStatement::Terminator(terminator);
+            let scope_block = stack.last_mut().unwrap().push(terminator);
         }
 
         // Pop off the remaining scopes.
         while stack.len() != 1 {
             let scope_block = stack.pop().unwrap();
-            stack.last_mut().unwrap().push_block(scope_block);
+            let scope_block = ScopeStatement::Block(scope_block);
+            stack.last_mut().unwrap().push(scope_block);
         }
 
         let scope_block = stack.pop().unwrap();
@@ -157,6 +151,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                 .with_stmts(stmts)
                                 .build()
                         ]
+                    }
+                    ScopeStatement::Terminator(terminator) => {
+                        self.terminator(terminator)
                     }
                 }
             })
@@ -332,6 +329,7 @@ enum ScopeStatement<'a> {
     Declare(Local),
     Statement(&'a Statement),
     Block(ScopeBlock<'a>),
+    Terminator(&'a Terminator),
 }
 
 impl<'a> ScopeBlock<'a> {
@@ -344,11 +342,7 @@ impl<'a> ScopeBlock<'a> {
         }
     }
 
-    fn push_stmt(&mut self, stmt: &'a Statement) {
-        self.stmts.push(ScopeStatement::Statement(stmt));
-    }
-
-    fn push_block(&mut self, block: ScopeBlock<'a>) {
-        self.stmts.push(ScopeStatement::Block(block));
+    fn push(&mut self, stmt: ScopeStatement<'a>) {
+        self.stmts.push(stmt);
     }
 }

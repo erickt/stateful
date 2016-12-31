@@ -100,15 +100,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .collect::<Vec<_>>();
 
         let resume_path = self.state_path(block, StateKind::Resume);
-        let resume_pat = ast_builder.pat().enum_().build(resume_path)
-            .with_ids(&ids)
-            .build();
+        let resume_pat = if ids.is_empty() {
+            ast_builder.pat().build_path(resume_path)
+        } else {
+            ast_builder.pat().enum_().build(resume_path)
+                .with_ids(&ids)
+                .build()
+        };
 
         let internal_path = self.state_path(block, StateKind::Internal);
         let internal_expr = ast_builder.expr().call()
             .build_path(internal_path)
             .with_args(ids.into_iter().map(|id| ast_builder.expr().id(id)))
-            .arg().id("args")
+            .arg().id("coroutine_args")
             .build();
 
         ast_builder.arm()

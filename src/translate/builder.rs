@@ -88,7 +88,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             $resume_state_stmts
             $internal_state_stmts
 
-            let resume = |mut resume_state, args| {
+            let resume = |mut resume_state, coroutine_args| {
                 let mut state = $resume_state_expr;
                 $internal_state_expr
             };
