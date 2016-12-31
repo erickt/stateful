@@ -515,8 +515,9 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 // branching terminators - these don't move anything
             }
 
-            TerminatorKind::Suspend { ref rvalue, .. } => {
+            TerminatorKind::Suspend { destination: (ref destination, _), ref rvalue } => {
                 self.gather_rvalue(loc, rvalue);
+                self.create_move_path(destination);
             }
         }
     }
