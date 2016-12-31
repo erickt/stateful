@@ -191,6 +191,37 @@ impl Mir {
         &self.local_decls[local]
     }
 
+    #[inline]
+    pub fn local_kind(&self, local: Local) -> LocalKind {
+        let index = local.0 as usize;
+        if index == 0 {
+            debug_assert!(self.local_decls[local].mutability == ast::Mutability::Mutable,
+                          "return pointer should be mutable");
+
+            LocalKind::ReturnPointer
+        } else if index == 1 {
+            debug_assert!(self.local_decls[local].mutability == ast::Mutability::Immutable,
+                          "coroutine arguments should be immutable");
+
+            LocalKind::CoroutineArgs
+
+        } else if index < self.arg_count + 2 {
+            LocalKind::Arg
+        /*
+        } else if self.local_decls[local].name.is_some() {
+            LocalKind::Var
+        } else {
+            debug_assert!(self.local_decls[local].mutability == Mutability::Mut,
+                          "temp should be mutable");
+
+            LocalKind::Temp
+        }
+        */
+        } else {
+            LocalKind::Var
+        }
+    }
+
     /// Returns an iterator over all user-declared locals.
     #[inline]
     pub fn vars_iter<'a>(&'a self) -> Box<Iterator<Item=Local> + 'a> {
@@ -245,6 +276,23 @@ newtype_index!(Local, "_");
 
 pub const RETURN_POINTER: Local = Local(0);
 pub const COROUTINE_ARGS: Local = Local(1);
+
+/// Classifies locals into categories. See `Mir::local_kind`.
+#[derive(PartialEq, Eq, Debug)]
+pub enum LocalKind {
+    /// User-declared variable binding
+    Var,
+    /*
+    /// Compiler-introduced temporary
+    Temp,
+    */
+    /// Function argument
+    Arg,
+    /// Location of function's return value
+    ReturnPointer,
+    /// Coroutine arguments
+    CoroutineArgs,
+}
 
 #[derive(Debug, PartialEq)]
 pub struct LocalDecl {
