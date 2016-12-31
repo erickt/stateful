@@ -914,7 +914,6 @@ impl ToExpr for Constant {
 ///////////////////////////////////////////////////////////////////////////
 // Statements
 
-#[derive(Debug)]
 pub struct Statement {
     pub source_info: SourceInfo,
     pub kind: StatementKind,
@@ -972,7 +971,6 @@ pub enum StatementKind {
     Nop,
 }
 
-/*
 impl Debug for Statement {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         use self::StatementKind::*;
@@ -1035,7 +1033,6 @@ impl Debug for Statement {
         }
     }
 }
-*/
 
 #[derive(Clone, Copy, Debug)]
 pub struct ShadowedDecl {
