@@ -47,8 +47,8 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     //
     // * ENTRY has a bit set for each local that was initialized in a parent block.
     // * GEN has a bit set for each local initialized in this block.
-    let mut initialized = HashMap::new();
-    let mut assigned = HashMap::new();
+    let mut initialized = BTreeMap::new();
+    let mut assigned = BTreeMap::new();
 
     for (block, block_data) in mir.basic_blocks().iter_enumerated() {
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
@@ -115,8 +115,8 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
 }
 
 pub struct DefiniteAssignment {
-    initialized: HashMap<BasicBlock, BTreeSet<Local>>,
-    assigned_on_entry: HashMap<BasicBlock, BTreeSet<Local>>,
+    initialized: BTreeMap<BasicBlock, BTreeSet<Local>>,
+    assigned_on_entry: BTreeMap<BasicBlock, BTreeSet<Local>>,
 }
 
 impl DefiniteAssignment {
