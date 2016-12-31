@@ -97,11 +97,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 // Walk up the scope tree to the current scope point, pushing new blocks along the
                 // way.
-                for i in common .. current_scope_path.len() {
-                    stack.push(
-                        ScopeBlock::new(
-                            current_scope,
-                            scope_decls.remove(&current_scope)));
+                for scope in &current_scope_path[common..] {
+                    let scope_block = ScopeBlock::new(
+                            *scope,
+                            scope_decls.remove(scope));
+                    stack.push(scope_block);
                 }
             }
 
@@ -129,6 +129,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                    ARGUMENT_VISIBILITY_SCOPE,
                    "block is not root scope: {:?}",
                    scope_block);
+        assert!(scope_decls.is_empty(), "scope decls is not empty: {:?}", scope_decls);
 
         scope_block
     }
