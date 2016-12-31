@@ -335,18 +335,37 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
                           "SetDiscrimant should not exist during borrowck");
             }
             */
+            StatementKind::Let { ref lvalues, .. } => {
+                debug!("drop_flag_effects: let {:?}", stmt);
+                for lvalue in lvalues {
+                    let lvalue = Lvalue::Local(*lvalue);
+                    on_lookup_result_bits(tcx, mir, move_data,
+                                          move_data.rev_lookup.find(&lvalue),
+                                          |moi| callback(moi, DropFlagState::Present))
+                }
+            }
             StatementKind::Assign(ref lvalue, _) => {
                 debug!("drop_flag_effects: assignment {:?}", stmt);
-                 on_lookup_result_bits(tcx, mir, move_data,
-                                       move_data.rev_lookup.find(lvalue),
-                                       |moi| callback(moi, DropFlagState::Present))
+                on_lookup_result_bits(tcx, mir, move_data,
+                                      move_data.rev_lookup.find(lvalue),
+                                      |moi| callback(moi, DropFlagState::Present))
             }
-            /*
+            StatementKind::Call { ref destination, .. } => {
+                debug!("drop_flag_effects: call {:?}", stmt);
+                on_lookup_result_bits(tcx, mir, move_data,
+                                      move_data.rev_lookup.find(destination),
+                                      |moi| callback(moi, DropFlagState::Present))
+            }
+            StatementKind::MethodCall { ref destination, .. } => {
+                debug!("drop_flag_effects: method call {:?}", stmt);
+                on_lookup_result_bits(tcx, mir, move_data,
+                                      move_data.rev_lookup.find(destination),
+                                      |moi| callback(moi, DropFlagState::Present))
+            }
+            StatementKind::Stmt(_) |
             StatementKind::StorageLive(_) |
             StatementKind::StorageDead(_) |
             StatementKind::Nop => {}
-            */
-            _ => {}
         },
         None => {
             debug!("drop_flag_effects: replace {:?}", block.terminator());
