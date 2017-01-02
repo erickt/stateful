@@ -255,7 +255,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             Lvalue::Local(local) => Ok(self.data.rev_lookup.locals[local]),
             // error: can't move out of a static
             Lvalue::Static(..) => Err(MovePathError::IllegalMove),
-            Lvalue::Projection(ref proj) => {
+            Lvalue::Projection(ref _proj) => {
                 panic!("can't look into projection paths")
                 //self.move_path_for_projection(lval, proj)
             }
@@ -531,9 +531,9 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
     fn gather_move(&mut self, loc: Location, lval: &Lvalue) {
         debug!("gather_move({:?}, {:?})", loc, lval);
 
+        /*
         let lv_ty = lval.ty(self.mir, self.tcx).to_ty(self.tcx);
 
-        /*
         if !lv_ty.moves_by_default(self.tcx, self.param_env, DUMMY_SP) {
             debug!("gather_move({:?}, {:?}) - {:?} is Copy. skipping", loc, lval, lv_ty);
             return

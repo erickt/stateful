@@ -116,7 +116,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Finally, push the terminator if we have one.
         if let Some(ref terminator) = block_data.terminator {
             let terminator = ScopeStatement::Terminator(terminator);
-            let scope_block = stack.last_mut().unwrap().push(terminator);
+            stack.last_mut().unwrap().push(terminator);
         }
 
         // Pop off the remaining scopes.
@@ -143,7 +143,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .flat_map(|stmt| {
                 match stmt {
                     ScopeStatement::Declare(local) => {
-                        self.declare(block, local)
+                        self.declare(local)
                     }
                     ScopeStatement::Statement(stmt) => {
                         self.stmt(block, stmt)
@@ -165,7 +165,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .collect()
     }
 
-    fn declare(&self, block: BasicBlock, local: Local) -> Vec<ast::Stmt> {
+    fn declare(&self, local: Local) -> Vec<ast::Stmt> {
         let local_decl = self.mir.local_decl_data(local);
 
         let ast_builder = self.ast_builder.span(local_decl.source_info.span);

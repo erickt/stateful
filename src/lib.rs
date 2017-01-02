@@ -3,7 +3,6 @@
 #![cfg_attr(feature = "clippy", allow(too_many_arguments))]
 
 #![allow(dead_code)]
-#![allow(unused_variables)]
 
 extern crate aster;
 extern crate bit_vec;

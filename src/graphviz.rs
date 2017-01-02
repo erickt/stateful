@@ -119,7 +119,7 @@ fn write_edges<W: Write>(source: BasicBlock, mir: &Mir, w: &mut W) -> io::Result
 /// Write the graphviz DOT label for the overall graph. This is essentially a block of text that
 /// will appear below the graph, showing the type of the `fn` this MIR represents and the types of
 /// all the variables and temporaries.
-fn write_graph_label<'a, 'tcx, W: Write>(tcx: TyCtxt<'a, 'tcx>,
+fn write_graph_label<'a, 'tcx, W: Write>(_tcx: TyCtxt<'a, 'tcx>,
                                          mir: &Mir,
                                          w: &mut W)
                                          -> io::Result<()> {

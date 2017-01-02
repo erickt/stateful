@@ -283,7 +283,7 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
     type Ctxt = MoveDataParamEnv;
     fn name() -> &'static str { "maybe_uninit" }
-    fn bits_per_block(&self, ctxt: &Self::Ctxt) -> usize {
+    fn bits_per_block(&self, _ctxt: &Self::Ctxt) -> usize {
         self.mir.local_decls.len()
     }
 
@@ -344,7 +344,7 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
     type Ctxt = MoveDataParamEnv;
     fn name() -> &'static str { "definite_init" }
-    fn bits_per_block(&self, ctxt: &Self::Ctxt) -> usize {
+    fn bits_per_block(&self, _ctxt: &Self::Ctxt) -> usize {
         self.mir.local_decls.len()
     }
 

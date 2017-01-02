@@ -48,7 +48,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let mut initialized = BTreeMap::new();
     let mut assigned = BTreeMap::new();
 
-    for (block, block_data) in mir.basic_blocks().iter_enumerated() {
+    for block in mir.basic_blocks().indices() {
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
         let gen_set = flow_inits.sets().gen_set_for(block.index());
         let kill_set = flow_inits.sets().kill_set_for(block.index());
@@ -98,7 +98,7 @@ impl DefiniteAssignment {
     }
 }
 
-fn do_dataflow<BD>(tcx: TyCtxt, mir: &Mir, ctxt: &BD::Ctxt, bd: BD) -> DataflowResults<BD>
+fn do_dataflow<BD>(_tcx: TyCtxt, mir: &Mir, ctxt: &BD::Ctxt, bd: BD) -> DataflowResults<BD>
     where BD: BitDenotation<Idx = MovePathIndex, Ctxt = MoveDataParamEnv> + DataflowOperator
 {
     let print_preflow_to = env::var("STATEFUL_BORROWCK_GRAPHVIZ_PREFLOW").ok();
@@ -178,9 +178,9 @@ fn drop_flag_effects_for_function_entry<'a, 'tcx, F>(tcx: TyCtxt<'a, 'tcx>,
 /// is no need to maintain separate drop flags to track such state.
 ///
 /// FIXME: we have to do something for moving slice patterns.
-fn lvalue_contents_drop_state_cannot_differ<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
-                                                      mir: &Mir,
-                                                      lv: &Lvalue) -> bool {
+fn lvalue_contents_drop_state_cannot_differ<'a, 'tcx>(_tcx: TyCtxt<'a, 'tcx>,
+                                                      _mir: &Mir,
+                                                      _lv: &Lvalue) -> bool {
     false
     /*
     let ty = lv.ty(mir, tcx).to_ty(tcx);

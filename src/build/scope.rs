@@ -273,13 +273,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 }
             }
 
-            // If the variable has already been initialized, drop it. Otherwise we want the rust
-            // warning if a variable hasn't been initialized, so just insert the declaration into
-            // our block.
-            if !scope.initialized_decls.contains(local) {
-                //self.cfg.push_declare(block, *local);
-            }
-
             let source_info = scope.source_info(span);
             unpack!(block = build_scope_drops(&mut self.cfg, block, &scope, source_info, *local));
         }
@@ -485,32 +478,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn declare(&mut self,
-                   block: BasicBlock,
-                   span: Span,
-                   lvalue: &Lvalue) {
-        /*
-        debug!("push_assign: block={:?} lvalue={:?}", block, lvalue);
-
-        match *lvalue {
-            Lvalue::Local(local) => {
-                let source_info = self.source_info(span);
-
-                if !self.is_initialized(local) {
-                    self.initialize_decl(local);
-                    self.cfg.push(block, Statement {
-                        source_info: source_info,
-                        kind: StatementKind::Declare(local),
-                    });
-                }
-            }
-            _ => {
-                span_bug!(self.cx, span, "cannot assign yet: {:?}", lvalue)
-            }
-        }
-        */
-    }
-
     pub fn push_assign(&mut self,
                        block: BasicBlock,
                        span: Span,
@@ -519,18 +486,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
 
         match *lvalue {
-            Lvalue::Local(local) => {
+            Lvalue::Local(_) => {
                 let source_info = self.source_info(span);
-
-                /*
-                if !self.is_initialized(local) {
-                    self.initialize_decl(local);
-                    self.cfg.push(block, Statement {
-                        source_info: source_info,
-                        kind: StatementKind::Declare(local),
-                    });
-                }
-                */
 
                 self.cfg.push(block, Statement {
                     source_info: source_info,
@@ -807,7 +764,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn schedule_move(&mut self, span: Span, local: Local) {
+    pub fn schedule_move(&mut self, _span: Span, local: Local) {
         /*
         if !self.is_initialized(local) {
             self.cx.span_err(

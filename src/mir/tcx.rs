@@ -24,7 +24,7 @@ pub enum LvalueTy {
 }
 
 impl<'a, 'tcx> LvalueTy {
-    pub fn to_ty(&self, tcx: TyCtxt<'a, 'tcx>) -> P<ast::Ty> {
+    pub fn to_ty(&self, _tcx: TyCtxt<'a, 'tcx>) -> P<ast::Ty> {
         match *self {
             LvalueTy::Ty { ref ty } => ty.clone(),
         }
