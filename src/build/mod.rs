@@ -166,10 +166,8 @@ pub fn construct_fn(cx: &ExtCtxt,
         let fn_end = Span { lo: span.hi, ..span };
         let source_info = builder.source_info(fn_end);
         let return_block = builder.return_block();
-        builder.cfg.terminate(block, source_info,
-                              TerminatorKind::Goto { target: return_block, end_scope: true });
-        builder.cfg.terminate(return_block, source_info,
-                              TerminatorKind::Return);
+        builder.cfg.terminate(block, source_info, TerminatorKind::Goto { target: return_block });
+        builder.cfg.terminate(return_block, source_info, TerminatorKind::Return);
         return_block.unit()
     }));
     assert_eq!(block, builder.return_block());

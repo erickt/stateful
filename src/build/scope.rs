@@ -202,19 +202,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         unpack!(block = self.pop_scope(extent, span, block));
         debug!("in_scope: exiting extent={:?} block={:?}", extent, block);
 
-        /*
-        // At this point, we can't tell that variables are not being accessed. So we'll create a
-        // new block to make sure variables are properly not referenced.
-        let end_scope_block = self.start_new_block(span, Some("EndScope"));
-        self.terminate(
-            span,
-            block,
-            TerminatorKind::Goto {
-                target: end_scope_block,
-                end_scope: true,
-            });
-        */
-
         block.and(rv)
     }
 
@@ -355,7 +342,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             for scope_index in (len - scope_count + 1 .. len).rev() {
                 block = {
                     let b = self.start_new_block_at(span, Some("Drop"), scope_index + 1);
-                    self.terminate(span, block, TerminatorKind::Goto { target: b, end_scope: true });
+                    self.terminate(span, block, TerminatorKind::Goto { target: b });
                     b
                 };
 
@@ -388,45 +375,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        /*
-        {
-            let (remaining_scopes, popped_scopes) = self.scopes.split_at(scope_count);
-
-            for scope in popped_scopes.iter().rev() {
-                debug!("exit_scope: dropping: {:#?}", scope);
-
-                let b = self.start_new_block_at(
-
-                for local in &scope.drops {
-                    // FIXME: Make sure we aren't double dropping a variable.
-                    for scope in remaining_scopes.iter().rev() {
-                        if scope.drops.contains(&local) {
-                            span_err!(self.cx, span,
-                                      "variable already scheduled for drop: {:?}",
-                                      local);
-                        }
-                    }
-
-                    // If the variable has already been initialized, drop it. Otherwise we want the rust
-                    // warning if a variable hasn't been initialized, so just insert the declaration into
-                    // our block.
-                    if !scope.initialized_decls.contains(local) {
-                        //self.cfg.push_declare(target, *var);
-                    }
-
-                    build_scope_drops(&mut self.cfg, target, scope, *local);
-                }
-            }
-        }
-        */
-
-        self.terminate(
-            span,
-            block,
-            TerminatorKind::Goto {
-                target: target,
-                end_scope: true,
-            });
+        self.terminate(span, block, TerminatorKind::Goto { target: target });
     }
 
     fn start_new_block_at(&mut self,

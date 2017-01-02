@@ -100,10 +100,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let end_block = self.start_new_block(span, Some("MatchEnd"));
 
         for body in arm_bodies {
-            self.terminate(
-                span,
-                body,
-                TerminatorKind::Goto { target: end_block, end_scope: true });
+            self.terminate(span, body, TerminatorKind::Goto { target: end_block });
         }
         self.visibility_scope = outer_source_info.scope;
 

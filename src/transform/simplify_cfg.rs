@@ -121,10 +121,7 @@ impl<'a> CfgSimplifier<'a> {
                 terminator: ref mut terminator @ Some(Terminator {
                     // FIXME: We cannot currently optimize end scopes or else we might not properly
                     // drop copyable types.
-                    kind: TerminatorKind::Goto {
-                        end_scope: false,
-                        ..
-                    },
+                    kind: TerminatorKind::Goto { .. },
                     ..
                 }), ..
             } if statements.is_empty() => terminator.take(),
@@ -135,10 +132,7 @@ impl<'a> CfgSimplifier<'a> {
 
         let target = match terminator {
             Some(Terminator {
-                kind: TerminatorKind::Goto {
-                    ref mut target,
-                    end_scope: false,
-                },
+                kind: TerminatorKind::Goto { ref mut target },
                 ..
             }) => {
                 self.collapse_goto_chain(target, changed);
@@ -165,7 +159,7 @@ impl<'a> CfgSimplifier<'a> {
         let target = match terminator.kind {
             // FIXME: We cannot currently optimize end scopes or else we might not properly drop
             // copyable types.
-            TerminatorKind::Goto { target, end_scope: false }
+            TerminatorKind::Goto { target }
                 if self.pred_count[target] == 1
                 => target,
             _ => return false
@@ -209,10 +203,7 @@ impl<'a> CfgSimplifier<'a> {
         };
 
         debug!("simplifying branch {:?}", terminator);
-        terminator.kind = TerminatorKind::Goto {
-            target: first_succ,
-            end_scope: false,
-        };
+        terminator.kind = TerminatorKind::Goto { target: first_succ };
         true
     }
 }

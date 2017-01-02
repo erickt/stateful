@@ -442,7 +442,6 @@ pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
         target: BasicBlock,
-        end_scope: bool,
     },
 
     /// jump to branch 0 if this lvalue evaluates to true
