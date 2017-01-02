@@ -56,57 +56,26 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         let kill_set = flow_inits.sets().kill_set_for(block.index());
 
         for &(idx, local) in &move_indices {
-            if entry_set.contains(&idx) {
+            let entry = entry_set.contains(&idx);
+            let gen = gen_set.contains(&idx);
+            let kill = kill_set.contains(&idx);
+
+            // If a local is both in the entry and the gen set, then that means that the local was
+            // generated externally from the state machine, such as for `Suspend`. If this is the
+            // case, only mark this variable as initialized, not assigned.
+            if gen {
+                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
+            } else if entry {
                 assigned.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
 
-            if gen_set.contains(&idx) {
-                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-            }
-
-            if !entry_set.contains(&idx) && kill_set.contains(&idx) {
+            // If a local is killed in this block but wasn't passed in through the entry of this
+            // block, then that means it was actually defined in this scope.
+            if !entry && kill {
                 initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
         }
-
-        // Make sure the target of a suspend is marked initialized.
-        if let Some(ref terminator) = block_data.terminator {
-            match terminator.kind {
-                TerminatorKind::Suspend { destination: (Lvalue::Local(local), block), .. } => {
-                    initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-                }
-                _ => {}
-            }
-        }
-
-        println!("entry: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if entry_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-
-        println!("gen: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if gen_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-
-        println!("kill: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if kill_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-        println!();
     }
-
-    println!("initialized: {:#?}", initialized);
-    println!("assigned: {:#?}", assigned);
 
     DefiniteAssignment {
         initialized: initialized,
