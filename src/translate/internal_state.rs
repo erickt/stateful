@@ -1,10 +1,9 @@
 use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::HashSet;
 use super::builder::Builder;
 use super::state::StateKind;
 use syntax::ast;
-use syntax::codemap::Span;
 use syntax::ptr::P;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {

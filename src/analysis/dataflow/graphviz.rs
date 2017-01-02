@@ -15,7 +15,6 @@ use data_structures::indexed_set::{IdxSet};
 use data_structures::indexed_vec::Idx;
 use graphviz;
 use mir::{BasicBlock, Mir};
-use syntax::ast::NodeId;
 
 use dot;
 use dot::IntoCow;

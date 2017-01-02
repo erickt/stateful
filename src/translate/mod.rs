@@ -1,8 +1,6 @@
 use analysis::DefiniteAssignment;
 use aster::AstBuilder;
-use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::BTreeMap;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;

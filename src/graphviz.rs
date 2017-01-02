@@ -9,12 +9,11 @@
 // except according to those terms.
 
 use dot;
-//use rustc::hir::def_id::DefId;
 use mir::*;
 use ty::TyCtxt;
 use std::fmt::Debug;
 use std::io::{self, Write};
-use syntax::ast::{Mutability, NodeId};
+use syntax::ast::Mutability;
 
 use data_structures::indexed_vec::Idx;
 

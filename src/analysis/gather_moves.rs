@@ -9,14 +9,11 @@
 // except according to those terms.
 
 
-use ty::{self, TyCtxt};
+use ty::TyCtxt;
 use mir::*;
 use data_structures::indexed_vec::{IndexVec};
 
-use syntax::codemap::DUMMY_SP;
-
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::fmt;
 use std::mem;
 use std::ops::{Index, IndexMut};

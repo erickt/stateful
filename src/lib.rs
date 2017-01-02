@@ -2,7 +2,6 @@
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 #![cfg_attr(feature = "clippy", allow(too_many_arguments))]
 
-#![allow(unused_imports)]
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
@@ -18,10 +17,8 @@ extern crate syntax_pos;
 #[macro_use] mod macros;
 
 mod analysis;
-//mod borrowck;
 mod build;
 mod data_structures;
-//mod dataflow;
 mod graphviz;
 mod mir;
 mod pretty;

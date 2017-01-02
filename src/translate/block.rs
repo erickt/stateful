@@ -1,7 +1,6 @@
 use mir::*;
 use std::collections::HashMap;
 use super::builder::Builder;
-use super::state::StateKind;
 use syntax::ast;
 use syntax::codemap::Span;
 

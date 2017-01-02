@@ -1,14 +1,12 @@
 use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::env;
-use std::fmt::Debug;
 use ty::TyCtxt;
 
 use self::dataflow::{BitDenotation};
 use self::dataflow::{DataflowOperator};
 use self::dataflow::{Dataflow, DataflowAnalysis, DataflowResults};
-use self::dataflow::{MaybeInitializedLvals, MaybeUninitializedLvals};
 use self::dataflow::{DefinitelyInitializedLvals};
 use self::gather_moves::{MoveData, MovePathIndex, LookupResult};
 

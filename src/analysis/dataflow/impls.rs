@@ -8,14 +8,12 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use data_structures::bitslice::BitSlice; // adds set_bit/get_bit to &[usize] bitvector rep.
-use data_structures::bitslice::{BitwiseOperator};
+use data_structures::bitslice::BitwiseOperator;
 use data_structures::indexed_set::{IdxSet};
-use data_structures::indexed_vec::Idx;
-use mir::{self, Location, Lvalue, Mir, StatementKind};
+use mir::{self, Location, Mir};
 use ty::TyCtxt;
 
-use super::super::gather_moves::{MoveOutIndex, MovePathIndex};
+use super::super::gather_moves::MovePathIndex;
 use super::super::MoveDataParamEnv;
 use super::super::DropFlagState;
 use super::super::drop_flag_effects_for_function_entry;

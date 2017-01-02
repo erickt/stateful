@@ -1,9 +1,7 @@
 use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
 use super::builder::Builder;
 use syntax::ast;
-use syntax::codemap::Span;
 use syntax::ptr::P;
 
 #[derive(Copy, Clone, PartialEq)]
