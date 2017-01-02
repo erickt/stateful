@@ -89,11 +89,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let last_scope_path = last_scope_path.split_at(common).1;
                 let current_scope_path = current_scope_path.split_at(common).1;
+
                 // Walk down the scope tree to the last common point. We'll commit all the scopes
                 // along the way.
                 for scope in last_scope_path {
                     let scope_block = stack.pop().unwrap();
                     assert_eq!(*scope, scope_block.scope);
+
                     let scope_block = ScopeStatement::Block(scope_block);
                     stack.last_mut().unwrap().push(scope_block);
                 }
