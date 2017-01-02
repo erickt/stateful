@@ -551,12 +551,15 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.data.loc_map[loc].push(move_out);
             }
             Err(MovePathError::IllegalMove) => {
+                // FIXME: This appears to be okay for stateful?
+                /*
                 // Moving out of a bad path. Eventually, this should be a MIR
                 // borrowck error instead of a bug.
                 span_warn!(&self.tcx,
                           self.mir.span,
                           "Broken MIR: moving out of lvalue {:?}: {:?} at {:?}",
                           lval, lv_ty, loc);
+                */
             }
         };
     }
