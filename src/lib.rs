@@ -2,8 +2,6 @@
 #![cfg_attr(feature = "clippy", plugin(clippy))]
 #![cfg_attr(feature = "clippy", allow(too_many_arguments))]
 
-#![allow(dead_code)]
-
 extern crate aster;
 extern crate bit_vec;
 extern crate dot;

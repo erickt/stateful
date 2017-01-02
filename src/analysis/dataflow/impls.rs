@@ -26,6 +26,7 @@ use super::{BitDenotation, BlockSets, DataflowOperator};
 // bitvectors attached to each basic block, represented via a
 // zero-sized structure.
 
+/*
 /// `MaybeInitializedLvals` tracks all l-values that might be
 /// initialized upon reaching a particular point in the control flow
 /// for a function.
@@ -117,6 +118,7 @@ impl<'a, 'tcx: 'a> MaybeUninitializedLvals<'a, 'tcx> {
         MaybeUninitializedLvals { tcx: tcx, mir: mir }
     }
 }
+*/
 
 /// `DefinitelyInitializedLvals` tracks all l-values that are definitely
 /// initialized upon reaching a particular point in the control flow
@@ -188,7 +190,6 @@ impl<'a, 'tcx: 'a> DefinitelyInitializedLvals<'a, 'tcx> {
 pub struct MovingOutStatements<'a> {
     mir: &'a Mir,
 }
-*/
 
 impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
@@ -210,6 +211,7 @@ impl<'a, 'tcx> MaybeUninitializedLvals<'a, 'tcx> {
         }
     }
 }
+*/
 
 impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
@@ -222,6 +224,7 @@ impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     }
 }
 
+/*
 impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
     type Ctxt = MoveDataParamEnv;
@@ -339,6 +342,7 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                               |mpi| { in_out.remove(&mpi); });
     }
 }
+*/
 
 impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
@@ -513,7 +517,6 @@ impl<'a> BitwiseOperator for MovingOutStatements<'a> {
         pred1 | pred2 // moves from both preds are in scope
     }
 }
-*/
 
 impl<'a, 'tcx> BitwiseOperator for MaybeInitializedLvals<'a, 'tcx> {
     #[inline]
@@ -528,6 +531,7 @@ impl<'a, 'tcx> BitwiseOperator for MaybeUninitializedLvals<'a, 'tcx> {
         pred1 | pred2 // "maybe" means we union effects of both preds
     }
 }
+*/
 
 impl<'a, 'tcx> BitwiseOperator for DefinitelyInitializedLvals<'a, 'tcx> {
     #[inline]
@@ -553,7 +557,6 @@ impl<'a> DataflowOperator for MovingOutStatements<'a> {
         false // bottom = no loans in scope by default
     }
 }
-*/
 
 impl<'a, 'tcx> DataflowOperator for MaybeInitializedLvals<'a, 'tcx> {
     #[inline]
@@ -568,6 +571,7 @@ impl<'a, 'tcx> DataflowOperator for MaybeUninitializedLvals<'a, 'tcx> {
         false // bottom = initialized (start_block_effect counters this at outset)
     }
 }
+*/
 
 impl<'a, 'tcx> DataflowOperator for DefinitelyInitializedLvals<'a, 'tcx> {
     #[inline]

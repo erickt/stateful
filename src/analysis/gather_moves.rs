@@ -182,13 +182,13 @@ pub struct MovePathLookup {
 
 struct MoveDataBuilder<'a, 'tcx: 'a> {
     mir: &'a Mir,
-    tcx: TyCtxt<'a, 'tcx>,
+    _tcx: TyCtxt<'a, 'tcx>,
     data: MoveData,
 }
 
 pub enum MovePathError {
     IllegalMove,
-    UnionMove { path: MovePathIndex },
+    //UnionMove { path: MovePathIndex },
 }
 
 impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
@@ -200,7 +200,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
 
         MoveDataBuilder {
             mir: mir,
-            tcx: tcx,
+            _tcx: tcx,
             data: MoveData {
                 moves: IndexVec::new(),
                 loc_map: LocationMap::new(mir),
@@ -427,8 +427,8 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                           stmt.source_info.span,
                           "SetDiscriminant should not exist during borrowck");
             }
-            */
             StatementKind::Nop => {}
+            */
         }
     }
 
@@ -541,7 +541,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
         */
 
         match self.move_path_for(lval) {
-            Ok(path) | Err(MovePathError::UnionMove { path }) => {
+            Ok(path) /*| Err(MovePathError::UnionMove { path })*/ => {
                 let move_out = self.data.moves.push(MoveOut { path: path, source: loc });
 
                 debug!("gather_move({:?}, {:?}): adding move {:?} of {:?}",

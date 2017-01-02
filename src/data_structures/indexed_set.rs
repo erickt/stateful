@@ -102,12 +102,14 @@ impl<T: Idx> DerefMut for IdxSetBuf<T> {
 }
 
 impl<T: Idx> IdxSet<T> {
+    /*
     pub fn to_owned(&self) -> IdxSetBuf<T> {
         IdxSetBuf {
             _pd: Default::default(),
             bits: self.bits.to_owned(),
         }
     }
+    */
 
     /// Removes `elem` from the set `self`; returns true iff this changed `self`.
     pub fn remove(&mut self, elem: &T) -> bool {

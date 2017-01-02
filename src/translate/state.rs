@@ -42,16 +42,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn get_shadowed_decls(&self, decls: &mut Vec<(Local, ast::Ident)>, local: Local) {
-        if let Some(decl) = self.mir.local_decls[local].shadowed_decl {
-            debug!("get_shadowed_decl: {:?} {:?}", decl, self.mir.local_decls[decl]);
-
-            decls.push((decl, self.shadowed_ident(decl)));
-
-            self.get_shadowed_decls(decls, decl);
-        }
-    }
-
     pub fn state_id(&self, block: BasicBlock) -> ast::Ident {
         match self.mir[block].name {
             Some(name) => {

@@ -133,15 +133,6 @@ enum DropFlagState {
     Absent, // i.e. deinitialized or "moved"
 }
 
-impl DropFlagState {
-    fn value(self) -> bool {
-        match self {
-            DropFlagState::Present => true,
-            DropFlagState::Absent => false,
-        }
-    }
-}
-
 fn drop_flag_effects_for_function_entry<'a, 'tcx, F>(tcx: TyCtxt<'a, 'tcx>,
                                                      mir: &Mir,
                                                      ctxt: &MoveDataParamEnv,
@@ -331,8 +322,8 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
             }
             StatementKind::Stmt(_) |
             StatementKind::StorageLive(_) |
-            StatementKind::StorageDead(_) |
-            StatementKind::Nop => {}
+            StatementKind::StorageDead(_) => {}
+            //StatementKind::Nop => {}
         },
         None => {
             debug!("drop_flag_effects: replace {:?}", block.terminator());

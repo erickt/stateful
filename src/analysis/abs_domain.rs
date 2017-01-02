@@ -27,7 +27,7 @@ use mir::{Operand, ProjectionElem};
 #[derive(Copy, Clone, PartialEq, Eq, Hash, Debug)]
 pub struct AbstractOperand;
 pub type AbstractElem =
-    ProjectionElem<AbstractOperand>;
+    ProjectionElem;
 
 pub trait Lift {
     type Abstract;
@@ -43,13 +43,11 @@ impl Lift for LvalueElem {
         match *self {
             ProjectionElem::Deref =>
                 ProjectionElem::Deref,
-                /*
+            /*
             ProjectionElem::Field(ref f, ty) =>
                 ProjectionElem::Field(f.clone(), ty.clone()),
-                */
             ProjectionElem::Index(ref i) =>
                 ProjectionElem::Index(i.lift()),
-                /*
             ProjectionElem::Subslice {from, to} =>
                 ProjectionElem::Subslice { from: from, to: to },
             ProjectionElem::ConstantIndex {offset,min_length,from_end} =>
@@ -60,7 +58,7 @@ impl Lift for LvalueElem {
                 },
             ProjectionElem::Downcast(a, u) =>
                 ProjectionElem::Downcast(a.clone(), u.clone()),
-                */
+            */
         }
     }
 }

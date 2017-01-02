@@ -10,13 +10,12 @@
 
 use dot;
 use mir::*;
-use ty::TyCtxt;
 use std::fmt::Debug;
 use std::io::{self, Write};
-use syntax::ast::Mutability;
 
 use data_structures::indexed_vec::Idx;
 
+/*
 /// Write a graphviz DOT graph of a list of MIRs.
 pub fn write_mir_graphviz<'a, 'b, 'tcx, W>(tcx: TyCtxt<'b, 'tcx>,
                                            mir: &Mir,
@@ -45,6 +44,7 @@ pub fn write_mir_graphviz<'a, 'b, 'tcx, W>(tcx: TyCtxt<'b, 'tcx>,
     }
     writeln!(w, "}}")
 }
+*/
 
 /// Write a graphviz HTML-styled label for the given basic block, with
 /// all necessary escaping already performed. (This is suitable for
@@ -95,6 +95,7 @@ pub fn write_node_label<W: Write, INIT, FINI>(block: BasicBlock,
     writeln!(w, "</table>")
 }
 
+/*
 /// Write a graphviz DOT node for the given basic block.
 fn write_node<W: Write>(block: BasicBlock, mir: &Mir, w: &mut W) -> io::Result<()> {
     // Start a new node with the label to follow, in one of DOT's pseudo-HTML tables.
@@ -154,6 +155,7 @@ fn write_graph_label<'a, 'tcx, W: Write>(_tcx: TyCtxt<'a, 'tcx>,
 fn node(block: BasicBlock) -> String {
     format!("bb{}", block.index())
 }
+*/
 
 fn escape<T: Debug>(t: &T) -> String {
     dot::escape_html(&format!("{:?}", t))

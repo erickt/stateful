@@ -3,10 +3,6 @@ use mir::*;
 use syntax::codemap::Span;
 
 impl CFG {
-    pub fn block_data(&self, block: BasicBlock) -> &BasicBlockData {
-        &self.basic_blocks[block]
-    }
-
     pub fn block_data_mut(&mut self, block: BasicBlock) -> &mut BasicBlockData {
         &mut self.basic_blocks[block]
     }

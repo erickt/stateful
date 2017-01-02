@@ -87,8 +87,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ]
             }
             StatementKind::StorageLive(_) |
-            StatementKind::StorageDead(_) |
-            StatementKind::Nop => {
+            StatementKind::StorageDead(_) => {
+            //StatementKind::Nop => {
                 vec![]
             }
         }
