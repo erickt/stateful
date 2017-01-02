@@ -21,7 +21,7 @@ pub struct Builder<'a, 'b: 'a> {
     pub assignments: &'a DefiniteAssignment,
 
     /// All the blocks that are the target of a resume.
-    pub resume_blocks: HashSet<BasicBlock>,
+    pub resume_blocks: BTreeSet<BasicBlock>,
 
     /// A map of basic blocks to their locals, grouped by scope.
     pub scope_locals: ScopeLocals,
@@ -184,22 +184,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 ///
 /// In order properly lift any resume arguments into the state machine, we need to first
 /// identify all the blocks that can be resumed into.
-fn find_resume_blocks(mir: &Mir) -> HashSet<BasicBlock> {
-    let mut blocks = HashSet::new();
-    blocks.insert(START_BLOCK);
-
-    for block_data in mir.basic_blocks().iter() {
-        if let Some(ref terminator) = block_data.terminator {
-            match terminator.kind {
-                TerminatorKind::Suspend { destination: (_, block), .. } => {
-                    blocks.insert(block);
+fn find_resume_blocks(mir: &Mir) -> BTreeSet<BasicBlock> {
+    mir.basic_blocks().iter()
+        .filter_map(|block_data| {
+            if let Some(ref terminator) = block_data.terminator {
+                match terminator.kind {
+                    TerminatorKind::Suspend { destination: (_, block), .. } => {
+                        Some(block)
+                    }
+                    _ => None
                 }
-                _ => {}
+            } else {
+                None
             }
-        }
-    }
-
-    blocks
+        })
+        .chain(Some(START_BLOCK))
+        .collect()
 }
 
 fn group_locals_by_scope(mir: &Mir, assignments: &DefiniteAssignment) -> ScopeLocals {

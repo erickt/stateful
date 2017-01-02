@@ -14,24 +14,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut variants = Vec::with_capacity(blocks.len());
         let mut seen_ty_param_ids = HashSet::new();
         let mut ty_param_ids = vec![];
-        let mut arms = Vec::with_capacity(blocks.len());
-        
-        for &block in blocks.iter() {
-            let (variant, tp) = self.state_variant(block, StateKind::Resume);
-            variants.push(variant);
+        let arms = blocks.iter()
+            .map(|&block| {
+                let (variant, tp) = self.state_variant(block, StateKind::Resume);
+                variants.push(variant);
 
-            // It's possible for a declaration to be created but not actually get used in the state
-            // variables, so we only create a type parameter for a declaration if it's actually
-            // used.
-            for ty_param_id in tp {
-                if !seen_ty_param_ids.contains(&ty_param_id) {
-                    seen_ty_param_ids.insert(ty_param_id);
-                    ty_param_ids.push(ty_param_id);
+                // It's possible for a declaration to be created but not actually get used in the
+                // state variables, so we only create a type parameter for a declaration if it's
+                // actually used.
+                for ty_param_id in tp {
+                    if !seen_ty_param_ids.contains(&ty_param_id) {
+                        seen_ty_param_ids.insert(ty_param_id);
+                        ty_param_ids.push(ty_param_id);
+                    }
                 }
-            }
 
-            arms.push(self.resume_arm(block));
-        }
+                self.resume_arm(block)
+            })
+            .collect::<Vec<_>>();
 
         let generics = self.ast_builder.generics()
             .with_ty_param_ids(ty_param_ids.iter())
@@ -39,8 +39,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let enum_item = self.ast_builder.item().enum_("ResumeState")
             .generics().with(generics.clone()).build()
-            .id("Illegal")
             .with_variants(variants)
+            .id("Illegal")
             .build();
 
         let state_path = self.ast_builder
