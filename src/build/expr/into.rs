@@ -168,8 +168,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                else_expr: &Option<P<ast::Expr>>) -> BlockAnd<()> {
         let operand = unpack!(block = self.as_operand(block, cond_expr));
 
-        let mut then_block = self.start_new_block(span, Some("Then"));
-        let mut else_block = self.start_new_block(span, Some("Else"));
+        let mut then_block = self.cfg.start_new_block(span, Some("Then"));
+        let mut else_block = self.cfg.start_new_block(span, Some("Else"));
         self.terminate(span, block, TerminatorKind::If {
             cond: operand,
             targets: (then_block, else_block),
@@ -192,7 +192,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             };
         });
 
-        let join_block = self.start_new_block(span, Some("IfJoin"));
+        let join_block = self.cfg.start_new_block(span, Some("IfJoin"));
 
         self.terminate(span, then_block, TerminatorKind::Goto { target: join_block });
         self.terminate(span, else_block, TerminatorKind::Goto { target: join_block });
@@ -223,8 +223,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let this = self;
 
-        let loop_block = this.start_new_block(source_info.span, Some("Loop"));
-        let exit_block = this.start_new_block(source_info.span, Some("LoopExit"));
+        let loop_block = this.cfg.start_new_block(source_info.span, Some("Loop"));
+        let exit_block = this.cfg.start_new_block(source_info.span, Some("LoopExit"));
 
         // start the loop
         this.terminate(body.span, block, TerminatorKind::Goto { target: loop_block });
@@ -242,7 +242,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         let loop_block_end;
                         let cond = unpack!(loop_block_end = this.as_operand(loop_block, cond_expr));
-                        body_block = this.start_new_block(cond_expr.span, Some("LoopBody"));
+                        body_block = this.cfg.start_new_block(cond_expr.span, Some("LoopBody"));
 
                         this.terminate(
                             cond_expr.span,

@@ -2,7 +2,6 @@ use aster::AstBuilder;
 use aster::ident::ToIdent;
 use data_structures::indexed_vec::{Idx, IndexVec};
 use std::borrow::Cow;
-use std::collections::BTreeMap;
 use std::fmt::{self, Debug, Formatter, Write};
 use std::ops::{Index, IndexMut};
 use std::u32;
@@ -343,22 +342,6 @@ impl LocalDecl {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum LiveDecl {
-    Active(Local),
-    Moved(Local),
-}
-
-impl LiveDecl {
-    pub fn local(&self) -> Local {
-        match *self {
-            LiveDecl::Active(local) | LiveDecl::Moved(local) => local,
-        }
-    }
-}
-
-pub type LiveDeclMap = BTreeMap<VisibilityScope, Vec<LiveDecl>>;
-
 ///////////////////////////////////////////////////////////////////////////
 // BasicBlock and Terminator
 
@@ -368,19 +351,16 @@ newtype_index!(BasicBlock, "bb");
 pub struct BasicBlockData {
     pub span: Span,
     pub name: Option<&'static str>,
-    pub incoming_decls: LiveDeclMap,
     pub statements: Vec<Statement>,
     pub terminator: Option<Terminator>,
 }
 
 impl BasicBlockData {
     pub fn new(span: Span,
-               name: Option<&'static str>,
-               decls: LiveDeclMap) -> Self {
+               name: Option<&'static str>) -> Self {
         BasicBlockData {
             span: span,
             name: name,
-            incoming_decls: decls,
             statements: vec![],
             terminator: None,
         }

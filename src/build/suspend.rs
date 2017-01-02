@@ -12,7 +12,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let rvalue_span = rvalue.span;
 
         let rvalue = unpack!(block = self.as_rvalue(block, &rvalue));
-        let next_block = self.start_new_block(rvalue_span, Some("Resume"));
+        let next_block = self.cfg.start_new_block(rvalue_span, Some("Resume"));
 
         self.terminate(rvalue_span, block, TerminatorKind::Suspend {
             destination: (destination.clone(), next_block),

@@ -199,7 +199,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             copied_exprs: HashSet::new(),
         };
 
-        assert_eq!(builder.start_new_block(span, Some("Start")), START_BLOCK);
+        assert_eq!(builder.cfg.start_new_block(span, Some("Start")), START_BLOCK);
         assert_eq!(builder.new_visibility_scope(span), ARGUMENT_VISIBILITY_SCOPE);
         builder.visibility_scopes[ARGUMENT_VISIBILITY_SCOPE].parent_scope = None;
 
@@ -227,37 +227,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 span_bug!(self.cx, self.fn_span, "no terminator on block {:?}", index);
             }
         }
-
-        // We need to make sure all variables have actually been initialized.
-        // First, gather up them all.
-        let mut initialized_vars = HashSet::new();
-        for block in self.cfg.basic_blocks.iter() {
-            for live_decls in block.incoming_decls.values() {
-                for live_decl in live_decls {
-                    initialized_vars.insert(live_decl.local());
-                }
-            }
-        }
-
-        // Now take the difference between the initialized vars and the total set of variables.
-        let mut uninitialized_vars = vec![];
-        for var in self.local_decls.indices() {
-            if !initialized_vars.contains(&var) {
-                uninitialized_vars.push(var);
-            }
-        }
-
-        if !uninitialized_vars.is_empty() {
-            span_warn!(
-                self.cx,
-                self.fn_span,
-                "uninitialized variables? {:?}",
-                uninitialized_vars);
-        }
-
-        debug!("scopes: {:#?}", self.visibility_scopes);
-        debug!("decls: {:#?}", self.local_decls);
-        debug!("blocks: {:#?}", self.cfg.basic_blocks);
 
         Mir::new(
             self.state_machine_kind,
@@ -290,14 +259,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 for local in &pat_locals {
                     self.initialize(block, arg.pat.span, &Lvalue::Local(*local));
                 }
-
-                let block_data = self.cfg.block_data_mut(block);
-                let incoming_decls = block_data.incoming_decls.entry(self.visibility_scope)
-                    .or_insert_with(Vec::new);
-
-                incoming_decls.extend(
-                    pat_locals.into_iter().map(LiveDecl::Active)
-                );
             }
         }
 
@@ -309,11 +270,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         unpack!(block = self.ast_block(Lvalue::Local(RETURN_POINTER), block, &ast_block));
 
         block.unit()
-    }
-
-    pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
-        let decls = self.find_live_decls();
-        self.cfg.start_new_block(span, name, decls)
     }
 
     pub fn start_new_extent(&mut self) -> CodeExtent {
@@ -328,7 +284,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             Some(rb) => rb,
             None => {
                 let span = self.fn_span;
-                let rb = self.start_new_block(span, Some("End"));
+                let rb = self.cfg.start_new_block(span, Some("End"));
                 debug!("return_block: created {:?}", rb);
                 self.cached_return_block = Some(rb);
                 rb

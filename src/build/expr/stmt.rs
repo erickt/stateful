@@ -114,7 +114,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // We need to start a new block after this one since there might be trailing expressions
         // that we need to type check.
-        block = self.start_new_block(span, Some("AfterReturn"));
+        block = self.cfg.start_new_block(span, Some("AfterReturn"));
 
         block.unit()
     }
@@ -136,12 +136,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("break_or_continue(extent={:?}, exit_block={:?})", extent, exit_block);
 
         self.exit_scope(span, extent, block, exit_block);
-        block = self.start_new_block(span, Some("AfterBreakOrContinue"));
-
-        // the `after-break-or-continue` block will never have any paths flowing into it, but we
-        // need to make sure it has the same incoming decls that are currently in scope.
-        let live_decls = self.find_live_decls();
-        self.cfg.block_data_mut(block).incoming_decls = live_decls;
+        block = self.cfg.start_new_block(span, Some("AfterBreakOrContinue"));
 
         block.unit()
     }

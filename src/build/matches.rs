@@ -44,7 +44,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 Arm {
                     pats: arm.pats.clone(),
                     guard: arm.guard.clone(),
-                    block: self.start_new_block(span, Some("Arm")),
+                    block: self.cfg.start_new_block(span, Some("Arm")),
                 }
             })
             .collect::<Vec<_>>();
@@ -75,17 +75,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         this.initialize(block, arm.pats[0].span, &Lvalue::Local(*local));
                     }
 
-                    {
-                        let block_data = this.cfg.block_data_mut(target.block);
-                        let incoming_decls = block_data.incoming_decls
-                            .entry(this.visibility_scope)
-                            .or_insert_with(Vec::new);
-
-                        incoming_decls.extend(
-                            pat_locals.into_iter().map(LiveDecl::Active)
-                        );
-                    }
-
                     // Re-enter the visibility scope we created the bindings in.
                     this.visibility_scope = scope.unwrap_or(this.visibility_scope);
 
@@ -97,7 +86,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         });
 
         // all the arm blocks will rejoin here
-        let end_block = self.start_new_block(span, Some("MatchEnd"));
+        let end_block = self.cfg.start_new_block(span, Some("MatchEnd"));
 
         for body in arm_bodies {
             self.terminate(span, body, TerminatorKind::Goto { target: end_block });

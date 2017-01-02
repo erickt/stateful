@@ -7,13 +7,10 @@ impl CFG {
         &mut self.basic_blocks[block]
     }
 
-    pub fn start_new_block(&mut self,
-                           span: Span,
-                           name: Option<&'static str>,
-                           live_decls: LiveDeclMap) -> BasicBlock {
-        debug!("start_new_block(name={:?}, decls={:?})", name, live_decls); 
-        let block = self.basic_blocks.push(BasicBlockData::new(span, name, live_decls));
-        debug!("start_new_block: block={:?}", block); 
+    pub fn start_new_block(&mut self, span: Span, name: Option<&'static str>) -> BasicBlock {
+        debug!("start_new_block(name={:?})", name);
+        let block = self.basic_blocks.push(BasicBlockData::new(span, name));
+        debug!("start_new_block: block={:?}", block);
 
         block
     }

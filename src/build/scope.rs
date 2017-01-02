@@ -16,7 +16,7 @@ tracks where a `break` and `continue` should go to.
 use build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::collections::{BTreeSet, HashSet};
 use std::mem;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -341,7 +341,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         {
             for scope_index in (len - scope_count + 1 .. len).rev() {
                 block = {
-                    let b = self.start_new_block_at(span, Some("Drop"), scope_index + 1);
+                    let b = self.cfg.start_new_block(span, Some("Drop"));
                     self.terminate(span, block, TerminatorKind::Goto { target: b });
                     b
                 };
@@ -376,19 +376,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         self.terminate(span, block, TerminatorKind::Goto { target: target });
-    }
-
-    fn start_new_block_at(&mut self,
-                          span: Span,
-                          name: Option<&'static str>,
-                          scope: usize) -> BasicBlock {
-        let decls = self.find_live_decls_at(scope);
-        debug!("start_new_block_at(name={:?}, scope={:?}, decls={:?})", name, scope, decls); 
-
-        let block = self.cfg.start_new_block(span, name, decls);
-        debug!("start_new_block_at: block={:?}", block); 
-
-        block
     }
 
     pub fn extent_of_innermost_scope(&self) -> CodeExtent {
@@ -543,111 +530,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      kind: TerminatorKind) {
         let source_info = self.source_info(span);
         self.cfg.terminate(block, source_info, kind);
-
-        // FIXME: should we be pushing live decls to our successors?
-        /*
-        let live_decls = self.find_live_decls();
-
-        let successors = self.cfg.block_data(block).terminator().successors();
-
-        debug!("terminate: block={:?} succ={:?} vars={:?}",
-               block, successors, live_decls);
-
-        for successor in successors {
-            let block_data = &mut self.cfg.block_data_mut(successor);
-
-            if block_data.decls.is_empty() {
-                block_data.decls.extend(live_decls.iter().cloned());
-            } else {
-                assert_eq!(block_data.decls, live_decls,
-                           "block {:?} has inconsistent live decls: {:?} != {:?}",
-                           successor,
-                           block_data.decls,
-                           live_decls);
-            }
-        }
-        */
-    }
-
-    /// This function constructs a vector of all of the variables in scope, and returns if the
-    /// variables are currently shadowed.
-    pub fn find_live_decls(&self) -> BTreeMap<VisibilityScope, Vec<LiveDecl>> {
-        self.find_live_decls_at(self.scopes.len())
-    }
-
-    pub fn find_live_decls_at(&self, index: usize) -> BTreeMap<VisibilityScope, Vec<LiveDecl>> {
-        debug!("find_live_decls: scope={:?}, decls={:#?}", index, self.local_decls);
-        debug!("find_live_decls: scopes={:#?}", self.scopes);
-
-        let mut scope_decls = BTreeMap::new();
-        let mut visited_decls = HashSet::new();
-
-        // We build up the list of declarations by walking up the scopes, and walking through each
-        // scope backwards. If this is the first time we've seen a variable with this name, we just
-        // add it to our list. However, if we've seen it before, then we need to rename it so that
-        // it'll be accessible once the shading variable goes out of scope.
-        for scope in self.scopes[..index].iter().rev() {
-            debug!("find_live_decls: current scope decls={:?}", scope_decls);
-
-            // First, add any conditionally initialized variables. We'll just grab the last one
-            // since that would be the one we're currently processing.
-            if let Some(conditional) = scope.conditionals.last() {
-                debug!("find_live_decls: conditional={:?}", conditional);
-
-                for local in &conditional.initialized_decls {
-                    // Only process a local once.
-                    if !visited_decls.insert(local) {
-                        continue;
-                    }
-
-                    // Check if the decl was moved in this conditional scope.
-                    let live_decl = if conditional.moved_decls.contains(local) {
-                        LiveDecl::Moved(*local)
-                    } else {
-                        LiveDecl::Active(*local)
-                    };
-
-                    // Conditionally initialized decls may be declared in a different scope than
-                    // this one, so make sure we insert it into the right scope.
-                    scope_decls.entry(self.local_decls[*local].source_info.scope)
-                        .or_insert_with(Vec::new)
-                        .push(live_decl)
-                }
-            };
-
-            // After we processed the conditional, now we can process the regular decls.
-            for local in scope.initialized_decls.iter() {
-                // Only process a local once.
-                if !visited_decls.insert(local) {
-                    continue;
-                }
-
-                // Make sure the scope is correct.
-                let local_decl = &self.local_decls[*local];
-                debug!("find_live_decls: local={:?} decl={:?}", local, local_decl);
-
-                if scope.visibility_scope != local_decl.source_info.scope {
-                    span_warn!(self.cx, local_decl.source_info.span,
-                               "incorrect scope: expected `{:?}`: {:?}",
-                               scope.visibility_scope,
-                               local_decl);
-                }
-
-                let live_decl = if scope.moved_decls.contains(local) {
-                    LiveDecl::Moved(*local)
-                } else {
-                    LiveDecl::Active(*local)
-                };
-
-                scope_decls.entry(local_decl.source_info.scope)
-                    .or_insert_with(Vec::new)
-                    .push(live_decl)
-            }
-        }
-
-        debug!("find_live_decls: live decls={:?}", scope_decls);
-
-        scope_decls
     }
 
     /// Indicates that `lvalue` should be dropped on exit from
