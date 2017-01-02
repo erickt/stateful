@@ -262,6 +262,14 @@ fn write_mir_intro<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
              indented_retptr,
              ALIGN)?;
 
+    // Print coroutine arguments
+    let indented_coargs = format!("{}let mut {:?};",
+                                  INDENT,
+                                  COROUTINE_ARGS);
+    writeln!(w, "{0:1$} // coroutine arguments",
+             indented_coargs,
+             ALIGN)?;
+
     write_scope_tree(tcx, mir, &scope_tree, w, ARGUMENT_VISIBILITY_SCOPE, 1)?;
 
     //write_temp_decls(mir, w)?;
