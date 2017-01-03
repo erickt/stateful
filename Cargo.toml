@@ -11,7 +11,10 @@ plugin = true
 default = ["unstable"]
 impl_trait = []
 unstable = []
-unstable-testing = ["clippy", "compiletest_rs", "impl_trait"]
+
+# clippy us currently broken on rustc 1.16.0-nightly (4ecc85beb 2016-12-28)
+#unstable-testing = ["clippy", "compiletest_rs", "impl_trait"]
+unstable-testing = ["compiletest_rs", "impl_trait"]
 
 [dependencies]
 aster = "0.*"
