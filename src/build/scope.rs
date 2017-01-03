@@ -329,8 +329,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       span: Span,
                       extent: CodeExtent,
                       mut block: BasicBlock,
-                      target: BasicBlock) {
-        debug!("exit_scope(extent={:?}, block={:?}, target={:?})", extent, block, target);
+                      target: BasicBlock,
+                      mut phantom_target: Option<BasicBlock>) {
+        debug!("exit_scope(extent={:?}, block={:?}, target={:?}, phantom_target={:?})",
+               extent,
+               block,
+               target,
+               phantom_target);
         let scope_count = 1 + self.scopes.iter().rev().position(|scope| scope.extent == extent)
                                                       .unwrap_or_else(||{
             span_bug!(self.cx, span, "extent {:?} does not enclose", extent)
@@ -342,7 +347,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             for scope_index in (len - scope_count + 1 .. len).rev() {
                 block = {
                     let b = self.cfg.start_new_block(span, Some("Drop"));
-                    self.terminate(span, block, TerminatorKind::Goto { target: b });
+                    self.terminate(span, block, TerminatorKind::Goto {
+                        target: b,
+                        phantom_target: phantom_target.take(),
+                    });
                     b
                 };
 
@@ -375,7 +383,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.terminate(span, block, TerminatorKind::Goto { target: target });
+        self.terminate(span, block, TerminatorKind::Goto {
+            target: target,
+            phantom_target: phantom_target.take(),
+        });
     }
 
     pub fn extent_of_innermost_scope(&self) -> CodeExtent {

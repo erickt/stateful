@@ -445,8 +445,12 @@ impl<'a, D> DataflowAnalysis<'a, D>
     {
         match bb_data.terminator().kind {
             mir::TerminatorKind::Return => {}
-            mir::TerminatorKind::Goto { ref target } => {
+            mir::TerminatorKind::Goto { ref target, ref phantom_target } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
+
+                if let Some(ref phantom_target) = *phantom_target {
+                    self.propagate_bits_into_entry_set_for(in_out, changed, phantom_target);
+                }
             }
             mir::TerminatorKind::If { ref targets, .. } => {
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.0);

@@ -389,6 +389,12 @@ pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
         target: BasicBlock,
+
+        /// In Stateful, we explicitly the locals across basic blocks in order to make sure
+        /// everything is explicitly initialized. In order to make sure dataflow works, we need to
+        /// have an additional edge (that's never followed) to the block following the
+        /// break/continue/return.
+        phantom_target: Option<BasicBlock>,
     },
 
     /// jump to branch 0 if this lvalue evaluates to true
@@ -455,7 +461,13 @@ impl Debug for TerminatorKind {
 impl TerminatorKind {
     pub fn successors(&self) -> Vec<BasicBlock> {
         match *self {
-            TerminatorKind::Goto { target, .. } |
+            TerminatorKind::Goto { target, phantom_target } => {
+                let mut successors = vec![target];
+                if let Some(phantom_target) = phantom_target {
+                    successors.push(phantom_target);
+                }
+                successors
+            }
             TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
             }
@@ -469,7 +481,13 @@ impl TerminatorKind {
 
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match *self {
-            TerminatorKind::Goto { ref mut target, .. } |
+            TerminatorKind::Goto { ref mut target, ref mut phantom_target } => {
+                let mut successors = vec![target];
+                if let Some(ref mut phantom_target) = *phantom_target {
+                    successors.push(phantom_target);
+                }
+                successors
+            }
             TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
             }
@@ -504,7 +522,13 @@ impl TerminatorKind {
         use self::TerminatorKind::*;
         match *self {
             Return => vec![],
-            Goto { .. } => vec!["".into()],
+            Goto { target: _, phantom_target } => {
+                let mut labels = vec!["".into()];
+                if phantom_target.is_some() {
+                    labels.push("phantom".into());
+                }
+                labels
+            }
             If { .. } => vec!["true".into(), "false".into()],
             Match { ref targets, .. } => {
                 targets.iter()

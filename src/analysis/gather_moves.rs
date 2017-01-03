@@ -501,7 +501,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
     fn gather_terminator(&mut self, loc: Location, term: &Terminator) {
         debug!("gather_terminator({:?}, {:?})", loc, term);
         match term.kind {
-            TerminatorKind::Goto { target: _, .. } => { }
+            TerminatorKind::Goto { target: _, phantom_target: _ } => { }
 
             TerminatorKind::Return => {
                 self.gather_move(loc, &Lvalue::Local(RETURN_POINTER));

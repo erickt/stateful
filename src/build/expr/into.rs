@@ -194,8 +194,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let join_block = self.cfg.start_new_block(span, Some("IfJoin"));
 
-        self.terminate(span, then_block, TerminatorKind::Goto { target: join_block });
-        self.terminate(span, else_block, TerminatorKind::Goto { target: join_block });
+        self.terminate(span, then_block, TerminatorKind::Goto {
+            target: join_block,
+            phantom_target: None,
+        });
+        self.terminate(span, else_block, TerminatorKind::Goto {
+            target: join_block,
+            phantom_target: None,
+        });
 
         join_block.unit()
     }
@@ -227,7 +233,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let exit_block = this.cfg.start_new_block(source_info.span, Some("LoopExit"));
 
         // start the loop
-        this.terminate(body.span, block, TerminatorKind::Goto { target: loop_block });
+        this.terminate(body.span, block, TerminatorKind::Goto {
+            target: loop_block,
+            phantom_target: None,
+        });
 
         let might_break = this.in_loop_scope(
             label, loop_block, exit_block,
@@ -272,7 +281,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     this.ast_block(tmp, body_block, body)
                 }));
 
-                this.terminate(body.span, body_block_end, TerminatorKind::Goto { target: loop_block });
+                this.terminate(body.span, body_block_end, TerminatorKind::Goto {
+                    target: loop_block,
+                    phantom_target: None,
+                });
             }
         );
 

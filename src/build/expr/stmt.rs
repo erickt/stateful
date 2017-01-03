@@ -110,18 +110,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         };
         let extent = self.extent_of_return_scope();
         let return_block = self.return_block();
-        self.exit_scope(span, extent, block, return_block);
 
         // We need to start a new block after this one since there might be trailing expressions
         // that we need to type check.
-        block = self.cfg.start_new_block(span, Some("AfterReturn"));
+        let after_block = self.cfg.start_new_block(span, Some("AfterReturn"));
 
-        block.unit()
+        self.exit_scope(span, extent, block, return_block, Some(after_block));
+
+        after_block.unit()
     }
 
     fn break_or_continue<F>(&mut self,
                             span: Span,
-                            mut block: BasicBlock,
+                            block: BasicBlock,
                             exit_selector: F)
                             -> BlockAnd<()>
         where F: FnOnce(&mut Builder<'a, 'b>) -> (BasicBlock, CodeExtent)
@@ -135,9 +136,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let (exit_block, extent) = exit_selector(self);
         debug!("break_or_continue(extent={:?}, exit_block={:?})", extent, exit_block);
 
-        self.exit_scope(span, extent, block, exit_block);
-        block = self.cfg.start_new_block(span, Some("AfterBreakOrContinue"));
+        let after_block = self.cfg.start_new_block(span, Some("AfterBreakOrContinue"));
 
-        block.unit()
+        self.exit_scope(span, extent, block, exit_block, Some(after_block));
+
+        after_block.unit()
     }
 }
