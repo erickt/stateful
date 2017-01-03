@@ -59,7 +59,7 @@ pub fn is_mac(mac: &ast::Mac, name: &str) -> bool {
 }
 
 pub fn is_path(path: &ast::Path, name: &str) -> bool {
-    !path.global && path.segments == AstBuilder::new()
+    !path.is_global() && path.segments == AstBuilder::new()
         .path().id(name)
         .build().segments
 }

@@ -203,7 +203,7 @@ fn is_try_path(path: &ast::Path) -> bool {
     let builder = AstBuilder::new();
     let yield_ = builder.path().id("try").build();
 
-    !path.global && path.segments == yield_.segments
+    !path.is_global() && path.segments == yield_.segments
 }
 
 /// Desugar a for loop into:

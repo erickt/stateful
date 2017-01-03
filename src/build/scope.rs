@@ -649,10 +649,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     */
 
     pub fn get_local_from_path(&self, path: &ast::Path) -> Option<Local> {
-        if !path.global && path.segments.len() == 1 {
+        if !path.is_global() && path.segments.len() == 1 {
             let segment = &path.segments[0];
 
-            if segment.parameters.is_empty() {
+            if segment.parameters.is_none() {
                 debug!("get_local_from_path: {:?}", segment.identifier);
                 return self.find_local(segment.identifier);
             }
