@@ -1012,7 +1012,11 @@ impl Debug for Statement {
                 write!(fmt, ")")
             }
             MethodCall { ref destination, ref ident, ref tys, ref self_, ref args, .. } => {
-                write!(fmt, "{:?} = {:?}.{:?}", destination, self_, ident)?;
+                write!(fmt,
+                       "{:?} = {:?}.{}",
+                       destination,
+                       self_,
+                       pprust::ident_to_string(ident.node))?;
 
                 if !tys.is_empty() {
                     write!(fmt, "::<")?;
