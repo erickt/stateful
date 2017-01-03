@@ -12,7 +12,7 @@ fn gen<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
             }
             None => {
                 break;
-                let x = y; //~ ERROR unresolved name `y`
+                let x = y; //~ ERROR unresolved value `y` [E0425]
             }
         };
     };

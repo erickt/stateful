@@ -4,10 +4,9 @@
 fn do_move<T>(_item: T) {}
 
 #[generator]
-fn gen(item: String) -> Box<Iterator<Item=String>> {
+fn gen(item: String) -> Box<Iterator<Item=String>> { //~ ERROR use of possibly uninitialized variable: `item` [E0381]
     yield_!(moved!(item));
-    yield_!(moved!(item)); //~ ERROR capture of moved value: `item`
-                           //~^ ERROR cannot move out of captured outer variable in an `Fn` closure
+    yield_!(moved!(item));
 }
 
 fn main() {

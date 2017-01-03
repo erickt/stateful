@@ -19,7 +19,7 @@ fn yield_() -> Box<Iterator<Item=usize>> {
 
         let w = d(z);
     };
-    e(w); //~ ERROR unresolved name `w` [E0425]
+    e(w); //~ ERROR unresolved value `w` [E0425]
 }
 
 fn main() {
