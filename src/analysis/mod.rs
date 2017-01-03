@@ -321,8 +321,13 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
                                       |moi| callback(moi, DropFlagState::Present))
             }
             StatementKind::Stmt(_) |
-            StatementKind::StorageLive(_) |
-            StatementKind::StorageDead(_) => {}
+            StatementKind::StorageLive(_) => {}
+            StatementKind::StorageDead(ref lvalue) => {
+                debug!("drop_flag_effects: storage dead {:?}", stmt);
+                on_lookup_result_bits(tcx, mir, move_data,
+                                      move_data.rev_lookup.find(lvalue),
+                                      |moi| callback(moi, DropFlagState::Absent))
+            }
             //StatementKind::Nop => {}
         },
         None => {
