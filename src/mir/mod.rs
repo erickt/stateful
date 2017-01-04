@@ -11,6 +11,8 @@ use syntax::codemap::Span;
 use syntax::print::pprust;
 use syntax::ptr::P;
 
+//pub mod visit;
+
 macro_rules! newtype_index {
     ($name:ident, $debug_name:expr) => (
         #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -109,6 +111,9 @@ pub struct Mir {
     /// and used (eventually) for debuginfo. Indexed by a `VisibilityScope`.
     pub visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
 
+    /// Return type of the function.
+    pub return_ty: P<ast::Ty>,
+
     /// Declarations of locals.
     ///
     /// The first local is the return value pointer, followed by `arg_count`
@@ -134,13 +139,12 @@ pub struct Mir {
 pub const START_BLOCK: BasicBlock = BasicBlock(0);
 
 impl Mir {
-    pub fn new(
-        state_machine_kind: StateMachineKind,
-        basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
-        visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
-        local_decls: IndexVec<Local, LocalDecl>,
-        span: Span,
-        fn_decl: FunctionDecl) -> Self
+    pub fn new(state_machine_kind: StateMachineKind,
+               basic_blocks: IndexVec<BasicBlock, BasicBlockData>,
+               visibility_scopes: IndexVec<VisibilityScope, VisibilityScopeData>,
+               local_decls: IndexVec<Local, LocalDecl>,
+               span: Span,
+               fn_decl: FunctionDecl) -> Self
     {
         // We need `arg_count` locals, and one for the return pointer
         let arg_count = fn_decl.inputs().len();
@@ -153,6 +157,7 @@ impl Mir {
             state_machine_kind: state_machine_kind,
             basic_blocks: basic_blocks,
             visibility_scopes: visibility_scopes,
+            return_ty: fn_decl.return_ty(),
             local_decls: local_decls,
             arg_count: arg_count,
             span: span,
@@ -950,7 +955,7 @@ pub enum StatementKind {
     Let {
         pat: P<ast::Pat>,
         ty: Option<P<ast::Ty>>,
-        lvalues: Vec<Local>,
+        lvalues: Vec<Lvalue>,
         rvalue: Rvalue,
     },
 

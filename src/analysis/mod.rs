@@ -296,7 +296,6 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
             StatementKind::Let { ref lvalues, .. } => {
                 debug!("drop_flag_effects: let {:?}", stmt);
                 for lvalue in lvalues {
-                    let lvalue = Lvalue::Local(*lvalue);
                     on_lookup_result_bits(tcx, mir, move_data,
                                           move_data.rev_lookup.find(&lvalue),
                                           |moi| callback(moi, DropFlagState::Present))

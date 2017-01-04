@@ -391,7 +391,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             StatementKind::Stmt(_) => {}
             StatementKind::Let { pat: _, ty: _, ref lvalues, ref rvalue }=> {
                 for lvalue in lvalues {
-                    self.create_move_path(&Lvalue::Local(*lvalue));
+                    self.create_move_path(lvalue);
                 }
                 self.gather_rvalue(loc, rvalue);
             }

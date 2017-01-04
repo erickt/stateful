@@ -1,4 +1,4 @@
-// Copyright 2016 The Rust Project Developers. See the COPYRIGHT
+// Copyright 2015 The Rust Project Developers. See the COPYRIGHT
 // file at the top-level directory of this distribution and at
 // http://rust-lang.org/COPYRIGHT.
 //
@@ -8,45 +8,71 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
-use bit_vec::BitVec;
+//! A number of passes which remove various redundancies in the CFG.
+//!
+//! The `SimplifyCfg` pass gets rid of unnecessary blocks in the CFG, whereas the `SimplifyLocals`
+//! gets rid of all the unnecessary local variable declarations.
+//!
+//! The `SimplifyLocals` pass is kinda expensive and therefore not very suitable to be run often.
+//! Most of the passes should not care or be impacted in meaningful ways due to extra locals
+//! either, so running the pass once, right before translation, should suffice.
+//!
+//! On the other side of the spectrum, the `SimplifyCfg` pass is considerably cheap to run, thus
+//! one should run it after every pass which may modify CFG in significant ways. This pass must
+//! also be run before any analysis passes because it removes dead blocks, and some of these can be
+//! ill-typed.
+//!
+//! The cause of this typing issue is typeck allowing most blocks whose end is not reachable have
+//! an arbitrary return type, rather than having the usual () return type (as a note, typeck's
+//! notion of reachability is in fact slightly weaker than MIR CFG reachability - see #31617). A
+//! standard example of the situation is:
+//!
+//! ```rust
+//!   fn example() {
+//!       let _a: char = { return; };
+//!   }
+//! ```
+//!
+//! Here the block (`{ return; }`) has the return type `char`, rather than `()`, but the MIR we
+//! naively generate still contains the `_a = ()` write in the unreachable block "after" the
+//! return.
+
+use data_structures::bitvec::BitVector;
 use data_structures::indexed_vec::{Idx, IndexVec};
 use mir::*;
 use std::borrow::Cow;
+use std::fmt;
+//use mir::visit::{MutVisitor, Visitor, LvalueContext};
 use super::{MirPass, Pass};
 use traversal;
 use ty::TyCtxt;
 
-#[derive(Debug)]
-pub struct SimplifyCfg;
+pub struct SimplifyCfg<'a> { label: &'a str }
 
-impl SimplifyCfg {
-    pub fn new() -> Self {
-        SimplifyCfg
+impl<'a> SimplifyCfg<'a> {
+    pub fn new(label: &'a str) -> Self {
+        SimplifyCfg { label: label }
     }
 }
 
-impl<'b> Pass for SimplifyCfg {
-    fn name(&self) -> Cow<'static, str> { 
-        Cow::from("SimplifyCfg")
-    }
-}
-
-impl MirPass for SimplifyCfg {
-    fn run_pass<'a, 'tcx>(&mut self,
-                          _tcx: TyCtxt<'a, 'tcx>,
-                          mir: &mut Mir) {
+impl<'l> MirPass for SimplifyCfg<'l> {
+    fn run_pass<'a, 'tcx>(&mut self, _tcx: TyCtxt<'a, 'tcx>, mir: &mut Mir) {
+        debug!("SimplifyCfg({:?}) - simplifying {:?}", self.label, mir);
         CfgSimplifier::new(mir).simplify();
         remove_dead_blocks(mir);
-        
+
         // FIXME: Should probably be moved into some kind of pass manager
         mir.basic_blocks_mut().raw.shrink_to_fit();
     }
 }
 
-impl Default for SimplifyCfg {
-    fn default() -> Self {
-        SimplifyCfg::new()
+impl<'l> Pass for SimplifyCfg<'l> {
+    fn disambiguator<'a>(&'a self) -> Option<Box<fmt::Display+'a>> {
+        Some(Box::new(self.label))
     }
+
+    // avoid calling `type_name` - it contains `<'static>`
+    fn name(&self) -> Cow<'static, str> { "SimplifyCfg".into() }
 }
 
 pub struct CfgSimplifier<'a> {
@@ -60,9 +86,11 @@ impl<'a> CfgSimplifier<'a> {
 
         // we can't use mir.predecessors() here because that counts
         // dead blocks, which we don't want to.
+        pred_count[START_BLOCK] = 1;
+
         for (_, data) in traversal::preorder(mir) {
             if let Some(ref term) = data.terminator {
-                for tgt in term.successors() {
+                for &tgt in term.successors().iter() {
                     pred_count[tgt] += 1;
                 }
             }
@@ -80,7 +108,7 @@ impl<'a> CfgSimplifier<'a> {
         loop {
             let mut changed = false;
 
-            for bb in self.basic_blocks.indices() {
+            for bb in (0..self.basic_blocks.len()).map(BasicBlock::new) {
                 if self.pred_count[bb] == 0 {
                     continue
                 }
@@ -119,10 +147,7 @@ impl<'a> CfgSimplifier<'a> {
             BasicBlockData {
                 ref statements,
                 terminator: ref mut terminator @ Some(Terminator {
-                    // FIXME: We cannot currently optimize end scopes or else we might not properly
-                    // drop copyable types.
-                    kind: TerminatorKind::Goto { .. },
-                    ..
+                    kind: TerminatorKind::Goto { .. }, ..
                 }), ..
             } if statements.is_empty() => terminator.take(),
             // if `terminator` is None, this means we are in a loop. In that
@@ -131,10 +156,7 @@ impl<'a> CfgSimplifier<'a> {
         };
 
         let target = match terminator {
-            Some(Terminator {
-                kind: TerminatorKind::Goto { ref mut target, .. },
-                ..
-            }) => {
+            Some(Terminator { kind: TerminatorKind::Goto { ref mut target, .. }, .. }) => {
                 self.collapse_goto_chain(target, changed);
                 *target
             }
@@ -145,8 +167,16 @@ impl<'a> CfgSimplifier<'a> {
         debug!("collapsing goto chain from {:?} to {:?}", *start, target);
 
         *changed |= *start != target;
-        self.pred_count[target] += 1;
-        self.pred_count[*start] -= 1;
+
+        if self.pred_count[*start] == 1 {
+            // This is the last reference to *start, so the pred-count to
+            // to target is moved into the current block.
+            self.pred_count[*start] = 0;
+        } else {
+            self.pred_count[target] += 1;
+            self.pred_count[*start] -= 1;
+        }
+
         *start = target;
     }
 
@@ -157,8 +187,6 @@ impl<'a> CfgSimplifier<'a> {
                        -> bool
     {
         let target = match terminator.kind {
-            // FIXME: We cannot currently optimize end scopes or else we might not properly drop
-            // copyable types.
             TerminatorKind::Goto { target, .. }
                 if self.pred_count[target] == 1
                 => target,
@@ -212,9 +240,9 @@ impl<'a> CfgSimplifier<'a> {
 }
 
 fn remove_dead_blocks(mir: &mut Mir) {
-    let mut seen = BitVec::from_elem(mir.basic_blocks().len(), false);
+    let mut seen = BitVector::new(mir.basic_blocks().len());
     for (bb, _) in traversal::preorder(mir) {
-        seen.set(bb.index(), true);
+        seen.insert(bb.index());
     }
 
     let basic_blocks = mir.basic_blocks_mut();
@@ -222,11 +250,7 @@ fn remove_dead_blocks(mir: &mut Mir) {
     let num_blocks = basic_blocks.len();
     let mut replacements : Vec<_> = (0..num_blocks).map(BasicBlock::new).collect();
     let mut used_blocks = 0;
-    for (alive_index, set) in seen.iter().enumerate() {
-        if !set {
-            continue;
-        }
-
+    for alive_index in seen.iter() {
         replacements[alive_index] = BasicBlock::new(used_blocks);
         if alive_index != used_blocks {
             // Swap the next alive block data with the current available slot. Since alive_index is
@@ -243,3 +267,88 @@ fn remove_dead_blocks(mir: &mut Mir) {
         }
     }
 }
+
+/*
+pub struct SimplifyLocals;
+
+impl Pass for SimplifyLocals {
+    fn name(&self) -> ::std::borrow::Cow<'static, str> { "SimplifyLocals".into() }
+}
+
+impl MirPass for SimplifyLocals {
+    fn run_pass<'a, 'tcx>(&mut self, _: TyCtxt<'a, 'tcx>, mir: &mut Mir) {
+        let mut marker = DeclMarker { locals: BitVector::new(mir.local_decls.len()) };
+        marker.visit_mir(mir);
+        // Return pointer and arguments are always live
+        marker.locals.insert(0);
+        for idx in mir.args_iter() {
+            marker.locals.insert(idx.index());
+        }
+        let map = make_local_map(&mut mir.local_decls, marker.locals);
+        // Update references to all vars and tmps now
+        LocalUpdater { map: map }.visit_mir(mir);
+        mir.local_decls.shrink_to_fit();
+    }
+}
+
+/// Construct the mapping while swapping out unused stuff out from the `vec`.
+fn make_local_map<'tcx, I: Idx, V>(vec: &mut IndexVec<I, V>, mask: BitVector) -> Vec<usize> {
+    let mut map: Vec<usize> = ::std::iter::repeat(!0).take(vec.len()).collect();
+    let mut used = 0;
+    for alive_index in mask.iter() {
+        map[alive_index] = used;
+        if alive_index != used {
+            vec.swap(alive_index, used);
+        }
+        used += 1;
+    }
+    vec.truncate(used);
+    map
+}
+
+struct DeclMarker {
+    pub locals: BitVector,
+}
+
+impl Visitor for DeclMarker {
+    fn visit_lvalue(&mut self, lval: &Lvalue, ctx: LvalueContext, loc: Location) {
+        if ctx == LvalueContext::StorageLive || ctx == LvalueContext::StorageDead {
+            // ignore these altogether, they get removed along with their otherwise unused decls.
+            return;
+        }
+        if let Lvalue::Local(ref v) = *lval {
+            self.locals.insert(v.index());
+        }
+        self.super_lvalue(lval, ctx, loc);
+    }
+}
+
+struct LocalUpdater {
+    map: Vec<usize>,
+}
+
+impl MutVisitor for LocalUpdater {
+    fn visit_basic_block_data(&mut self, block: BasicBlock, data: &mut BasicBlockData) {
+        // Remove unnecessary StorageLive and StorageDead annotations.
+        data.statements.retain(|stmt| {
+            match stmt.kind {
+                StatementKind::StorageLive(ref lval) | StatementKind::StorageDead(ref lval) => {
+                    match *lval {
+                        Lvalue::Local(l) => self.map[l.index()] != !0,
+                        _ => true
+                    }
+                }
+                _ => true
+            }
+        });
+        self.super_basic_block_data(block, data);
+    }
+    fn visit_lvalue(&mut self, lval: &mut Lvalue, ctx: LvalueContext, loc: Location) {
+        match *lval {
+            Lvalue::Local(ref mut l) => *l = Local::new(self.map[l.index()]),
+            _ => (),
+        };
+        self.super_lvalue(lval, ctx, loc);
+    }
+}
+*/

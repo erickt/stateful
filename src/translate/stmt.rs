@@ -15,7 +15,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 // Rename shadowed variables.
                 let mut stmts = lvalues.iter()
-                    .filter_map(|&local| self.rename_shadowed_local(&ast_builder, local))
+                    .filter_map(|lvalue| {
+                        if let Lvalue::Local(local) = *lvalue {
+                            self.rename_shadowed_local(&ast_builder, local)
+                        } else {
+                            None
+                        }
+                    })
                     .collect::<Vec<_>>();
 
                 stmts.push(

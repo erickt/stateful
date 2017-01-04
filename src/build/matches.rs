@@ -138,6 +138,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         // Initialize all the locals.
+        let mut lvalues = vec![];
         for local in &locals {
             let lvalue = Lvalue::Local(*local);
 
@@ -148,6 +149,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                           });
 
             self.initialize(block, span, &lvalue);
+
+            lvalues.push(lvalue);
         }
 
         let source_info = self.source_info(span);
@@ -156,7 +159,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             kind: StatementKind::Let {
                 pat: irrefutable_pat.clone(),
                 ty: self.ty_indices.get(&irrefutable_pat.id).map(|ty| ty.clone()),
-                lvalues: locals,
+                lvalues: lvalues,
                 rvalue: Rvalue::Use(Operand::Consume(initializer.clone())),
             }
         });

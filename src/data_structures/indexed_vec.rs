@@ -90,18 +90,19 @@ impl<I: Idx, T> IndexVec<I, T> {
     }
 
     #[inline]
-    pub fn into_iter_enumerated(self) -> Enumerated<I, vec::IntoIter<T>> {
+    pub fn into_iter(self) -> vec::IntoIter<T> {
+        self.raw.into_iter()
+    }
+
+    #[inline]
+    pub fn into_iter_enumerated(self) -> Enumerated<I, vec::IntoIter<T>>
+    {
         Enumerated::new(self.raw.into_iter())
     }
 
     #[inline]
     pub fn iter(&self) -> slice::Iter<T> {
         self.raw.iter()
-    }
-
-    #[inline]
-    pub fn iter_mut(&mut self) -> slice::IterMut<T> {
-        self.raw.iter_mut()
     }
 
     #[inline]
@@ -115,6 +116,11 @@ impl<I: Idx, T> IndexVec<I, T> {
     }
 
     #[inline]
+    pub fn iter_mut(&mut self) -> slice::IterMut<T> {
+        self.raw.iter_mut()
+    }
+
+    #[inline]
     pub fn iter_enumerated_mut(&mut self) -> Enumerated<I, slice::IterMut<T>> {
         Enumerated::new(self.raw.iter_mut())
     }
@@ -122,6 +128,21 @@ impl<I: Idx, T> IndexVec<I, T> {
     #[inline]
     pub fn last(&self) -> Option<I> {
         self.len().checked_sub(1).map(I::new)
+    }
+
+    #[inline]
+    pub fn shrink_to_fit(&mut self) {
+        self.raw.shrink_to_fit()
+    }
+
+    #[inline]
+    pub fn swap(&mut self, a: usize, b: usize) {
+        self.raw.swap(a, b)
+    }
+
+    #[inline]
+    pub fn truncate(&mut self, a: usize) {
+        self.raw.truncate(a)
     }
 }
 

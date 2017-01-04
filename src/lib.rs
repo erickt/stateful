@@ -90,7 +90,7 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     let mut passes = transform::Passes::new();
     passes.push_hook(Box::new(transform::dump_mir::DumpMir));
     passes.push_hook(Box::new(transform::validate::Validate));
-    passes.push_pass(Box::new(transform::simplify_cfg::SimplifyCfg::new()));
+    passes.push_pass(Box::new(transform::simplify::SimplifyCfg::new("initial")));
     passes.run_passes(tcx, &mut mir);
 
     let assignments = analysis::analyze_assignments(tcx, &mir);
