@@ -147,8 +147,10 @@ impl<'a> CfgSimplifier<'a> {
             BasicBlockData {
                 ref statements,
                 terminator: ref mut terminator @ Some(Terminator {
-                    kind: TerminatorKind::Goto { .. }, ..
-                }), ..
+                    kind: TerminatorKind::Goto { target: _, phantom_target: None },
+                    ..
+                }),
+                ..
             } if statements.is_empty() => terminator.take(),
             // if `terminator` is None, this means we are in a loop. In that
             // case, let all the loop collapse to its entry.
@@ -156,7 +158,13 @@ impl<'a> CfgSimplifier<'a> {
         };
 
         let target = match terminator {
-            Some(Terminator { kind: TerminatorKind::Goto { ref mut target, .. }, .. }) => {
+            Some(Terminator {
+                kind: TerminatorKind::Goto {
+                    ref mut target,
+                    phantom_target: None,
+                },
+                ..
+            }) => {
                 self.collapse_goto_chain(target, changed);
                 *target
             }
@@ -187,7 +195,7 @@ impl<'a> CfgSimplifier<'a> {
                        -> bool
     {
         let target = match terminator.kind {
-            TerminatorKind::Goto { target, .. }
+            TerminatorKind::Goto { target, phantom_target: None }
                 if self.pred_count[target] == 1
                 => target,
             _ => return false
