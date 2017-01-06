@@ -172,10 +172,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.initialize_decl(*local);
         }
 
-        for local in &conditional.moved_decls {
-            self.schedule_move(span, *local);
-        }
-
         result
     }
 
@@ -593,72 +589,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         span_bug!(self.cx, span, "extent {:?} not in scope to drop {:?}", extent, lvalue);
     }
 
-    pub fn move_lvalue(&mut self, span: Span, lvalue: &Lvalue) {
-        match *lvalue {
-            Lvalue::Local(ref local) => self.schedule_move(span, *local),
-
-            Lvalue::Projection(ref projection) => {
-                self.move_lvalue(span, &projection.base);
-            }
-
-            // statics don't get moved
-            Lvalue::Static(_) => {}
-        }
-    }
-
-    pub fn schedule_move(&mut self, _span: Span, local: Local) {
-        /*
-        if !self.is_initialized(local) {
-            self.cx.span_err(
-                span,
-                &format!("trying to move an uninitialized local {:?}?", local));
-        }
-        */
-
-        for scope in self.scopes.iter_mut().rev() {
-            scope.moved_decls.insert(local);
-
-            if scope.decls.contains(&local) {
-                break;
-            }
-        }
-    }
-
-    /*
-    pub fn get_decls_from_expr(&self, expr: &P<ast::Expr>) -> Vec<Local> {
-        struct Visitor<'a, 'b: 'a> {
-            builder: &'a Builder<'a, 'b>,
-            locals: Vec<Local>,
-        }
-
-        impl<'a, 'b: 'a> visit::Visitor for Visitor<'a, 'b> {
-            fn visit_expr(&mut self, expr: &ast::Expr) {
-                debug!("get_decls_from_expr: {:?}", expr.node);
-
-                if let ast::ExprKind::Path(None, ref path) = expr.node {
-                    if let Some(local) = self.builder.get_local_from_path(path) {
-                        debug!("get_decls_from_expr: decl `{:?}", local);
-                        self.locals.push(local);
-                    }
-                }
-
-                visit::walk_expr(self, expr);
-            }
-
-            fn visit_mac(&mut self, _mac: &ast::Mac) { }
-        }
-
-        let mut visitor = Visitor {
-            builder: self,
-            locals: Vec::new(),
-        };
-
-        visit::Visitor::visit_expr(&mut visitor, expr);
-
-        visitor.locals
-    }
-    */
-
     pub fn get_local_from_path(&self, path: &ast::Path) -> Option<Local> {
         if !path.is_global() && path.segments.len() == 1 {
             let segment = &path.segments[0];
@@ -689,15 +619,3 @@ fn build_scope_drops(cfg: &mut CFG,
 
     block.unit()
 }
-
-/*
-pub struct ConditionalScope<'a, 'b: 'a, 'c: 'b> {
-    builder: &'a mut Builder<'b, 'c>,
-}
-
-impl<'a, 'b: 'a, 'c: 'b> ConditionalScope<'a, 'b, 'c> {
-    fn scope<F>(&mut self, f: F) where F: FnOnce(&mut Builder) -> BasicBlock {
-
-    }
-}
-*/

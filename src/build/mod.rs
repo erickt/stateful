@@ -1,7 +1,7 @@
 use build::scope::ConditionalScope;
 use data_structures::indexed_vec::{Idx, IndexVec};
 use mir::*;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::u32;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -44,9 +44,6 @@ pub struct Builder<'a, 'b: 'a> {
 
     /// cached block with the RETURN terminator
     cached_return_block: Option<BasicBlock>,
-
-    moved_exprs: HashSet<ast::NodeId>,
-    copied_exprs: HashSet<ast::NodeId>,
 }
 
 #[derive(Debug)]
@@ -198,8 +195,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             local_decls: IndexVec::new(),
             extents: IndexVec::new(),
             cached_return_block: None,
-            moved_exprs: HashSet::new(),
-            copied_exprs: HashSet::new(),
         };
 
         assert_eq!(builder.cfg.start_new_block(span, Some("Start")), START_BLOCK);

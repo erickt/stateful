@@ -26,24 +26,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Path(..) => {
                 // Path operands don't need a temporary.
                 let operand = unpack!(block = this.as_lvalue(block, expr));
-
-                // Only move this value if it's not `copied!(...)`.
-                if !this.copied_exprs.contains(&expr.id) {
-                    this.move_lvalue(expr.span, &operand);
-                }
-
                 block.and(Operand::Consume(operand))
             }
 
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
                 let expr = parse_mac(this.cx, mac);
-                this.moved_exprs.insert(expr.id);
                 this.as_operand(block, &expr)
             }
 
             ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
                 let expr = parse_mac(this.cx, mac);
-                this.copied_exprs.insert(expr.id);
                 this.as_operand(block, &expr)
             }
 
@@ -66,7 +58,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Category::Lvalue |
                     Category::Rvalue(..) => {
                         let operand = unpack!(block = this.as_temp(block, expr));
-                        this.move_lvalue(expr.span, &operand);
                         block.and(Operand::Consume(operand))
                     }
                 }

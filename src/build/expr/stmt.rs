@@ -67,13 +67,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
                 let expr = parse_mac(this.cx, mac);
-                this.moved_exprs.insert(expr.id);
                 this.stmt_expr(block, &expr)
             }
 
             ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
                 let expr = parse_mac(this.cx, mac);
-                this.copied_exprs.insert(expr.id);
                 this.stmt_expr(block, &expr)
             }
 
