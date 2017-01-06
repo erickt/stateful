@@ -175,22 +175,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             targets: (then_block, else_block),
         });
 
-        self.in_conditional_scope(span, |this| {
-            this.next_conditional_scope(span);
+        then_block = unpack!(self.ast_block(destination.clone(), then_block, then_expr));
 
-            then_block = unpack!(this.ast_block(destination.clone(), then_block, then_expr));
-
-            this.next_conditional_scope(span);
-
-            else_block = if let Some(ref else_expr) = *else_expr {
-                unpack!(this.into(destination, else_block, else_expr))
-            } else {
-                // Body of the `if` expression without an `else` clause must return `()`, thus
-                // we implicitly generate a `else {}` if it is not specified.
-                this.push_assign_unit(span, else_block, &destination);
-                else_block
-            };
-        });
+        else_block = if let Some(ref else_expr) = *else_expr {
+            unpack!(self.into(destination, else_block, else_expr))
+        } else {
+            // Body of the `if` expression without an `else` clause must return `()`, thus
+            // we implicitly generate a `else {}` if it is not specified.
+            self.push_assign_unit(span, else_block, &destination);
+            else_block
+        };
 
         let join_block = self.cfg.start_new_block(span, Some("IfJoin"));
 

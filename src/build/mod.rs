@@ -1,4 +1,3 @@
-use build::scope::ConditionalScope;
 use data_structures::indexed_vec::{Idx, IndexVec};
 use mir::*;
 use std::collections::HashMap;
@@ -29,7 +28,6 @@ pub struct Builder<'a, 'b: 'a> {
     /// the current set of loops; see the `scope` module for more
     /// details
     loop_scopes: Vec<scope::LoopScope>,
-    conditional_scopes: HashMap<ScopeId, ConditionalScope>,
 
     /// the vector of all scopes that we have created thus far;
     /// we track this for debuginfo later
@@ -189,7 +187,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             visibility_scopes: IndexVec::new(),
             visibility_scope: ARGUMENT_VISIBILITY_SCOPE,
             loop_scopes: vec![],
-            conditional_scopes: HashMap::new(),
             var_indices: HashMap::new(),
             ty_indices: HashMap::new(),
             local_decls: IndexVec::new(),
@@ -251,12 +248,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 &Some(arg.ty.clone()));
 
             {
-                let pat_locals = self.locals_from_pat(&arg.pat);
-
-                // Mark all the locals initialized.
-                for local in &pat_locals {
-                    self.initialize(block, arg.pat.span, &Lvalue::Local(*local));
-                }
+                self.locals_from_pat(&arg.pat);
             }
         }
 

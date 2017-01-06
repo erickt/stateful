@@ -57,33 +57,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut arm_bodies = vec![];
 
         let outer_source_info = self.source_info(span);
-        self.in_conditional_scope(span, |this| {
-            for (arm, target) in arms.iter().zip(targets) {
-                this.next_conditional_scope(arm.body.span);
 
-                let extent = this.start_new_extent();
-                let body = unpack!(this.in_scope(extent, span, target.block, |this| {
-                    let scope = this.declare_bindings(
-                        None,
-                        arm.body.span,
-                        &arm.pats[0],
-                        &None);
+        for (arm, target) in arms.iter().zip(targets) {
+            let extent = self.start_new_extent();
+            let body = unpack!(self.in_scope(extent, span, target.block, |this| {
+                let scope = this.declare_bindings(
+                    None,
+                    arm.body.span,
+                    &arm.pats[0],
+                    &None);
 
-                    let pat_locals = this.locals_from_pat(&arm.pats[0]);
+                let pat_locals = this.locals_from_pat(&arm.pats[0]);
 
-                    for local in &pat_locals {
-                        this.initialize(block, arm.pats[0].span, &Lvalue::Local(*local));
-                    }
+                // Re-enter the visibility scope we created the bindings in.
+                this.visibility_scope = scope.unwrap_or(this.visibility_scope);
 
-                    // Re-enter the visibility scope we created the bindings in.
-                    this.visibility_scope = scope.unwrap_or(this.visibility_scope);
+                this.into(destination.clone(), target.block, &arm.body)
+            }));
 
-                    this.into(destination.clone(), target.block, &arm.body)
-                }));
-
-                arm_bodies.push(body);
-            }
-        });
+            arm_bodies.push(body);
+        }
 
         // all the arm blocks will rejoin here
         let end_block = self.cfg.start_new_block(span, Some("MatchEnd"));
@@ -147,8 +140,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                               source_info: source_info,
                               kind: StatementKind::StorageLive(lvalue.clone()),
                           });
-
-            self.initialize(block, span, &lvalue);
 
             lvalues.push(lvalue);
         }

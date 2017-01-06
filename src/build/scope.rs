@@ -42,12 +42,6 @@ pub struct Scope {
     /// building process. This is a stack, so we always drop from the
     /// end of the vector (top of the stack) first.
     drops: BTreeSet<Local>,
-
-    moved_decls: HashSet<Local>,
-
-    /// Any conditionally initialized variables from this or other scopes that were modified in
-    /// this scope.
-    conditionals: Vec<ConditionalScope>,
 }
 
 impl Scope {
@@ -56,21 +50,6 @@ impl Scope {
         SourceInfo {
             span: span,
             scope: self.visibility_scope
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct ConditionalScope {
-    initialized_decls: HashSet<Local>,
-    moved_decls: HashSet<Local>,
-}
-
-impl ConditionalScope {
-    fn new() -> Self {
-        ConditionalScope {
-            initialized_decls: HashSet::new(),
-            moved_decls: HashSet::new(),
         }
     }
 }
@@ -116,73 +95,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         loop_scope.might_break
     }
 
-    /// Start a loop scope, which tracks where `continue` and `break`
-    /// should branch to. See module comment for more details.
-    pub fn in_conditional_scope<F, T>(&mut self, span: Span, f: F) -> T
-        where F: FnOnce(&mut Builder) -> T
-    {
-        debug!("in_conditional_scope");
-
-        let scope_id = self.scopes.last().unwrap().id;
-
-        let result = f(self);
-
-        let conditionals = {
-            // First, make sure we've got the same scope we started with.
-            let scope = self.scopes.last_mut().unwrap();
-
-            if scope_id != scope.id {
-                span_bug!(self.cx, span, "expected scope {:?}, not scope {:?}", scope_id, scope.id);
-            }
-
-            // Next, grab all the conditionals that were just created.
-            mem::replace(&mut scope.conditionals, vec![])
-        };
-
-        let mut iter = conditionals.iter();
-
-        // We need to make sure all the conditional scopes initialized the same variables. We'll
-        // do this by grabbing the first one and then checking the rest initialized the same
-        // things.
-        let conditional = match iter.next() {
-            Some(conditional) => conditional,
-            None => {
-                span_bug!(self.cx, span, "there should have been conditionals");
-            }
-        };
-
-        for c in iter {
-            if conditional.initialized_decls != c.initialized_decls {
-                span_err!(self.cx, span,
-                          "some variables not conditionally initialized? {:#?} != {:#?}",
-                          conditional.initialized_decls,
-                          c.initialized_decls);
-            }
-
-            if conditional.moved_decls != c.moved_decls {
-                span_err!(self.cx, span,
-                          "some variables not conditionally moved? {:#?} != {:#?}",
-                          conditional.moved_decls,
-                          c.moved_decls);
-            }
-        }
-
-        // Finally, push down the conditionally initialized and moved variables.
-        for local in &conditional.initialized_decls {
-            self.initialize_decl(*local);
-        }
-
-        result
-    }
-
-    pub fn next_conditional_scope(&mut self, span: Span) {
-        if let Some(scope) = self.scopes.last_mut() {
-            scope.conditionals.push(ConditionalScope::new());
-        } else {
-            span_bug!(self.cx, span, "scope is not currently conditional?");
-        }
-    }
-
     /// Convenience wrapper that pushes a scope and then executes `f`
     /// to build its contents, popping the scope afterwards.
     pub fn in_scope<F, R>(&mut self,
@@ -219,9 +131,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             extent: extent,
             decls: HashSet::new(),
             initialized_decls: HashSet::new(),
-            moved_decls: HashSet::new(),
             drops: BTreeSet::new(),
-            conditionals: vec![],
         });
 
         self.scope_auxiliary.push(ScopeAuxiliary {
@@ -241,7 +151,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("pop_scope: extent={:?} block={:?} scope={:#?}", extent, block, scope);
 
         assert_eq!(scope.extent, extent);
-        assert!(scope.conditionals.is_empty());
 
         // add in any drops needed on the fallthrough path (any other
         // exiting paths, such as those that arise from `break`, will
@@ -402,25 +311,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes[1].extent
     }
 
-    /// Mark the lvalue initialized. This assumes that the lvalue has been previously declared.
-    pub fn initialize(&mut self,
-                      block: BasicBlock,
-                      span: Span,
-                      lvalue: &Lvalue) {
-        debug!("initialize: block={:?} lvalue={:?}", block, lvalue);
-
-        match *lvalue {
-            Lvalue::Local(local) => {
-                if !self.is_initialized(local) {
-                    self.initialize_decl(local);
-                }
-            }
-            _ => {
-                span_bug!(self.cx, span, "cannot initialize yet: {:?}", lvalue);
-            }
-        }
-    }
-
     pub fn push_assign(&mut self,
                        block: BasicBlock,
                        span: Span,
@@ -451,76 +341,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.push_assign(block, span, lvalue, rvalue)
     }
 
-    /// Walk up the scopes to discover if this variable has been initialized.
-    fn is_initialized(&mut self, var: Local) -> bool {
-        for scope in self.scopes.iter_mut().rev() {
-            debug!("is_initialized: scope={:?}", scope.id);
-
-            // Don't consider a variable initialized if the `scope` is currently conditional.
-            if scope.initialized_decls.contains(&var) {
-                if self.conditional_scopes.contains_key(&scope.id) {
-                    debug!("is_initialized: scope is conditional: {:?}", scope.id);
-                    return false;
-                } else {
-                    debug!("is_initialized: var {:?} already initialized", var);
-                    return true;
-                }
-            }
-
-            if scope.decls.contains(&var) {
-                //debug!("is_initialized: found scope at {:?}", scope.id);
-                return false;
-            }
-        }
-
-        span_warn!(self.cx, self.local_decls[var].source_info.span,
-                   "var {:?} not in any scope?", var);
-
-        true
-    }
-
-    /// Mark a variable initialized.
-    fn initialize_decl(&mut self, var: Local) {
-        let ident = self.local_decls[var].name;
-        debug!("initialize_decl: scope={:?} var={:?} ident={:?}", self.scopes.last().unwrap().id, var, ident);
-        
-        for scope in self.scopes.iter_mut().rev() {
-            // If the scope is conditional, buffer it there instead of pushing it up the scope.
-            if let Some(conditional) = scope.conditionals.last_mut() {
-                debug!("initialize_decl: found conditional scope at {:?}", scope.id);
-
-                conditional.initialized_decls.insert(var);
-
-                return;
-
-            // Otherwise initialize it in the stack that created the variable.
-            } else if scope.decls.contains(&var) {
-                debug!("initialize_decl: found scope at {:?}", scope.id);
-
-                scope.initialized_decls.insert(var);
-
-                return;
-            }
-        }
-
-        self.cx.span_bug(self.local_decls[var].source_info.span,
-                         &format!("var {:?} not in scope to initialize", var));
-    }
 
     pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {
         debug!("find_local: {:?} scopes={:#?}", ident, self.scopes); 
 
         for scope in self.scopes.iter().rev() {
-            // Check first if the lvalue has been conditionally initialized.
-            if let Some(conditional) = scope.conditionals.last() {
-                for var in &conditional.initialized_decls {
-                    if ident == self.local_decls[*var].name {
-                        return Some(*var);
-                    }
-                }
-            }
-
-            // If not, check if we are shadowing another variable.
             for var in scope.drops.iter().rev() {
                 if ident == self.local_decls[*var].name {
                     return Some(*var);
