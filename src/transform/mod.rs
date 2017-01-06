@@ -95,3 +95,25 @@ impl Passes {
         self.pass_hooks.push(hook);
     }
 }
+
+/// A pass that does nothing.
+pub struct NopPass<'a> { label: &'a str }
+
+impl<'a> NopPass<'a> {
+    pub fn new(label: &'a str) -> Self {
+        NopPass { label: label }
+    }
+}
+
+impl<'l> MirPass for NopPass<'l> {
+    fn run_pass<'a, 'tcx>(&mut self, _tcx: TyCtxt<'a, 'tcx>, _mir: &mut Mir) { }
+}
+
+impl<'l> Pass for NopPass<'l> {
+    fn disambiguator<'a>(&'a self) -> Option<Box<fmt::Display+'a>> {
+        Some(Box::new(self.label))
+    }
+
+    // avoid calling `type_name` - it contains `<'static>`
+    fn name(&self) -> Cow<'static, str> { "NopPass".into() }
+}
