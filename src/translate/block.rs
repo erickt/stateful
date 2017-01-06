@@ -215,21 +215,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build_else(else_block),
                 ]
             }
-            TerminatorKind::Match { ref discr, ref targets } => {
+            TerminatorKind::Match { ref discr, ref arms } => {
                 let discr = discr.to_expr(&self.mir.local_decls);
 
-                let arms = targets.iter()
-                    .map(|target| {
-                        let ast_builder = ast_builder.span(self.block_span(target.block));
+                let arms = arms.iter()
+                    .map(|arm| {
+                        let ast_builder = ast_builder.span(self.block_span(arm.block));
 
                         let block = ast_builder.block()
                             .span(self.mir.span)
-                            .with_stmts(self.goto(span, target.block))
+                            .with_stmts(self.goto(span, arm.block))
                             .build();
 
                         ast_builder.arm()
-                            .with_pats(target.pats.iter().cloned())
-                            .with_guard(target.guard.clone())
+                            .with_pats(arm.pats.iter().cloned())
+                            .with_guard(arm.guard.clone())
                             .body().build_block(block)
                     });
 

@@ -507,9 +507,16 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.gather_move(loc, &Lvalue::Local(RETURN_POINTER));
             }
 
-            TerminatorKind::If { .. } |
-            TerminatorKind::Match { .. } => {
+            TerminatorKind::If { .. } => {
                 // branching terminators - these don't move anything
+            }
+
+            TerminatorKind::Match { ref arms, .. } => {
+                for arm in arms {
+                    for lvalue in &arm.lvalues {
+                        self.create_move_path(lvalue);
+                    }
+                }
             }
 
             TerminatorKind::Suspend { destination: (ref destination, _), ref rvalue } => {

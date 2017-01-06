@@ -456,9 +456,9 @@ impl<'a, D> DataflowAnalysis<'a, D>
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.0);
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.1);
             }
-            mir::TerminatorKind::Match { ref targets, .. } => {
-                for target in targets {
-                    self.propagate_bits_into_entry_set_for(in_out, changed, &target.block);
+            mir::TerminatorKind::Match { ref arms, .. } => {
+                for arm in arms {
+                    self.propagate_bits_into_entry_set_for(in_out, changed, &arm.block);
                 }
             }
             mir::TerminatorKind::Suspend {

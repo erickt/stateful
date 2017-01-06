@@ -411,7 +411,7 @@ pub enum TerminatorKind {
     /// lvalue evaluates to some enum; jump depending on the branch
     Match {
         discr: Operand,
-        targets: Vec<Arm>,
+        arms: Vec<Arm>,
     },
 
     /// Indicates a normal return. The ReturnPointer lvalue should
@@ -476,8 +476,8 @@ impl TerminatorKind {
             TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
             }
-            TerminatorKind::Match { ref targets, .. } => {
-                targets.iter().map(|arm| arm.block).collect()
+            TerminatorKind::Match { ref arms, .. } => {
+                arms.iter().map(|arm| arm.block).collect()
             }
             TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
             TerminatorKind::Return => vec![],
@@ -496,8 +496,8 @@ impl TerminatorKind {
             TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
             }
-            TerminatorKind::Match { ref mut targets, .. } => {
-                targets.iter_mut().map(|arm| &mut arm.block).collect()
+            TerminatorKind::Match { ref mut arms, .. } => {
+                arms.iter_mut().map(|arm| &mut arm.block).collect()
             }
             TerminatorKind::If { targets: (ref mut then, ref mut else_), .. } => {
                 vec![then, else_]
@@ -535,8 +535,8 @@ impl TerminatorKind {
                 labels
             }
             If { .. } => vec!["true".into(), "false".into()],
-            Match { ref targets, .. } => {
-                targets.iter()
+            Match { ref arms, .. } => {
+                arms.iter()
                     .map(|arm| {
                         let pats = arm.pats.iter()
                             .map(|pat| pprust::pat_to_string(pat))
@@ -554,6 +554,7 @@ impl TerminatorKind {
 pub struct Arm {
     pub pats: Vec<P<ast::Pat>>,
     pub guard: Option<P<ast::Expr>>,
+    pub lvalues: Vec<Lvalue>,
     pub block: BasicBlock,
 }
 

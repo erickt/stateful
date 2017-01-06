@@ -39,53 +39,46 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let discriminant_lvalue = unpack!(block = self.as_operand(block, &discriminant));
 
-        let targets = arms.iter()
-            .map(|arm| {
-                Arm {
-                    pats: arm.pats.clone(),
-                    guard: arm.guard.clone(),
-                    block: self.cfg.start_new_block(span, Some("Arm")),
-                }
-            })
+        let mut arm_blocks = arms.iter()
+            .map(|_| self.cfg.start_new_block(span, Some("Arm")))
             .collect::<Vec<_>>();
 
-        self.terminate(span, block, TerminatorKind::Match {
-            discr: discriminant_lvalue,
-            targets: targets.clone(),
-        });
+        // Get the arm bodies and their scopes, while declaring bindings.
+        let arm_bodies: Vec<_> = arms.iter().map(|arm| {
+            let scope = self.declare_bindings(None, arm.body.span, &arm.pats[0], &None);
+            (arm, scope.unwrap_or(self.visibility_scope))
+        }).collect();
 
-        let mut arm_bodies = vec![];
+        let arms = arms.iter().zip(&arm_blocks).map(|(arm, arm_block)| {
+            let lvalues = self.locals_from_pat(&arm.pats[0]).into_iter()
+                .map(Lvalue::Local)
+                .collect();
 
-        let outer_source_info = self.source_info(span);
-
-        for (arm, target) in arms.iter().zip(targets) {
-            let extent = self.start_new_extent();
-            let body = unpack!(self.in_scope(extent, span, target.block, |this| {
-                let scope = this.declare_bindings(
-                    None,
-                    arm.body.span,
-                    &arm.pats[0],
-                    &None);
-
-                let pat_locals = this.locals_from_pat(&arm.pats[0]);
-
-                // Re-enter the visibility scope we created the bindings in.
-                this.visibility_scope = scope.unwrap_or(this.visibility_scope);
-
-                this.into(destination.clone(), target.block, &arm.body)
-            }));
-
-            arm_bodies.push(body);
-        }
+            Arm {
+                pats: arm.pats.clone(),
+                guard: arm.guard.clone(),
+                lvalues: lvalues,
+                block: block,
+            }
+        }).collect();
 
         // all the arm blocks will rejoin here
         let end_block = self.cfg.start_new_block(span, Some("MatchEnd"));
 
-        for body in arm_bodies {
-            self.terminate(span, body, TerminatorKind::Goto {
-                target: end_block,
-                phantom_target: None,
-            });
+        let outer_source_info = self.source_info(span);
+
+        self.cfg.terminate(block, outer_source_info, TerminatorKind::Match {
+            discr: discriminant_lvalue,
+            arms: arms,
+        });
+
+        for (arm_index, (arm, visibility_scope)) in arm_bodies.into_iter().enumerate() {
+            let mut arm_block = arm_blocks[arm_index];
+            // Re-enter the visibility scope we created the bindings in.
+            self.visibility_scope = visibility_scope;
+            unpack!(arm_block = self.into(destination.clone(), arm_block, &arm.body));
+            self.cfg.terminate(arm_block, outer_source_info,
+                               TerminatorKind::Goto { target: end_block, phantom_target: None });
         }
         self.visibility_scope = outer_source_info.scope;
 
