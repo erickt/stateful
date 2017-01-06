@@ -155,4 +155,49 @@ impl<T: Idx> IdxSet<T> {
     pub fn subtract(&mut self, other: &IdxSet<T>) -> bool {
         bitwise(self.words_mut(), other.words(), &Subtract)
     }
+
+    /// Iterates over indexes of set bits in a sorted order
+    pub fn iter<'a>(&'a self) -> Iter<'a, T> {
+        Iter {
+            iter: self.bits.iter(),
+            current: 0,
+            idx: 0,
+            _pd: PhantomData,
+        }
+    }
+}
+
+pub struct Iter<'a, T: Idx> {
+    iter: ::std::slice::Iter<'a, usize>,
+    current: usize,
+    idx: usize,
+    _pd: PhantomData<fn(&T)>,
+}
+
+impl<'a, T: Idx> Iterator for Iter<'a, T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        while self.current == 0 {
+            self.current = if let Some(&i) = self.iter.next() {
+                if i == 0 {
+                    self.idx += mem::size_of::<usize>();
+                    continue;
+                } else {
+                    self.idx = usizes(self.idx) * mem::size_of::<usize>();
+                    i
+                }
+            } else {
+                return None;
+            }
+        }
+        let offset = self.current.trailing_zeros() as usize;
+        self.current >>= offset;
+        self.current >>= 1; // shift otherwise overflows for 0b1000_0000_…_0000
+        self.idx += offset + 1;
+        return Some(Idx::new(self.idx - 1));
+    }
+}
+
+fn usizes(elements: usize) -> usize {
+    (elements + mem::size_of::<usize>() - 1) / mem::size_of::<usize>()
 }
