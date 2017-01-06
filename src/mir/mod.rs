@@ -726,6 +726,7 @@ pub struct VisibilityScopeData {
 #[derive(Clone, PartialEq)]
 pub enum Operand {
     Consume(Lvalue),
+    Copy(Lvalue),
     Constant(Constant),
 }
 
@@ -733,6 +734,7 @@ impl ToExpr for Operand {
     fn to_expr(&self, local_decls: &IndexVec<Local, LocalDecl>) -> P<ast::Expr> {
         match *self {
             Operand::Consume(ref lvalue) => lvalue.to_expr(local_decls),
+            Operand::Copy(ref lvalue) => lvalue.to_expr(local_decls),
             Operand::Constant(ref constant) => constant.to_expr(local_decls),
         }
     }
@@ -743,6 +745,7 @@ impl Debug for Operand {
         use self::Operand::*;
         match *self {
             Constant(ref a) => write!(fmt, "{:?}", a),
+            Copy(ref a) => write!(fmt, "{:?}", a),
             Consume(ref lv) => write!(fmt, "{:?}", lv),
         }
     }

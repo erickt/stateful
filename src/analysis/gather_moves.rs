@@ -522,6 +522,7 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
     fn gather_operand(&mut self, loc: Location, operand: &Operand) {
         match *operand {
             Operand::Constant(..) => {} // not-a-move
+            Operand::Copy(..) => {} // not-a-move
             Operand::Consume(ref lval) => { // a move
                 self.gather_move(loc, lval);
             }

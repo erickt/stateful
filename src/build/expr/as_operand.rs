@@ -26,27 +26,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Path(..) => {
                 // Path operands don't need a temporary.
                 let operand = unpack!(block = this.as_lvalue(block, expr));
-                block.and(Operand::Consume(operand))
+                block.and(Operand::Copy(operand))
             }
 
+            // NOTE(stateful): As opposed to MIR, we treat all operands as copy by default, since
+            // the semantics and error messages are a bit more straightforward. So if we actually
+            // want to move a value, we need to wrap it in a `moved!(...)` to make this value get
+            // consumed.
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
                 let expr = parse_mac(this.cx, mac);
-                this.as_operand(block, &expr)
+
+                let category = Category::of(&expr.node).unwrap();
+                debug!("expr_as_operand: category={:?} for={:?}", category, expr.node);
+                match category {
+                    Category::Constant => {
+                        let constant = this.as_constant(&expr);
+                        block.and(Operand::Constant(constant))
+                    }
+                    Category::Lvalue |
+                    Category::Rvalue(..) => {
+                        let operand = unpack!(block = this.as_temp(block, &expr));
+                        block.and(Operand::Consume(operand))
+                    }
+                }
             }
 
-            ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
-                let expr = parse_mac(this.cx, mac);
-                this.as_operand(block, &expr)
-            }
-
-            /*
-            ExprKind::AddrOf(..) => {
-                // `&x` operands don't need a temporary.
-                let operand = unpack!(block = this.as_lvalue(block, expr));
-                this.move_lvalue(expr.span, &operand);
-                block.and(Operand::Consume(operand))
-            }
-            */
             _ => {
                 let category = Category::of(&expr.node).unwrap();
                 debug!("expr_as_operand: category={:?} for={:?}", category, expr.node);
@@ -58,7 +62,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Category::Lvalue |
                     Category::Rvalue(..) => {
                         let operand = unpack!(block = this.as_temp(block, expr));
-                        block.and(Operand::Consume(operand))
+                        block.and(Operand::Copy(operand))
                     }
                 }
             }
