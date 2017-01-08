@@ -8,12 +8,24 @@
 #![allow(unused_variables)]
 
 use std::iter::Iterator;
+use std::mem;
 
 #[generator]
 fn gen() -> Box<Iterator<Item = usize>> {
-    loop {
-        break;
+    let items: Vec<usize> = vec![1, 2, 3];
+    /*
+    let mut iter = moved!(items).into_iter();
+
+    if true {
+        //iter.next();
+    } else {
+        //iter.next();
     }
+
+    while let Some(item) = iter.next() {
+        println!("hello {:?}", item);
+    }
+    */
 }
 
 fn main() {

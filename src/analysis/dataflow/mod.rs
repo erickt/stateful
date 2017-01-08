@@ -23,7 +23,7 @@ use std::usize;
 use super::MirBorrowckCtxtPreDataflow;
 use super::MoveDataParamEnv;
 
-pub use self::impls::{DefinitelyInitializedLvals};
+pub use self::impls::{MaybeInitializedLvals, DefinitelyInitializedLvals};
 
 mod graphviz;
 mod impls;
@@ -73,15 +73,56 @@ impl<'a, BD> DataflowAnalysis<'a, BD>
         // directly to gen-sets here). But we still need to figure out
         // the kill-sets.
 
+        println!("===================");
+
         {
             let sets = &mut self.flow_state.sets.for_block(mir::START_BLOCK.index());
+
+            println!("build_sets.on_entry1: {:?} {:?}",
+                     mir::START_BLOCK,
+                     sets.on_entry.iter().collect::<Vec<_>>());
+
+            println!("build_sets.gen1:      {:?} {:?}",
+                     mir::START_BLOCK,
+                     sets.gen_set.iter().collect::<Vec<_>>());
+
+            println!("build_sets.kill1:     {:?} {:?}",
+                     mir::START_BLOCK,
+                     sets.kill_set.iter().collect::<Vec<_>>());
+
             self.flow_state.operator.start_block_effect(&self.ctxt, sets);
+
+            println!("build_sets.on_entry2: {:?} {:?}",
+                     mir::START_BLOCK,
+                     sets.on_entry.iter().collect::<Vec<_>>());
+
+            println!("build_sets.gen2:      {:?} {:?}",
+                     mir::START_BLOCK,
+                     sets.gen_set.iter().collect::<Vec<_>>());
+
+            println!("build_sets.kill2:     {:?} {:?}",
+                     mir::START_BLOCK,
+                     sets.kill_set.iter().collect::<Vec<_>>());
+            println!();
         }
 
         for (bb, data) in self.mir.basic_blocks().iter_enumerated() {
             let &mir::BasicBlockData { ref statements, ref terminator, .. } = data;
 
             let sets = &mut self.flow_state.sets.for_block(bb.index());
+
+            println!("build_sets.on_entry3: {:?} {:?}",
+                     bb,
+                     sets.on_entry.iter().collect::<Vec<_>>());
+
+            println!("build_sets.gen3:      {:?} {:?}",
+                     bb,
+                     sets.gen_set.iter().collect::<Vec<_>>());
+
+            println!("build_sets.kill3:     {:?} {:?}",
+                     bb,
+                     sets.kill_set.iter().collect::<Vec<_>>());
+
             for j_stmt in 0..statements.len() {
                 self.flow_state.operator.statement_effect(&self.ctxt, sets, bb, j_stmt);
             }
@@ -90,6 +131,19 @@ impl<'a, BD> DataflowAnalysis<'a, BD>
                 let stmts_len = statements.len();
                 self.flow_state.operator.terminator_effect(&self.ctxt, sets, bb, stmts_len);
             }
+
+            println!("build_sets.on_entry4: {:?} {:?}",
+                     bb,
+                     sets.on_entry.iter().collect::<Vec<_>>());
+
+            println!("build_sets.gen4:      {:?} {:?}",
+                     bb,
+                     sets.gen_set.iter().collect::<Vec<_>>());
+
+            println!("build_sets.kill4:     {:?} {:?}",
+                     bb,
+                     sets.kill_set.iter().collect::<Vec<_>>());
+            println!();
         }
     }
 }
@@ -110,14 +164,43 @@ impl<'b, 'a: 'b, BD> PropagationContext<'b, 'a, BD>
             let builder = &mut self.builder;
             {
                 let sets = builder.flow_state.sets.for_block(bb_idx);
+
+                println!("walk_cfg.on_entry1: {:?} {:?}",
+                         bb_idx,
+                         sets.on_entry.iter().collect::<Vec<_>>());
+
+                println!("walk_cfg.gen1:      {:?} {:?}",
+                         bb_idx,
+                         sets.gen_set.iter().collect::<Vec<_>>());
+
+                println!("walk_cfg.kill1:     {:?} {:?}",
+                         bb_idx,
+                         sets.kill_set.iter().collect::<Vec<_>>());
+
                 debug_assert!(in_out.words().len() == sets.on_entry.words().len());
                 in_out.clone_from(sets.on_entry);
                 in_out.union(sets.gen_set);
                 in_out.subtract(sets.kill_set);
+                println!("walk_cfg.on_entry2: {:?} {:?}",
+                         bb_idx,
+                         sets.on_entry.iter().collect::<Vec<_>>());
+
+                println!("walk_cfg.gen2:      {:?} {:?}",
+                         bb_idx,
+                         sets.gen_set.iter().collect::<Vec<_>>());
+
+                println!("walk_cfg.kill2:     {:?} {:?}",
+                         bb_idx,
+                         sets.kill_set.iter().collect::<Vec<_>>());
             }
             builder.propagate_bits_into_graph_successors_of(
                 in_out, &mut self.changed, (mir::BasicBlock::new(bb_idx), bb_data));
+            println!("changed: {:?}", self.changed);
+            println!("");
         }
+
+        println!("walk_cfg: {:?}", in_out);
+        println!("-------");
     }
 }
 
@@ -444,8 +527,11 @@ impl<'a, D> DataflowAnalysis<'a, D>
         (bb, bb_data): (mir::BasicBlock, &mir::BasicBlockData))
     {
         match bb_data.terminator().kind {
-            mir::TerminatorKind::Return => {}
+            mir::TerminatorKind::Return => {
+                debug!("propgate_bits: return");
+            }
             mir::TerminatorKind::Goto { ref target, ref phantom_target } => {
+                debug!("propgate_bits: goto {:?}", target);
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
 
                 if let Some(ref phantom_target) = *phantom_target {
@@ -453,10 +539,12 @@ impl<'a, D> DataflowAnalysis<'a, D>
                 }
             }
             mir::TerminatorKind::If { ref targets, .. } => {
+                debug!("propgate_bits: if {:?}", targets);
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.0);
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.1);
             }
             mir::TerminatorKind::Match { ref arms, .. } => {
+                debug!("propgate_bits: match {:?}", arms);
                 for arm in arms {
                     self.propagate_bits_into_entry_set_for(in_out, changed, &arm.block);
                 }
@@ -465,6 +553,7 @@ impl<'a, D> DataflowAnalysis<'a, D>
                 ref destination,
                 rvalue: _,
             } => {
+                debug!("propgate_bits: suspend {:?}", destination);
                 let (ref dest_lval, ref dest_bb) = *destination;
                 // N.B.: This must be done *last*, after all other
                 // propagation, as documented in comment above.

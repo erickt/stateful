@@ -64,6 +64,7 @@ fn test_empty_if() {
     assert_eq!(gen.next(), None);
 }
 
+/*
 #[test]
 fn test_empty_if_let() {
     #[generator]
@@ -76,6 +77,7 @@ fn test_empty_if_let() {
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
+*/
 
 #[test]
 fn test_empty_loop() {
@@ -101,7 +103,6 @@ fn test_empty_while() {
     assert_eq!(gen.next(), None);
 }
 
-/*
 #[test]
 fn test_empty_while_let() {
     #[generator]
@@ -114,8 +115,8 @@ fn test_empty_while_let() {
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
-*/
 
+/*
 #[test]
 fn test_empty_for() {
     #[generator]
@@ -127,6 +128,7 @@ fn test_empty_for() {
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
+*/
 
 #[should_panic]
 #[test]
@@ -140,7 +142,7 @@ fn test_empty_with_macro() {
     assert_eq!(gen.next(), None);
 }
 
-
+/*
 #[test]
 fn test_ints() {
     #[generator]
@@ -161,7 +163,6 @@ fn test_ints() {
     assert_eq!(gen.next(), None);
 }
 
-/*
 #[test]
 fn test_item_slice() {
     #[generator]
@@ -268,7 +269,6 @@ fn test_yield_expr() {
     assert_eq!(gen.next(), Some(3));
     assert_eq!(gen.next(), None);
 }
-*/
 
 #[test]
 fn test_yield_in_assign() {
@@ -282,7 +282,6 @@ fn test_yield_in_assign() {
     assert_eq!(gen.next(), None);
 }
 
-/*
 #[test]
 fn test_shadowing() {
     #[generator]

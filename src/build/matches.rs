@@ -39,7 +39,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let discriminant_lvalue = unpack!(block = self.as_operand(block, &discriminant));
 
-        let mut arm_blocks = arms.iter()
+        let arm_blocks = arms.iter()
             .map(|_| self.cfg.start_new_block(span, Some("Arm")))
             .collect::<Vec<_>>();
 
@@ -58,7 +58,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 pats: arm.pats.clone(),
                 guard: arm.guard.clone(),
                 lvalues: lvalues,
-                block: block,
+                block: *arm_block,
             }
         }).collect();
 

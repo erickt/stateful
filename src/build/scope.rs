@@ -17,7 +17,6 @@ use build::{BlockAnd, BlockAndExtension, Builder, CFG, ScopeAuxiliary, ScopeId};
 use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::{BTreeSet, HashSet};
-use std::mem;
 use syntax::ast;
 use syntax::codemap::Span;
 
@@ -250,6 +249,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         {
             for scope_index in (len - scope_count + 1 .. len).rev() {
+                /*
                 block = {
                     let b = self.cfg.start_new_block(span, Some("Drop"));
                     self.terminate(span, block, TerminatorKind::Goto {
@@ -258,6 +258,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     });
                     b
                 };
+                */
 
                 let scope = &self.scopes[scope_index];
                 debug!("exit_scope: dropping: block={:?} scope={:#?}", block, scope);
