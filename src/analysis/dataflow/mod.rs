@@ -545,8 +545,20 @@ impl<'a, D> DataflowAnalysis<'a, D>
             }
             mir::TerminatorKind::Match { ref arms, .. } => {
                 debug!("propgate_bits: match {:?}", arms);
+                /*
                 for arm in arms {
                     self.propagate_bits_into_entry_set_for(in_out, changed, &arm.block);
+                }
+                */
+
+                for arm in arms {
+                    // N.B.: This must be done *last*, after all other
+                    // propagation, as documented in comment above.
+                    for lvalue in &arm.lvalues {
+                        self.flow_state.operator.propagate_call_return(
+                            &self.ctxt, in_out, bb, arm.block, lvalue);
+                        self.propagate_bits_into_entry_set_for(in_out, changed, &arm.block);
+                    }
                 }
             }
             mir::TerminatorKind::Suspend {

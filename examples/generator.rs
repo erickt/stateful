@@ -13,19 +13,11 @@ use std::mem;
 #[generator]
 fn gen() -> Box<Iterator<Item = usize>> {
     let items: Vec<usize> = vec![1, 2, 3];
-    /*
     let mut iter = moved!(items).into_iter();
-
-    if true {
-        //iter.next();
-    } else {
-        //iter.next();
-    }
 
     while let Some(item) = iter.next() {
         println!("hello {:?}", item);
     }
-    */
 }
 
 fn main() {

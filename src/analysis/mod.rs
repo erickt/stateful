@@ -40,6 +40,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         })
         .collect::<Vec<_>>();
 
+        /*
     // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
     // the blocks for which it is alive. In order to figure this out, we need the ENTRY set and the
     // GEN set from the dataflow. In our case, for a given block:
@@ -68,11 +69,13 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                 assigned.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
 
+            /*
             // If a local is killed in this block but wasn't passed in through the entry of this
             // block, then that means it was actually defined in this scope.
             if !entry && !gen && kill {
                 initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
+            */
         }
 
         println!("maybe entry: {:?} => {:?}",
@@ -105,6 +108,9 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     println!("maybe assigned: {:#?}", assigned);
     println!("---------");
 
+    panic!();
+    */
+
     ///
 
     // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
@@ -116,7 +122,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let mut initialized = BTreeMap::new();
     let mut assigned = BTreeMap::new();
 
-    for block in mir.basic_blocks().indices() {
+    for (block, block_data) in mir.basic_blocks().iter_enumerated() {
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
         let gen_set = flow_inits.sets().gen_set_for(block.index());
         let kill_set = flow_inits.sets().kill_set_for(block.index());
@@ -135,10 +141,48 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                 assigned.entry(block).or_insert_with(BTreeSet::new).insert(local);
             }
 
-            // If a local is killed in this block but wasn't passed in through the entry of this
-            // block, then that means it was actually defined in this scope.
-            if !entry && !gen && kill {
-                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
+            // It's possible that if the local was killed in this block it was also initialized in
+            // this block. This can happen in code like this:
+            //
+            // ```rust
+            // {
+            //     let x = String::new();
+            //     // `x` is dropped
+            // }
+            // ```
+            //
+            // However, we also have the case where if a local was moved in a prior block, we still
+            // might end up still having a killed local in our set. This can happen in code like
+            // this:
+            //
+            // ```rust
+            // {
+            //     let x = String::new();
+            //     // `x` is marked live
+            //
+            //     if true {
+            //         mem::drop(x);
+            //     } else {
+            //         mem::drop(x);
+            //     }
+            //
+            //     // `x` is marked dead at the end of the scope
+            // }
+            // ```
+            //
+            // So to initialize the variable in the first case but not the second case, just check
+            // if we have a matching `StorageLive` in this block. If we do, we must have
+            // initialized the local. Otherwise ignore it.
+            if !entry && kill {
+                for stmt in block_data.statements() {
+                    match stmt.kind {
+                        StatementKind::StorageLive(ref lvalue) if Lvalue::Local(local) == *lvalue => {
+                            initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
+                            break;
+                        }
+                        _ => {}
+                    }
+                }
             }
         }
 
@@ -430,19 +474,29 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
             //StatementKind::Nop => {}
         },
         None => {
-            debug!("drop_flag_effects: replace {:?}", block.terminator());
-            /*
+            debug!("drop_flag_effects: replace {:?}", block.terminator().kind);
             match block.terminator().kind {
+                /*
+                TerminatorKind::Match { ref arms, .. } => {
+                    for arm in arms {
+                        for lvalue in &arm.lvalues {
+                            on_lookup_result_bits(tcx, mir, move_data,
+                                                  move_data.rev_lookup.find(&lvalue),
+                                                  |moi| callback(moi, DropFlagState::Present))
+                        }
+                    }
+                    panic!("{:#?}", arms);
+                }
                 TerminatorKind::DropAndReplace { ref location, .. } => {
                     on_lookup_result_bits(tcx, mir, move_data,
                                           move_data.rev_lookup.find(location),
                                           |moi| callback(moi, DropFlagState::Present))
                 }
+                */
                 _ => {
                     // other terminators do not contain move-ins
                 }
             }
-            */
         }
     }
 }
