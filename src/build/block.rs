@@ -52,7 +52,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let extent = this.start_new_extent();
                         unpack!(block = this.in_scope(extent, stmt.span, block, |this| {
                             let (ref mac, _, _) = **mac;
-                            let temp = this.temp(stmt.span, "temp_stmt_mac");
+                            let temp = this.temp(block, stmt.span, "temp_stmt_mac");
 
                             match this.expr_mac(temp.clone(), block, mac) {
                                 Some(block) => block,

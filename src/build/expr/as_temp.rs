@@ -24,14 +24,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("expr_as_temp(block={:?}, expr={:?})", block, expr);
         let this = self;
 
-        let temp = this.temp(expr.span, "temp_expr");
+        let temp = this.temp(block, expr.span, "temp_expr");
         let expr_span = expr.span;
         let source_info = this.source_info(expr_span);
-
-        this.cfg.push(block, Statement {
-            source_info: source_info,
-            kind: StatementKind::StorageLive(temp.clone())
-        });
 
         match expr.node {
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {

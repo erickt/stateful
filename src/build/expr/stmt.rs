@@ -76,7 +76,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             _ => {
-                let temp = this.temp(expr_span, "temp_stmt_expr");
+                let temp = this.temp(block, expr_span, "temp_stmt_expr");
                 unpack!(block = this.into(temp, block, expr));
                 block.unit()
             }

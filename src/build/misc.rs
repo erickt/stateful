@@ -9,7 +9,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     ///
     /// NB: **No cleanup is scheduled for this temporary.** You should
     /// call `schedule_drop` once the temporary is initialized.
-    pub fn temp<T>(&mut self, span: Span, name: T) -> Lvalue
+    pub fn temp<T>(&mut self, block: BasicBlock, span: Span, name: T) -> Lvalue
         where T: ToIdent,
     {
         // Add a unique number to the name.
@@ -32,6 +32,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             source_info: source_info,
         });
         let lvalue = Lvalue::Local(temp);
+
+        // NOTE(stateful): As opposed to Mir, we need a StorageLive for every temp in order to
+        // distinguish between a local being dropped in the same block it was defined in, or that
+        // the local was already moved in an incoming block.
+        self.cfg.push(block, Statement {
+            source_info: source_info,
+            kind: StatementKind::StorageLive(lvalue.clone())
+        });
+
         let extent = self.extent_of_innermost_scope();
         self.schedule_drop(source_info.span, extent, &lvalue);
         debug!("temp: created temp {:?} with name {:?}", lvalue, name);

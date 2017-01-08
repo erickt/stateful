@@ -263,7 +263,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     // loops are diverging (e.g. `loop {}`). Thus, we introduce a unit temporary as
                     // the destination for the loop body and assign the loop’s own “return” value
                     // immediately after the iteration is finished.
-                    let tmp = this.temp(body.span, "temp_loop");
+                    let tmp = this.temp(body_block, body.span, "temp_loop");
 
                     /*
                     // FIXME(stateful): as another MIR divergence, we need to assign the return value
