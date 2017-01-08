@@ -540,8 +540,15 @@ impl TerminatorKind {
                     .map(|arm| {
                         let pats = arm.pats.iter()
                             .map(|pat| pprust::pat_to_string(pat))
-                            .collect::<Vec<_>>();
-                        Cow::from(pats.join("|"))
+                            .collect::<Vec<_>>()
+                            .join("|");
+
+                        let lvalues = arm.lvalues.iter()
+                            .map(|lvalue| format!("{:?}", lvalue))
+                            .collect::<Vec<_>>()
+                            .join(",");
+
+                        Cow::from(format!("{}: [{}]", pats, lvalues))
                     })
                     .collect()
             }
