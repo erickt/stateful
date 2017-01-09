@@ -7,7 +7,7 @@ use ty::TyCtxt;
 use self::dataflow::{BitDenotation};
 use self::dataflow::{DataflowOperator};
 use self::dataflow::{Dataflow, DataflowAnalysis, DataflowResults};
-use self::dataflow::{MaybeInitializedLvals, DefinitelyInitializedLvals};
+use self::dataflow::{DefinitelyInitializedLvals};
 use self::gather_moves::{MoveData, MovePathIndex, LookupResult};
 
 mod abs_domain;
@@ -21,7 +21,6 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let mdpe = MoveDataParamEnv { move_data: move_data };
 
     // Figure out when variables are initialized or assigned.
-    let flow_maybe_inits = do_dataflow(tcx, mir, &mdpe, MaybeInitializedLvals::new(tcx, mir));
     let flow_inits = do_dataflow(tcx, mir, &mdpe, DefinitelyInitializedLvals::new(tcx, mir));
 
     // `flow_inits` works with `MoveIndex`s not locals, so we need a mapping from one to the other.
@@ -40,79 +39,6 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         })
         .collect::<Vec<_>>();
 
-        /*
-    // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
-    // the blocks for which it is alive. In order to figure this out, we need the ENTRY set and the
-    // GEN set from the dataflow. In our case, for a given block:
-    //
-    // * ENTRY has a bit set for each local that was initialized in a parent block.
-    // * GEN has a bit set for each local initialized in this block.
-    let mut initialized = BTreeMap::new();
-    let mut assigned = BTreeMap::new();
-
-    for block in mir.basic_blocks().indices() {
-        let entry_set = flow_maybe_inits.sets().on_entry_set_for(block.index());
-        let gen_set = flow_maybe_inits.sets().gen_set_for(block.index());
-        let kill_set = flow_maybe_inits.sets().kill_set_for(block.index());
-
-        for &(idx, local) in &move_indices {
-            let entry = entry_set.contains(&idx);
-            let gen = gen_set.contains(&idx);
-            let kill = kill_set.contains(&idx);
-
-            // If a local is both in the entry and the gen set, then that means that the local was
-            // generated externally from the state machine, such as for `Suspend`. If this is the
-            // case, only mark this variable as initialized, not assigned.
-            if gen {
-                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-            } else if entry {
-                assigned.entry(block).or_insert_with(BTreeSet::new).insert(local);
-            }
-
-            /*
-            // If a local is killed in this block but wasn't passed in through the entry of this
-            // block, then that means it was actually defined in this scope.
-            if !entry && !gen && kill {
-                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-            }
-            */
-        }
-
-        println!("maybe entry: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if entry_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-
-        println!("maybe gen: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if gen_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-
-        println!("maybe kill: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if kill_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-        println!();
-    }
-
-    println!("maybe initialized: {:#?}", initialized);
-    println!("maybe assigned: {:#?}", assigned);
-    println!("---------");
-
-    panic!();
-    */
-
-    ///
-
     // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
     // the blocks for which it is alive. In order to figure this out, we need the ENTRY set and the
     // GEN set from the dataflow. In our case, for a given block:
@@ -126,6 +52,24 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
         let gen_set = flow_inits.sets().gen_set_for(block.index());
         let kill_set = flow_inits.sets().kill_set_for(block.index());
+
+        // FIXME(stateful): We need to push down the fact that match arm lvalues have been defined
+        // by pulling apart the pattern. This would be best expressed implicitly though the
+        // dataflow, but, well, I couldn't figure out how to get that to work.
+        if let TerminatorKind::Match { ref arms, .. } = block_data.terminator().kind {
+            for arm in arms {
+                for lvalue in &arm.lvalues {
+                    match *lvalue {
+                        Lvalue::Local(local) => {
+                            assigned.entry(arm.block)
+                                .or_insert_with(BTreeSet::new)
+                                .insert(local);
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
 
         for &(idx, local) in &move_indices {
             let entry = entry_set.contains(&idx);
@@ -185,35 +129,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                 }
             }
         }
-
-        println!("entry: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if entry_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-
-        println!("gen: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if gen_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-
-        println!("kill: {:?} => {:?}",
-                 block,
-                 move_indices.iter()
-                    .filter_map(|&(idx, local)| {
-                        if kill_set.contains(&idx) { Some(local) } else { None }
-                    })
-                    .collect::<Vec<_>>());
-        println!();
     }
-
-    println!("initialized: {:#?}", initialized);
-    println!("assigned: {:#?}", assigned);
 
     DefiniteAssignment {
         initialized: initialized,
@@ -475,28 +391,18 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
         },
         None => {
             debug!("drop_flag_effects: replace {:?}", block.terminator().kind);
+            /*
             match block.terminator().kind {
-                /*
-                TerminatorKind::Match { ref arms, .. } => {
-                    for arm in arms {
-                        for lvalue in &arm.lvalues {
-                            on_lookup_result_bits(tcx, mir, move_data,
-                                                  move_data.rev_lookup.find(&lvalue),
-                                                  |moi| callback(moi, DropFlagState::Present))
-                        }
-                    }
-                    panic!("{:#?}", arms);
-                }
                 TerminatorKind::DropAndReplace { ref location, .. } => {
                     on_lookup_result_bits(tcx, mir, move_data,
                                           move_data.rev_lookup.find(location),
                                           |moi| callback(moi, DropFlagState::Present))
                 }
-                */
                 _ => {
                     // other terminators do not contain move-ins
                 }
             }
+            */
         }
     }
 }

@@ -26,6 +26,7 @@ use super::{BitDenotation, BlockSets, DataflowOperator};
 // bitvectors attached to each basic block, represented via a
 // zero-sized structure.
 
+/*
 /// `MaybeInitializedLvals` tracks all l-values that might be
 /// initialized upon reaching a particular point in the control flow
 /// for a function.
@@ -72,7 +73,6 @@ impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
 /// `MaybeUninitializedLvals` tracks all l-values that might be
 /// uninitialized upon reaching a particular point in the control flow
 /// for a function.
@@ -190,7 +190,6 @@ impl<'a, 'tcx: 'a> DefinitelyInitializedLvals<'a, 'tcx> {
 pub struct MovingOutStatements<'a> {
     mir: &'a Mir,
 }
-*/
 
 impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
@@ -202,7 +201,6 @@ impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
 impl<'a, 'tcx> MaybeUninitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
                    state: DropFlagState)
@@ -219,7 +217,6 @@ impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
                    state: DropFlagState)
     {
-        println!("update_bits: {:?} {:?}", path, state);
         match state {
             DropFlagState::Absent => sets.kill(&path),
             DropFlagState::Present => sets.gen(&path),
@@ -227,6 +224,7 @@ impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     }
 }
 
+/*
 impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
     type Ctxt = MoveDataParamEnv;
@@ -284,7 +282,6 @@ impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
 impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
     type Ctxt = MoveDataParamEnv;
@@ -520,7 +517,6 @@ impl<'a> BitwiseOperator for MovingOutStatements<'a> {
         pred1 | pred2 // moves from both preds are in scope
     }
 }
-*/
 
 impl<'a, 'tcx> BitwiseOperator for MaybeInitializedLvals<'a, 'tcx> {
     #[inline]
@@ -529,7 +525,6 @@ impl<'a, 'tcx> BitwiseOperator for MaybeInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
 impl<'a, 'tcx> BitwiseOperator for MaybeUninitializedLvals<'a, 'tcx> {
     #[inline]
     fn join(&self, pred1: usize, pred2: usize) -> usize {
@@ -562,7 +557,6 @@ impl<'a> DataflowOperator for MovingOutStatements<'a> {
         false // bottom = no loans in scope by default
     }
 }
-*/
 
 impl<'a, 'tcx> DataflowOperator for MaybeInitializedLvals<'a, 'tcx> {
     #[inline]
@@ -571,7 +565,6 @@ impl<'a, 'tcx> DataflowOperator for MaybeInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
 impl<'a, 'tcx> DataflowOperator for MaybeUninitializedLvals<'a, 'tcx> {
     #[inline]
     fn bottom_value() -> bool {

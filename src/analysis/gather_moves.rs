@@ -419,10 +419,8 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 }
                 self.create_move_path(destination);
             }
-            StatementKind::StorageLive(_) => {}
-            StatementKind::StorageDead(ref lvalue) => {
-                self.create_move_path(lvalue);
-            }
+            StatementKind::StorageLive(_) |
+            StatementKind::StorageDead(_) => {}
             /*
             StatementKind::SetDiscriminant{ .. } => {
                 span_bug!(&self.tcx,

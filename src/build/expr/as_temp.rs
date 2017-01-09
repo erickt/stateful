@@ -26,7 +26,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let temp = this.temp(block, expr.span, "temp_expr");
         let expr_span = expr.span;
-        let source_info = this.source_info(expr_span);
 
         match expr.node {
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
