@@ -142,6 +142,20 @@ fn test_empty_with_macro() {
     assert_eq!(gen.next(), None);
 }
 
+#[test]
+fn test_break_value() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        let x = loop {
+            break 5;
+        };
+        yield_!(x);
+    }
+
+    let mut gen = gen();
+    assert_eq!(gen.next(), None);
+}
+
 /*
 #[test]
 fn test_ints() {

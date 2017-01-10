@@ -1,4 +1,15 @@
+// Copyright 2016 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
 use build::mac::{is_mac, parse_mac};
+use build::scope::LoopScope;
 use build::{BlockAnd, BlockAndExtension, Builder};
 use mir::*;
 use syntax::ast::{self, ExprKind};
@@ -13,22 +24,44 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let this = self;
         let expr_span = expr.span;
-
+        let source_info = this.source_info(expr.span);
+        // Handle a number of expressions that don't need a destination at all. This
+        // avoids needing a mountain of temporary `()` variables.
         match expr.node {
             ExprKind::Continue(label) => {
-                this.break_or_continue(expr_span, block, |this| {
-                    let loop_scope = this.find_loop_scope(expr_span, label);
-                    (loop_scope.continue_block, loop_scope.extent)
-                })
+                if !this.is_in_loop() {
+                    span_err!(this.cx, expr_span, "cannot continue outside of a loop");
+                }
+
+                let LoopScope { continue_block, extent, .. } =
+                    *this.find_loop_scope(expr_span, label);
+                let after_block = this.cfg.start_new_block(expr_span, Some("AfterContinue"));
+                this.exit_scope(expr_span, extent, block, continue_block, after_block);
+                after_block.unit()
             }
-            ExprKind::Break(label, None) => {
-                this.break_or_continue(expr_span, block, |this| {
-                    let loop_scope = this.find_loop_scope(expr_span, label);
-                    (loop_scope.break_block, loop_scope.extent)
-                })
-            }
-            ExprKind::Break(_label, Some(ref _value)) => {
-                span_bug!(this.cx, expr_span, "break returning values is not supported yet");
+            ExprKind::Break(label, ref value) => {
+                if !this.is_in_loop() {
+                    span_err!(this.cx, expr_span, "cannot break outside of a loop");
+                }
+
+                let (break_block, extent, destination) = {
+                    let LoopScope {
+                        break_block,
+                        extent,
+                        ref break_destination,
+                        ..
+                    } = *this.find_loop_scope(expr_span, label);
+                    (break_block, extent, break_destination.clone())
+                };
+                if let Some(ref value) = *value {
+                    unpack!(block = this.into(destination, block, value));
+                } else {
+                    this.cfg.push_assign_unit(block, source_info, &destination);
+                }
+                let after_block = this.cfg.start_new_block(expr_span, Some("AfterBreak"));
+                this.exit_scope(expr_span, extent, block, break_block, after_block);
+                after_block.unit()
+
             }
             ExprKind::Assign(ref lhs, ref rhs) => {
                 // Note: we evaluate assignments right-to-left. This
@@ -113,29 +146,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let after_block = self.cfg.start_new_block(span, Some("AfterReturn"));
 
         self.exit_scope(span, extent, block, return_block, after_block);
-
-        after_block.unit()
-    }
-
-    fn break_or_continue<F>(&mut self,
-                            span: Span,
-                            block: BasicBlock,
-                            exit_selector: F)
-                            -> BlockAnd<()>
-        where F: FnOnce(&mut Builder<'a, 'b>) -> (BasicBlock, CodeExtent)
-    {
-        debug!("break_or_continue(block={:?})", block);
-
-        if !self.is_in_loop() {
-            self.cx.span_err(span, "cannot break outside of a loop");
-        }
-
-        let (exit_block, extent) = exit_selector(self);
-        debug!("break_or_continue(extent={:?}, exit_block={:?})", extent, exit_block);
-
-        let after_block = self.cfg.start_new_block(span, Some("AfterBreakOrContinue"));
-
-        self.exit_scope(span, extent, block, exit_block, after_block);
 
         after_block.unit()
     }

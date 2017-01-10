@@ -19,11 +19,11 @@ fn gen() -> Box<Iterator<Item = usize>> {
         println!("hello {:?}", item);
     }
 
-    loop {
-        break;
+    let x = loop {
+        break 5;
     };
 
-    println!("esfs");
+    println!("esfs: {:?}", x);
 }
 
 fn main() {
