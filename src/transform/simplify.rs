@@ -127,7 +127,7 @@ impl<'a> CfgSimplifier<'a> {
                 while inner_changed {
                     inner_changed = false;
                     inner_changed |= self.simplify_branch(&mut terminator);
-                    inner_changed |= self.merge_successor(&mut new_stmts, &mut terminator);
+                    //inner_changed |= self.merge_successor(&mut new_stmts, &mut terminator);
                     changed |= inner_changed;
                 }
 
@@ -147,7 +147,7 @@ impl<'a> CfgSimplifier<'a> {
             BasicBlockData {
                 ref statements,
                 terminator: ref mut terminator @ Some(Terminator {
-                    kind: TerminatorKind::Goto { target: _, phantom_target: None },
+                    kind: TerminatorKind::Goto { target: _ },
                     ..
                 }),
                 ..
@@ -158,13 +158,7 @@ impl<'a> CfgSimplifier<'a> {
         };
 
         let target = match terminator {
-            Some(Terminator {
-                kind: TerminatorKind::Goto {
-                    ref mut target,
-                    phantom_target: None,
-                },
-                ..
-            }) => {
+            Some(Terminator { kind: TerminatorKind::Goto { ref mut target }, ..  }) => {
                 self.collapse_goto_chain(target, changed);
                 *target
             }
@@ -195,9 +189,7 @@ impl<'a> CfgSimplifier<'a> {
                        -> bool
     {
         let target = match terminator.kind {
-            TerminatorKind::Goto { target, phantom_target: None }
-                if self.pred_count[target] == 1
-                => target,
+            TerminatorKind::Goto { target } if self.pred_count[target] == 1 => target,
             _ => return false
         };
 
@@ -239,10 +231,7 @@ impl<'a> CfgSimplifier<'a> {
         };
 
         debug!("simplifying branch {:?}", terminator);
-        terminator.kind = TerminatorKind::Goto {
-            target: first_succ,
-            phantom_target: None,
-        };
+        terminator.kind = TerminatorKind::Goto { target: first_succ };
         true
     }
 }

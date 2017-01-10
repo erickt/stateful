@@ -57,14 +57,16 @@ impl Scope {
 pub struct LoopScope {
     /// Extent of the loop
     pub extent: CodeExtent,
+    /// The label of the loop
     pub label: Option<ast::SpannedIdent>,
     /// Where the body of the loop begins
     pub continue_block: BasicBlock,
     /// Block to branch into when the loop terminates (either by being `break`-en out from, or by
     /// having its condition to become false)
     pub break_block: BasicBlock,
-    /// Indicates the reachability of the break_block for this loop
-    pub might_break: bool
+    /// The destination of the loop expression itself (i.e. where to put the result of a `break`
+    /// expression)
+    pub break_destination: Lvalue,
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
@@ -74,10 +76,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             label: Option<ast::SpannedIdent>,
                             loop_block: BasicBlock,
                             break_block: BasicBlock,
-                            f: F) -> bool
+                            break_destination: Lvalue,
+                            f: F)
         where F: FnOnce(&mut Builder)
     {
-        debug!("in_loop_scope(label={:?}, loop_block={:?}, break_block={:?})", label, loop_block, break_block);
+        debug!("in_loop_scope(label={:?}, loop_block={:?}, break_block={:?}, break_destination={:?})",
+               label,
+               loop_block,
+               break_block,
+               break_destination);
 
         let extent = self.extent_of_innermost_scope();
         let loop_scope = LoopScope {
@@ -85,13 +92,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             label: label,
             continue_block: loop_block,
             break_block: break_block,
-            might_break: false
+            break_destination: break_destination,
         };
         self.loop_scopes.push(loop_scope);
         f(self);
         let loop_scope = self.loop_scopes.pop().unwrap();
         assert!(loop_scope.extent == extent);
-        loop_scope.might_break
     }
 
     /// Convenience wrapper that pushes a scope and then executes `f`
@@ -189,11 +195,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         !self.loop_scopes.is_empty()
     }
 
+    // Finding scopes
+    // ==============
     /// Finds the loop scope for a given label. This is used for
     /// resolving `break` and `continue`.
     pub fn find_loop_scope(&mut self,
                            span: Span,
-                           label: Option<ast::SpannedIdent>) -> &mut LoopScope {
+                           label: Option<ast::SpannedIdent>)
+                           -> &mut LoopScope {
         let loop_scopes = &mut self.loop_scopes;
         let loop_scope = match label {
             None => {
@@ -234,12 +243,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                       extent: CodeExtent,
                       mut block: BasicBlock,
                       target: BasicBlock,
-                      mut phantom_target: Option<BasicBlock>) {
-        debug!("exit_scope(extent={:?}, block={:?}, target={:?}, phantom_target={:?})",
+                      after_target: BasicBlock) {
+        debug!("exit_scope(extent={:?}, block={:?}, target={:?}, after_target={:?})",
                extent,
                block,
                target,
-               phantom_target);
+               after_target);
         let scope_count = 1 + self.scopes.iter().rev().position(|scope| scope.extent == extent)
                                                       .unwrap_or_else(||{
             span_bug!(self.cx, span, "extent {:?} does not enclose", extent)
@@ -249,17 +258,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         {
             for scope_index in (len - scope_count + 1 .. len).rev() {
-                /*
-                block = {
-                    let b = self.cfg.start_new_block(span, Some("Drop"));
-                    self.terminate(span, block, TerminatorKind::Goto {
-                        target: b,
-                        phantom_target: phantom_target.take(),
-                    });
-                    b
-                };
-                */
-
                 let scope = &self.scopes[scope_index];
                 debug!("exit_scope: dropping: block={:?} scope={:#?}", block, scope);
                 let source_info = scope.source_info(span);
@@ -289,9 +287,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        self.terminate(span, block, TerminatorKind::Goto {
+        self.terminate(span, block, TerminatorKind::Break {
             target: target,
-            phantom_target: phantom_target.take(),
+            after_target: after_target,
         });
     }
 
@@ -341,7 +339,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let rvalue = self.unit_rvalue();
         self.push_assign(block, span, lvalue, rvalue)
     }
-
 
     pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {
         debug!("find_local: {:?} scopes={:#?}", ident, self.scopes); 

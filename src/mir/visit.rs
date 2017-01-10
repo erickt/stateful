@@ -415,12 +415,12 @@ macro_rules! make_mir_visitor {
                                      kind: & $($mutability)* TerminatorKind,
                                      source_location: Location) {
                 match *kind {
-                    TerminatorKind::Goto { target, phantom_target } => {
+                    TerminatorKind::Goto { target } => {
                         self.visit_branch(block, target);
-
-                        if let Some(phantom_target) = phantom_target {
-                            self.visit_branch(block, phantom_target);
-                        }
+                    }
+                    TerminatorKind::Break { target, after_target } => {
+                        self.visit_branch(block, target);
+                        self.visit_branch(block, after_target);
                     }
 
                     TerminatorKind::If { ref $($mutability)* cond,

@@ -384,22 +384,29 @@ impl BasicBlockData {
     }
 }
 
-#[derive(Debug)]
 pub struct Terminator {
     pub source_info: SourceInfo,
     pub kind: TerminatorKind,
+}
+
+impl Debug for Terminator {
+    fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
+        self.kind.fmt(fmt)
+    }
 }
 
 pub enum TerminatorKind {
     /// block should have one successor in the graph; we jump there
     Goto {
         target: BasicBlock,
+    },
 
-        /// In Stateful, we explicitly the locals across basic blocks in order to make sure
-        /// everything is explicitly initialized. In order to make sure dataflow works, we need to
-        /// have an additional edge (that's never followed) to the block following the
-        /// break/continue/return.
-        phantom_target: Option<BasicBlock>,
+    /// Effectively a goto that has an additional edge to the after-break block. This allows
+    /// dataflow to properly initialize the block following a break, even though it is not
+    /// reachable.
+    Break {
+        target: BasicBlock,
+        after_target: BasicBlock,
     },
 
     /// jump to branch 0 if this lvalue evaluates to true
@@ -466,12 +473,12 @@ impl Debug for TerminatorKind {
 impl TerminatorKind {
     pub fn successors(&self) -> Vec<BasicBlock> {
         match *self {
-            TerminatorKind::Goto { target, phantom_target } => {
-                let mut successors = vec![target];
-                if let Some(phantom_target) = phantom_target {
-                    successors.push(phantom_target);
-                }
-                successors
+            TerminatorKind::Goto { target } => {
+                vec![target]
+            }
+            TerminatorKind::Break { target, after_target } => {
+                // Explicitly don't add `after_target` to successors. It needs to be handled.
+                vec![target, after_target]
             }
             TerminatorKind::Suspend { destination: (_, target), .. } => {
                 vec![target]
@@ -486,12 +493,12 @@ impl TerminatorKind {
 
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match *self {
-            TerminatorKind::Goto { ref mut target, ref mut phantom_target } => {
-                let mut successors = vec![target];
-                if let Some(ref mut phantom_target) = *phantom_target {
-                    successors.push(phantom_target);
-                }
-                successors
+            TerminatorKind::Goto { ref mut target } => {
+                vec![target]
+            }
+            TerminatorKind::Break { ref mut target, ref mut after_target } => {
+                // Explicitly don't add `after_target` to successors. It needs to be handled.
+                vec![target, after_target]
             }
             TerminatorKind::Suspend { destination: (_, ref mut target), .. } => {
                 vec![target]
@@ -513,6 +520,7 @@ impl TerminatorKind {
         use self::TerminatorKind::*;
         match *self {
             Goto { .. } => write!(fmt, "goto"),
+            Break { .. } => write!(fmt, "break"),
             If { cond: ref lv, .. } => write!(fmt, "if({:?})", lv),
             Match { discr: ref lv, .. } => write!(fmt, "match({:?})", lv),
             Return => write!(fmt, "return"),
@@ -527,13 +535,8 @@ impl TerminatorKind {
         use self::TerminatorKind::*;
         match *self {
             Return => vec![],
-            Goto { target: _, phantom_target } => {
-                let mut labels = vec!["".into()];
-                if phantom_target.is_some() {
-                    labels.push("phantom".into());
-                }
-                labels
-            }
+            Goto { target: _ } => vec!["target".into()],
+            Break { .. } => vec!["target".into(), "after_target".into()],
             If { .. } => vec!["true".into(), "false".into()],
             Match { ref arms, .. } => {
                 arms.iter()

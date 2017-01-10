@@ -19,6 +19,25 @@ impl CFG {
         self.block_data_mut(block).statements.push(statement);
     }
 
+    pub fn push_assign(&mut self,
+                       block: BasicBlock,
+                       source_info: SourceInfo,
+                       lvalue: &Lvalue,
+                       rvalue: Rvalue) {
+        self.push(block, Statement {
+            source_info: source_info,
+            kind: StatementKind::Assign(lvalue.clone(), rvalue)
+        });
+    }
+
+    pub fn push_assign_unit(&mut self,
+                            block: BasicBlock,
+                            source_info: SourceInfo,
+                            lvalue: &Lvalue) {
+        let rvalue = Rvalue::Tuple(vec![]);
+        self.push_assign(block, source_info, lvalue, rvalue);
+    }
+
     pub fn terminate(&mut self,
                      block: BasicBlock,
                      source_info: SourceInfo,

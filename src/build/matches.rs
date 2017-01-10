@@ -78,7 +78,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             self.visibility_scope = visibility_scope;
             unpack!(arm_block = self.into(destination.clone(), arm_block, &arm.body));
             self.cfg.terminate(arm_block, outer_source_info,
-                               TerminatorKind::Goto { target: end_block, phantom_target: None });
+                               TerminatorKind::Goto { target: end_block });
         }
         self.visibility_scope = outer_source_info.scope;
 

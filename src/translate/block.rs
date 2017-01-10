@@ -190,7 +190,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         match terminator.kind {
-            TerminatorKind::Goto { target, .. } => {
+            TerminatorKind::Goto { target } => {
+                self.goto(span, target)
+            }
+            TerminatorKind::Break { target, after_target: _ } => {
                 self.goto(span, target)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {

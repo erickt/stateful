@@ -447,13 +447,14 @@ impl<'a, D> DataflowAnalysis<'a, D>
             mir::TerminatorKind::Return => {
                 debug!("propgate_bits: return");
             }
-            mir::TerminatorKind::Goto { ref target, ref phantom_target } => {
+            mir::TerminatorKind::Goto { ref target } => {
                 debug!("propgate_bits: goto {:?}", target);
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
-
-                if let Some(ref phantom_target) = *phantom_target {
-                    self.propagate_bits_into_entry_set_for(in_out, changed, phantom_target);
-                }
+            }
+            mir::TerminatorKind::Break { ref target, ref after_target } => {
+                debug!("propgate_bits: break {:?} {:?}", target, after_target);
+                self.propagate_bits_into_entry_set_for(in_out, changed, target);
+                self.propagate_bits_into_entry_set_for(in_out, changed, after_target);
             }
             mir::TerminatorKind::If { ref targets, .. } => {
                 debug!("propgate_bits: if {:?}", targets);

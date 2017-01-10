@@ -129,7 +129,35 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                 }
             }
         }
+
+        println!("entry: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if entry_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("gen: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if gen_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("kill: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if kill_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+        println!();
     }
+
+    println!("initialized: {:#?}", initialized);
+    println!("assigned: {:#?}", assigned);
 
     DefiniteAssignment {
         initialized: initialized,

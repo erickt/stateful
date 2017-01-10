@@ -24,7 +24,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Break(label, None) => {
                 this.break_or_continue(expr_span, block, |this| {
                     let loop_scope = this.find_loop_scope(expr_span, label);
-                    loop_scope.might_break = true;
                     (loop_scope.break_block, loop_scope.extent)
                 })
             }
@@ -113,7 +112,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // that we need to type check.
         let after_block = self.cfg.start_new_block(span, Some("AfterReturn"));
 
-        self.exit_scope(span, extent, block, return_block, Some(after_block));
+        self.exit_scope(span, extent, block, return_block, after_block);
 
         after_block.unit()
     }
@@ -136,7 +135,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let after_block = self.cfg.start_new_block(span, Some("AfterBreakOrContinue"));
 
-        self.exit_scope(span, extent, block, exit_block, Some(after_block));
+        self.exit_scope(span, extent, block, exit_block, after_block);
 
         after_block.unit()
     }

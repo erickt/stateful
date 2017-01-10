@@ -18,6 +18,12 @@ fn gen() -> Box<Iterator<Item = usize>> {
     while let Some(item) = iter.next() {
         println!("hello {:?}", item);
     }
+
+    loop {
+        break;
+    };
+
+    println!("esfs");
 }
 
 fn main() {
