@@ -22,7 +22,7 @@ mod pretty;
 mod transform;
 mod translate;
 mod ty;
-mod traversal;
+//mod traversal;
 
 use std::env;
 use std::fs;

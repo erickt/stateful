@@ -379,9 +379,11 @@ impl BasicBlockData {
         self.terminator.as_ref().expect("invalid terminator state")
     }
 
+    /*
     pub fn terminator_mut(&mut self) -> &mut Terminator {
         self.terminator.as_mut().expect("invalid terminator state")
     }
+    */
 }
 
 pub struct Terminator {
@@ -438,9 +440,11 @@ impl Terminator {
         self.kind.successors()
     }
 
+    /*
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         self.kind.successors_mut()
     }
+    */
 }
 
 impl Debug for TerminatorKind {
@@ -491,6 +495,7 @@ impl TerminatorKind {
         }
     }
 
+    /*
     pub fn successors_mut(&mut self) -> Vec<&mut BasicBlock> {
         match *self {
             TerminatorKind::Goto { ref mut target } => {
@@ -512,6 +517,7 @@ impl TerminatorKind {
             TerminatorKind::Return => vec![],
         }
     }
+    */
 
     /// Write the "head" part of the terminator; that is, its name and the data it uses to pick the
     /// successor basic block, if any. The only information not inlcuded is the list of possible

@@ -14,7 +14,7 @@ use std::fmt;
 use ty::TyCtxt;
 
 pub mod dump_mir;
-pub mod simplify;
+//pub mod simplify;
 pub mod validate;
 
 /// Various information about pass.

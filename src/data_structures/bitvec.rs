@@ -67,6 +67,7 @@ impl BitVector {
         }
     }
 
+    /*
     /// Iterates over indexes of set bits in a sorted order
     pub fn iter<'a>(&'a self) -> BitVectorIter<'a> {
         BitVectorIter {
@@ -75,8 +76,10 @@ impl BitVector {
             idx: 0,
         }
     }
+    */
 }
 
+/*
 pub struct BitVectorIter<'a> {
     iter: ::std::slice::Iter<'a, u64>,
     current: u64,
@@ -106,6 +109,7 @@ impl<'a> Iterator for BitVectorIter<'a> {
         return Some(self.idx - 1);
     }
 }
+*/
 
 impl FromIterator<bool> for BitVector {
     fn from_iter<I>(iter: I) -> BitVector where I: IntoIterator<Item=bool> {
