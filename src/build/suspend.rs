@@ -8,21 +8,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn expr_suspend(&mut self,
                         destination: Lvalue,
                         mut block: BasicBlock,
-                        rvalue: P<ast::Expr>) -> BlockAnd<()> {
-        let rvalue_span = rvalue.span;
+                        arg: P<ast::Expr>) -> BlockAnd<()> {
+        let arg_span = arg.span;
 
-        let rvalue = unpack!(block = self.as_rvalue(block, &rvalue));
-        let next_block = self.cfg.start_new_block(rvalue_span, Some("Resume"));
+        let arg = unpack!(block = self.as_operand(block, &arg));
+        let next_block = self.cfg.start_new_block(arg_span, Some("Resume"));
 
-        self.terminate(rvalue_span, block, TerminatorKind::Suspend {
+        self.terminate(arg_span, block, TerminatorKind::Suspend {
             destination: (destination.clone(), next_block),
-            rvalue: rvalue,
+            arg: arg,
         });
 
         let coroutine_args_lvalue = Lvalue::Local(COROUTINE_ARGS);
         let coroutine_args_operand = Operand::Consume(coroutine_args_lvalue);
         let coroutine_args_rvalue = Rvalue::Use(coroutine_args_operand);
-        self.push_assign(next_block, rvalue_span, &destination, coroutine_args_rvalue);
+
+        self.push_assign(next_block, arg_span, &destination, coroutine_args_rvalue);
 
         next_block.unit()
     }

@@ -429,7 +429,7 @@ pub enum TerminatorKind {
     /// jump to target on next iteration.
     Suspend {
         destination: (Lvalue, BasicBlock),
-        rvalue: Rvalue,
+        arg: Operand,
     },
 }
 
@@ -524,8 +524,8 @@ impl TerminatorKind {
             If { cond: ref lv, .. } => write!(fmt, "if({:?})", lv),
             Match { discr: ref lv, .. } => write!(fmt, "match({:?})", lv),
             Return => write!(fmt, "return"),
-            Suspend { destination: (ref destination, _), ref rvalue, .. } => {
-                write!(fmt, "{:?} = suspend({:?})", destination, rvalue)
+            Suspend { destination: (ref destination, _), ref arg, .. } => {
+                write!(fmt, "{:?} = suspend({:?})", destination, arg)
             }
         }
     }
@@ -535,7 +535,7 @@ impl TerminatorKind {
         use self::TerminatorKind::*;
         match *self {
             Return => vec![],
-            Goto { target: _ } => vec!["target".into()],
+            Goto { target: _ } => vec!["".into()],
             Break { .. } => vec!["target".into(), "after_target".into()],
             If { .. } => vec!["true".into(), "false".into()],
             Match { ref arms, .. } => {

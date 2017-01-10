@@ -286,14 +286,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
             TerminatorKind::Suspend {
                 destination: (_, target),
-                ref rvalue,
+                ref arg,
             } => {
-                let rvalue = rvalue.to_expr(&self.mir.local_decls);
+                let arg = arg.to_expr(&self.mir.local_decls);
                 let next_state = self.resume_state_expr(target);
 
-                let ast_builder = ast_builder.span(rvalue.span);
+                let ast_builder = ast_builder.span(arg.span);
                 let expr = ast_builder.expr().tuple()
-                    .expr().build(rvalue)
+                    .expr().build(arg)
                     .expr().build(next_state)
                     .build();
 

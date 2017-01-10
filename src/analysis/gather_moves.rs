@@ -520,8 +520,8 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 }
             }
 
-            TerminatorKind::Suspend { destination: (ref destination, _), ref rvalue } => {
-                self.gather_rvalue(loc, rvalue);
+            TerminatorKind::Suspend { destination: (ref destination, _), ref arg } => {
+                self.gather_operand(loc, arg);
                 self.create_move_path(destination);
             }
         }

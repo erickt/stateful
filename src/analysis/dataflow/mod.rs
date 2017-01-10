@@ -469,7 +469,7 @@ impl<'a, D> DataflowAnalysis<'a, D>
             }
             mir::TerminatorKind::Suspend {
                 ref destination,
-                rvalue: _,
+                arg: _,
             } => {
                 debug!("propgate_bits: suspend {:?}", destination);
                 let (ref dest_lval, ref dest_bb) = *destination;
