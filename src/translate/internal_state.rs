@@ -78,14 +78,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .map(|&(scope, _)| {
                 ast_builder.pat().id(format!("scope{}", scope.index()))
             })
-            .chain(
-                // If this is a resume block, it also gets the `coroutine_args` argument.
-                if self.resume_blocks.contains(&block) {
-                    Some(ast_builder.pat().id("coroutine_args"))
-                } else {
-                    None
-                }
-            )
             .collect::<Vec<_>>();
 
         // Construct the pattern, which looks like:

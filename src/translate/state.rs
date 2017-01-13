@@ -78,12 +78,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Create type parameters for each alive local in this block.
         let scope_locals = &self.scope_locals[&block];
 
-        // Internal states get an extra `Args` typaram if the block is a resume block.
-        let args_param = if kind == StateKind::Internal && self.resume_blocks.contains(&block) {
-            Some(ast_builder.id("Args"))
-        } else {
-            None
-        };
+        let args_param = None;
 
         let ty_param_ids = scope_locals.iter()
             .flat_map(|&(_, ref locals)| locals)
@@ -91,19 +86,27 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .chain(args_param)
             .collect::<Vec<_>>();
 
+        let coroutine_args_scope = self.mir.local_decls[COROUTINE_ARGS].source_info.scope;
+
         let variant = if ty_param_ids.is_empty() {
             ast_builder.variant(state_id).unit()
         } else {
             let mut tys = scope_locals.iter()
-                .map(|&(_, ref locals)| {
-                    ast_builder.ty().tuple()
-                        .with_tys(
-                            locals.iter()
-                                .map(|local| {
-                                    ast_builder.ty().id(format!("T{}", local.index()))
-                                })
-                        )
-                        .build()
+                .filter_map(|&(scope, ref locals)| {
+                    if block == START_BLOCK && kind == StateKind::Resume && scope == coroutine_args_scope {
+                        None
+                    } else {
+                        let ty = ast_builder.ty().tuple()
+                            .with_tys(
+                                locals.iter()
+                                    .map(|local| {
+                                        ast_builder.ty().id(format!("T{}", local.index()))
+                                    })
+                            )
+                            .build();
+
+                        Some(ty)
+                    }
                 })
                 .chain(
                     args_param.iter().map(|id| ast_builder.ty().id(id))

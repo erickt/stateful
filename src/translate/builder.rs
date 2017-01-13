@@ -50,7 +50,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn state_machine(&self) -> P<ast::Block> {
-        let start_state_expr = self.resume_state_expr(START_BLOCK);
+        let start_state_expr = self.start_state_expr();
 
         let state_machine_impl = self.state_machine_impl();
         let state_machine_impl_driver = self.state_machine_impl_driver();

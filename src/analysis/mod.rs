@@ -1,4 +1,4 @@
-use data_structures::indexed_vec::Idx;
+use data_structures::indexed_vec::{IndexVec, Idx};
 use mir::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
@@ -38,6 +38,15 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
             }
         })
         .collect::<Vec<_>>();
+
+    let mut predecessors = IndexVec::from_elem(vec![], mir.basic_blocks());
+    for (bb, data) in mir.basic_blocks().iter_enumerated() {
+        if let Some(ref term) = data.terminator {
+            for &tgt in term.successors().iter() {
+                predecessors[tgt].push(bb);
+            }
+        }
+    }
 
     // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
     // the blocks for which it is alive. In order to figure this out, we need the ENTRY set and the
@@ -118,6 +127,19 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
             // if we have a matching `StorageLive` in this block. If we do, we must have
             // initialized the local. Otherwise ignore it.
             if !entry && kill {
+                let mut live = true;
+                for predecessor in &predecessors[block] {
+                    let pred_kill_set = flow_inits.sets().kill_set_for(predecessor.index());
+                    if pred_kill_set.contains(&idx) {
+                        live = false;
+                        break;
+                    }
+                }
+
+                if live {
+                    initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
+                }
+                /*
                 for stmt in block_data.statements() {
                     match stmt.kind {
                         StatementKind::StorageLive(ref lvalue) if Lvalue::Local(local) == *lvalue => {
@@ -127,6 +149,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                         _ => {}
                     }
                 }
+                */
             }
         }
 

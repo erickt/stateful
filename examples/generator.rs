@@ -11,23 +11,12 @@ use std::iter::Iterator;
 use std::mem;
 
 #[generator]
-fn gen() -> Box<Iterator<Item = usize>> {
-    let items: Vec<usize> = vec![1, 2, 3];
-    let mut iter = moved!(items).into_iter();
-
-    while let Some(item) = iter.next() {
-        println!("hello {:?}", item);
-    }
-
-    let x = loop {
-        break 5;
-    };
-
-    println!("esfs: {:?}", x);
+fn gen(pred: bool) -> Box<Iterator<Item = usize>> {
+    yield_!(1);
 }
 
 fn main() {
-    for value in gen() {
+    for value in gen(true) {
         println!("{}", value);
     }
 }

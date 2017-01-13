@@ -221,7 +221,8 @@ impl Mir {
 
     /// Returns an iterator over all function arguments.
     pub fn args_iter(&self) -> Box<Iterator<Item=Local>> {
-        Box::new((2 .. self.arg_count + 2).map(Local::new))
+        // NOTE: we also consider the `coroutine_args` as part of the arguments.
+        Box::new((1 .. self.arg_count + 2).map(Local::new))
     }
 
     /*
@@ -727,6 +728,8 @@ impl Debug for Lvalue {
 
 newtype_index!(VisibilityScope, "scope");
 pub const ARGUMENT_VISIBILITY_SCOPE : VisibilityScope = VisibilityScope(0);
+pub const RETURN_PTR_VISIBILITY_SCOPE : VisibilityScope = VisibilityScope(1);
+pub const COROUTINE_ARGS_VISIBILITY_SCOPE : VisibilityScope = VisibilityScope(2);
 
 #[derive(Clone, Debug)]
 pub struct VisibilityScopeData {

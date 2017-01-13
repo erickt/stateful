@@ -64,20 +64,18 @@ fn test_empty_if() {
     assert_eq!(gen.next(), None);
 }
 
-/*
 #[test]
 fn test_empty_if_let() {
     #[generator]
     fn gen() -> Box<Iterator<Item=usize>> {
         let items = Empty::<usize>::new();
-        let mut iter = items.into_iter();
-        if let Some(_) = copied!(iter).next() { }
+        let mut iter = moved!(items).into_iter();
+        if let Some(_) = iter.next() { }
     }
 
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
-*/
 
 #[test]
 fn test_empty_loop() {
@@ -108,8 +106,8 @@ fn test_empty_while_let() {
     #[generator]
     fn gen() -> Box<Iterator<Item=usize>> {
         let items = Empty::<usize>::new();
-        let mut iter = items.into_iter();
-        while let Some(_) = copied!(iter).next() { }
+        let mut iter = moved!(items).into_iter();
+        while let Some(_) = iter.next() { }
     }
 
     let mut gen = gen();

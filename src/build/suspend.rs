@@ -14,16 +14,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let arg = unpack!(block = self.as_operand(block, &arg));
         let next_block = self.cfg.start_new_block(arg_span, Some("Resume"));
 
+        let coroutine_args = Lvalue::Local(COROUTINE_ARGS);
+
         self.terminate(arg_span, block, TerminatorKind::Suspend {
-            destination: (destination.clone(), next_block),
+            destination: (coroutine_args.clone(), next_block),
             arg: arg,
         });
 
-        let coroutine_args_lvalue = Lvalue::Local(COROUTINE_ARGS);
-        let coroutine_args_operand = Operand::Consume(coroutine_args_lvalue);
-        let coroutine_args_rvalue = Rvalue::Use(coroutine_args_operand);
+        let coroutine_args = Operand::Consume(coroutine_args);
+        let coroutine_args = Rvalue::Use(coroutine_args);
 
-        self.push_assign(next_block, arg_span, &destination, coroutine_args_rvalue);
+        self.push_assign(next_block, arg_span, &destination, coroutine_args);
 
         next_block.unit()
     }

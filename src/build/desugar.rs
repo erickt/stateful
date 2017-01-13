@@ -436,7 +436,7 @@ fn desugar_try(expr: P<ast::Expr>) -> P<ast::Expr> {
 /// }
 /// ```
 fn desugar_yield(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Expr> {
-    quote_expr!(cx, suspend!(Some($expr)))
+    quote_expr!(cx, suspend!(moved!(Some(moved!($expr)))))
 }
 
 /// Compile `$result = await!($expr)` into:

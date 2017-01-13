@@ -205,10 +205,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert_eq!(
             builder.local_decls.push(LocalDecl::new_return_pointer(source_info, None)),
             RETURN_POINTER);
+        assert_eq!(
+            builder.local_decls[RETURN_POINTER].source_info.scope,
+            RETURN_PTR_VISIBILITY_SCOPE);
 
+        // Give the coroutine arguments their own visibility scope.
+        builder.visibility_scope = builder.new_visibility_scope(span);
+
+        let source_info = builder.source_info(span);
+        assert_eq!(builder.visibility_scope, COROUTINE_ARGS_VISIBILITY_SCOPE);
         assert_eq!(
             builder.local_decls.push(LocalDecl::new_coroutine_args(source_info, None)),
             COROUTINE_ARGS);
+        assert_eq!(
+            builder.local_decls[COROUTINE_ARGS].source_info.scope,
+            COROUTINE_ARGS_VISIBILITY_SCOPE);
 
         builder
     }
