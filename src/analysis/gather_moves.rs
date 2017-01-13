@@ -116,6 +116,10 @@ pub struct MoveData {
     pub rev_lookup: MovePathLookup,
 }
 
+pub trait HasMoveData {
+    fn move_data(&self) -> &MoveData;
+}
+
 #[derive(Debug)]
 pub struct LocationMap<T> {
     /// Location-indexed (BasicBlock for outer index, index within BB

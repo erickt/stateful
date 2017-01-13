@@ -94,9 +94,7 @@ fn expand_state_machine<'a, 'ecx>(cx: &'a ExtCtxt<'ecx>,
     //passes.push_pass(Box::new(transform::simplify::SimplifyCfg::new("initial")));
     passes.run_passes(tcx, &mut mir);
 
-    let assignments = analysis::analyze_assignments(tcx, &mir);
-
-    let item = translate::translate(cx, &mir, &assignments);
+    let item = translate::translate(tcx, &mir);
 
     if let Some(path) = env::var("STATEFUL_DUMP_SOURCE").ok() {
         let mut file = fs::File::create(path).unwrap();

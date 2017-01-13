@@ -74,8 +74,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let state_path = self.state_path(block, StateKind::Internal);
         let scope_locals = &self.scope_locals[&block];
 
-        println!("internal_arm: {:#?}", scope_locals);
-
         let pats = scope_locals.iter()
             .map(|&(scope, _)| {
                 ast_builder.pat().id(format!("scope{}", scope.index()))

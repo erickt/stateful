@@ -1,4 +1,4 @@
-use analysis::DefiniteAssignment;
+use analysis::elaborate_assignments::DefiniteAssignment;
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
 use mir::*;
@@ -9,6 +9,7 @@ use syntax::ast;
 use syntax::codemap::Span;
 use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
+use ty::TyCtxt;
 
 type ScopeLocals = HashMap<BasicBlock, Vec<(VisibilityScope, Vec<Local>)>>;
 type ScopePaths = BTreeMap<VisibilityScope, Vec<VisibilityScope>>;
@@ -30,11 +31,11 @@ pub struct Builder<'a, 'b: 'a> {
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn new(cx: &'a ExtCtxt<'b>,
+    pub fn new(tcx: TyCtxt<'a, 'b>,
                mir: &'a Mir,
                assignments: &'a DefiniteAssignment) -> Self {
         Builder {
-            cx: cx,
+            cx: &tcx,
             ast_builder: AstBuilder::new().span(mir.span),
             mir: mir,
             assignments: assignments,

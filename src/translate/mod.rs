@@ -1,15 +1,14 @@
-use analysis::DefiniteAssignment;
+use analysis::elaborate_assignments;
 use aster::AstBuilder;
 use mir::*;
 use syntax::ast;
-use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
+use ty::TyCtxt;
 
-pub fn translate(cx: &ExtCtxt,
-                 mir: &Mir,
-                 assignments: &DefiniteAssignment)
-                 -> P<ast::Item> {
-    let builder = builder::Builder::new(cx, mir, assignments);
+pub fn translate(tcx: TyCtxt, mir: &Mir) -> P<ast::Item> {
+    let assignments = elaborate_assignments::analyze_assignments(tcx, &mir);
+
+    let builder = builder::Builder::new(tcx, mir, &assignments);
     let block = builder.state_machine();
 
     let ast_builder = AstBuilder::new().span(mir.span);

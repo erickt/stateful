@@ -13,6 +13,7 @@ use data_structures::indexed_vec::Idx;
 use data_structures::bitslice::{bitwise, BitwiseOperator};
 
 use mir::{self, Mir};
+use ty::TyCtxt;
 
 use std::fmt::Debug;
 use std::io;
@@ -21,7 +22,6 @@ use std::path::PathBuf;
 use std::usize;
 
 use super::MirBorrowckCtxtPreDataflow;
-use super::MoveDataParamEnv;
 
 pub use self::impls::{DefinitelyInitializedLvals};
 
@@ -29,13 +29,13 @@ mod graphviz;
 mod impls;
 
 pub trait Dataflow<BD: BitDenotation> {
-    fn dataflow<P>(&mut self, p: P) where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug;
+    fn dataflow<P>(&mut self, p: P) where P: Fn(&BD, BD::Idx) -> &Debug;
 }
 
 impl<'a, BD> Dataflow<BD> for MirBorrowckCtxtPreDataflow<'a, BD>
-    where BD: BitDenotation<Ctxt=MoveDataParamEnv> + DataflowOperator
+    where BD: BitDenotation + DataflowOperator
 {
-    fn dataflow<P>(&mut self, p: P) where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug {
+    fn dataflow<P>(&mut self, p: P) where P: Fn(&BD, BD::Idx) -> &Debug {
         self.flow_state.build_sets();
         self.pre_dataflow_instrumentation(|c,i| p(c,i)).unwrap();
         self.flow_state.propagate();
@@ -44,7 +44,7 @@ impl<'a, BD> Dataflow<BD> for MirBorrowckCtxtPreDataflow<'a, BD>
 }
 
 struct PropagationContext<'b, 'a: 'b, O>
-    where O: 'b + BitDenotation, O::Ctxt: 'a
+    where O: 'b + BitDenotation
 {
     builder: &'b mut DataflowAnalysis<'a, O>,
     changed: bool,
@@ -75,7 +75,7 @@ impl<'a, BD> DataflowAnalysis<'a, BD>
 
         {
             let sets = &mut self.flow_state.sets.for_block(mir::START_BLOCK.index());
-            self.flow_state.operator.start_block_effect(&self.ctxt, sets);
+            self.flow_state.operator.start_block_effect(sets);
         }
 
         for (bb, data) in self.mir.basic_blocks().iter_enumerated() {
@@ -83,12 +83,12 @@ impl<'a, BD> DataflowAnalysis<'a, BD>
 
             let sets = &mut self.flow_state.sets.for_block(bb.index());
             for j_stmt in 0..statements.len() {
-                self.flow_state.operator.statement_effect(&self.ctxt, sets, bb, j_stmt);
+                self.flow_state.operator.statement_effect(sets, bb, j_stmt);
             }
 
             if terminator.is_some() {
                 let stmts_len = statements.len();
-                self.flow_state.operator.terminator_effect(&self.ctxt, sets, bb, stmts_len);
+                self.flow_state.operator.terminator_effect(sets, bb, stmts_len);
             }
         }
     }
@@ -122,23 +122,21 @@ impl<'b, 'a: 'b, BD> PropagationContext<'b, 'a, BD>
 }
 
 fn dataflow_path(context: &str, prepost: &str, path: &str) -> PathBuf {
-    println!("dataflow_path: {} {} {}", context, prepost, path);
-    let context = format!("{}_{}", context, prepost);
+    format!("{}_{}", context, prepost);
     let mut path = PathBuf::from(path);
     let new_file_name = {
         let orig_file_name = path.file_name().unwrap().to_str().unwrap();
         format!("{}_{}", context, orig_file_name)
     };
     path.set_file_name(new_file_name);
-    println!("path: {:?}", path);
     path
 }
 
 impl<'a, BD> MirBorrowckCtxtPreDataflow<'a, BD>
-    where BD: BitDenotation<Ctxt=MoveDataParamEnv>
+    where BD: BitDenotation
 {
     fn pre_dataflow_instrumentation<P>(&self, p: P) -> io::Result<()>
-        where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug
+        where P: Fn(&BD, BD::Idx) -> &Debug
     {
         if let Some(ref path_str) = self.print_preflow_to {
             let path = dataflow_path(BD::name(), "preflow", path_str);
@@ -149,7 +147,7 @@ impl<'a, BD> MirBorrowckCtxtPreDataflow<'a, BD>
     }
 
     fn post_dataflow_instrumentation<P>(&self, p: P) -> io::Result<()>
-        where P: Fn(&BD::Ctxt, BD::Idx) -> &Debug
+        where P: Fn(&BD, BD::Idx) -> &Debug
     {
         if let Some(ref path_str) = self.print_postflow_to {
             let path = dataflow_path(BD::name(), "postflow", path_str);
@@ -177,11 +175,10 @@ impl<E:Idx> Bits<E> {
 }
 
 pub struct DataflowAnalysis<'a, O>
-    where O: BitDenotation, O::Ctxt: 'a
+    where O: BitDenotation
 {
     flow_state: DataflowState<O>,
     mir: &'a Mir,
-    ctxt: &'a O::Ctxt,
 }
 
 impl<'a, O> DataflowAnalysis<'a, O>
@@ -295,9 +292,6 @@ pub trait BitDenotation {
     /// Specifies what index type is used to access the bitvector.
     type Idx: Idx;
 
-    /// Specifies what, if any, separate context needs to be supplied for methods below.
-    type Ctxt;
-
     /// A name describing the dataflow analysis that this
     /// BitDenotation is supporting.  The name should be something
     /// suitable for plugging in as part of a filename e.g. avoid
@@ -308,7 +302,7 @@ pub trait BitDenotation {
     fn name() -> &'static str;
 
     /// Size of each bitvector allocated for each block in the analysis.
-    fn bits_per_block(&self, &Self::Ctxt) -> usize;
+    fn bits_per_block(&self) -> usize;
 
     /// Mutates the block-sets (the flow sets for the given
     /// basic block) according to the effects that have been
@@ -319,7 +313,7 @@ pub trait BitDenotation {
     /// (Typically this should only modify `sets.on_entry`, since the
     /// gen and kill sets should reflect the effects of *executing*
     /// the start block itself.)
-    fn start_block_effect(&self, ctxt: &Self::Ctxt, sets: &mut BlockSets<Self::Idx>);
+    fn start_block_effect(&self, sets: &mut BlockSets<Self::Idx>);
 
     /// Mutates the block-sets (the flow sets for the given
     /// basic block) according to the effects of evaluating statement.
@@ -332,7 +326,6 @@ pub trait BitDenotation {
     /// `bb_data` is the sequence of statements identifed by `bb` in
     /// the MIR.
     fn statement_effect(&self,
-                        ctxt: &Self::Ctxt,
                         sets: &mut BlockSets<Self::Idx>,
                         bb: mir::BasicBlock,
                         idx_stmt: usize);
@@ -348,7 +341,6 @@ pub trait BitDenotation {
     /// The effects applied here cannot depend on which branch the
     /// terminator took.
     fn terminator_effect(&self,
-                         ctxt: &Self::Ctxt,
                          sets: &mut BlockSets<Self::Idx>,
                          bb: mir::BasicBlock,
                          idx_term: usize);
@@ -373,20 +365,19 @@ pub trait BitDenotation {
     /// kill-sets associated with each edge coming out of the basic
     /// block.
     fn propagate_call_return(&self,
-                             ctxt: &Self::Ctxt,
                              in_out: &mut IdxSet<Self::Idx>,
                              call_bb: mir::BasicBlock,
                              dest_bb: mir::BasicBlock,
                              dest_lval: &mir::Lvalue);
 }
 
-impl<'a, D> DataflowAnalysis<'a, D>
+impl<'a, 'tcx: 'a, D> DataflowAnalysis<'a, D>
     where D: BitDenotation + DataflowOperator
 {
-    pub fn new(mir: &'a Mir,
-               ctxt: &'a D::Ctxt,
+    pub fn new(_tcx: TyCtxt<'a, 'tcx>,
+               mir: &'a Mir,
                denotation: D) -> Self {
-        let bits_per_block = denotation.bits_per_block(&ctxt);
+        let bits_per_block = denotation.bits_per_block();
         let usize_bits = mem::size_of::<usize>() * 8;
         let words_per_block = (bits_per_block + usize_bits - 1) / usize_bits;
 
@@ -404,7 +395,6 @@ impl<'a, D> DataflowAnalysis<'a, D>
         });
 
         DataflowAnalysis {
-            ctxt: ctxt,
             mir: mir,
             flow_state: DataflowState {
                 sets: AllSets {
@@ -476,7 +466,7 @@ impl<'a, D> DataflowAnalysis<'a, D>
                 // N.B.: This must be done *last*, after all other
                 // propagation, as documented in comment above.
                 self.flow_state.operator.propagate_call_return(
-                    &self.ctxt, in_out, bb, *dest_bb, dest_lval);
+                    in_out, bb, *dest_bb, dest_lval);
                 self.propagate_bits_into_entry_set_for(in_out, changed, dest_bb);
             }
         }
