@@ -64,7 +64,6 @@ fn test_empty_if() {
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
-*/
 
 #[test]
 fn test_empty_if_let() {
@@ -79,7 +78,6 @@ fn test_empty_if_let() {
     assert_eq!(gen.next(), None);
 }
 
-/*
 #[test]
 fn test_empty_loop() {
     #[generator]
@@ -142,6 +140,7 @@ fn test_empty_with_macro() {
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
+*/
 
 #[test]
 fn test_break_value() {
@@ -178,6 +177,7 @@ fn test_ints() {
     assert_eq!(gen.next(), None);
 }
 
+/*
 #[test]
 fn test_item_slice() {
     #[generator]

@@ -200,8 +200,6 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     println!("initialized: {:#?}", initialized);
     println!("assigned: {:#?}", assigned);
 
-    panic!();
-
     DefiniteAssignment {
         initialized: initialized,
         assigned_on_entry: assigned,

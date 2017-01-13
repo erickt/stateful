@@ -8,6 +8,7 @@
 #![allow(unused_variables)]
 
 use std::iter::Iterator;
+use std::marker::PhantomData;
 use std::mem;
 
 struct Empty<T>(PhantomData<T>);
@@ -45,9 +46,9 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen() -> Box<Iterator<Item = usize>> {
-    let items = Empty::<usize>::new();
-    let mut iter = moved!(items).into_iter();
-    if let Some(_) = iter.next() { }
+    loop {
+        break;
+    };
 }
 
 fn main() {
