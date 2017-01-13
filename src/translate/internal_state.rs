@@ -16,7 +16,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut arms = Vec::with_capacity(blocks.len());
 
         for block in blocks.indices() {
-            let (variant, tp) = self.state_variant(block, StateKind::Internal);
+            let (variant, tp) = self.state_variant(block);
             variants.push(variant);
 
             // It's possible for a declaration to be created but not actually get used in the state

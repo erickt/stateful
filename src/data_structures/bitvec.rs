@@ -246,6 +246,7 @@ fn word_mask(index: usize) -> (usize, u64) {
     (word, mask)
 }
 
+/*
 #[test]
 fn bitvec_iter_works() {
     let mut bitvec = BitVector::new(100);
@@ -274,7 +275,6 @@ fn bitvec_iter_works_2() {
     assert_eq!(bitvec.iter().collect::<Vec<_>>(), [0, 127, 191, 255, 319]);
 }
 
-/*
 #[test]
 fn union_two_vecs() {
     let mut vec1 = BitVector::new(65);

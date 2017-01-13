@@ -15,7 +15,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut ty_param_ids = vec![];
         let arms = blocks.iter()
             .map(|&block| {
-                let (variant, tp) = self.state_variant(block, StateKind::Resume);
+                let (variant, tp) = self.resume_state_variant(block);
                 variants.push(variant);
 
                 // It's possible for a declaration to be created but not actually get used in the
@@ -83,26 +83,31 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let state_path = self.state_path(START_BLOCK, StateKind::Resume);
 
-        println!("{:?}", &self.scope_locals[&START_BLOCK]);
-
-        // Pack up all the locals back into scope tuples.
-        let exprs = self.scope_locals[&START_BLOCK].iter()
+        let scope_locals = self.scope_locals[&START_BLOCK].iter()
             // The start expression doesn't yet have coroutine args initialized yet.
             .filter(|&&(scope, _)| scope != COROUTINE_ARGS_VISIBILITY_SCOPE)
-            .map(|&(_, ref locals)| {
-                ast_builder.expr().tuple()
-                    .with_exprs(
-                        locals.iter().map(|local| {
-                            let name = &self.mir.local_decls[*local].name;
-                            ast_builder.expr().id(name)
-                        })
-                    ).build()
-            });
+            .collect::<Vec<_>>();
+        
+        if scope_locals.is_empty() {
+            ast_builder.expr().build_path(state_path)
+        } else {
+            // Pack up all the locals back into scope tuples.
+            let exprs = scope_locals.iter()
+                .map(|&&(_, ref locals)| {
+                    ast_builder.expr().tuple()
+                        .with_exprs(
+                            locals.iter().map(|local| {
+                                let name = &self.mir.local_decls[*local].name;
+                                ast_builder.expr().id(name)
+                            })
+                        ).build()
+                });
 
-        ast_builder.expr().call()
-            .build_path(state_path)
-            .with_args(exprs)
-            .build()
+            ast_builder.expr().call()
+                .build_path(state_path)
+                .with_args(exprs)
+                .build()
+        }
     }
 
     pub fn resume_state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
@@ -143,6 +148,55 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.state_expr(block, StateKind::Resume)
     }
 
+    fn resume_state_variant(&self, block: BasicBlock) -> (ast::Variant, Vec<ast::Ident>) {
+        let span = self.block_span(block);
+        let ast_builder = self.ast_builder.span(span);
+
+        let state_id = self.state_id(block);
+
+        // Create type parameters for each alive local in this block.
+        let scope_locals = &self.scope_locals[&block];
+
+        let ty_param_ids = scope_locals.iter()
+            .filter(|&&(scope, _)| {
+                !(block == START_BLOCK && scope == COROUTINE_ARGS_VISIBILITY_SCOPE)
+            })
+            .flat_map(|&(_, ref locals)| locals)
+            .map(|local| ast_builder.id(format!("T{}", local.index())))
+            .collect::<Vec<_>>();
+
+        let variant = if false { //ty_param_ids.is_empty() {
+            ast_builder.variant(state_id).unit()
+        } else {
+            let mut tys = scope_locals.iter()
+                .filter(|&&(scope, _)| {
+                    !(block == START_BLOCK && scope == COROUTINE_ARGS_VISIBILITY_SCOPE)
+                })
+                .map(|&(_, ref locals)| {
+                    ast_builder.ty().tuple()
+                        .with_tys(
+                            locals.iter()
+                                .map(|local| {
+                                    ast_builder.ty().id(format!("T{}", local.index()))
+                                })
+                        )
+                        .build()
+                });
+
+            if let Some(ty) = tys.next() {
+                ast_builder.variant(state_id).tuple().ty().build(ty)
+                    .with_fields(
+                        tys.map(|ty| ast_builder.tuple_field().ty().build(ty))
+                    )
+                    .build()
+            } else {
+                ast_builder.variant(state_id).unit()
+            }
+        };
+
+        (variant, ty_param_ids)
+    }
+
     /// Build up an `ast::Arm` for a resume state variant. This arm's role is to lift up the
     /// resume arguments into the state machine, which is simply generating a conversion like
     /// this:
@@ -163,18 +217,23 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Build the resume arm. Note that the resume start block does not get the
         // `coroutine_args`.
         let resume_path = self.state_path(block, StateKind::Resume);
-        let resume_pat = if scope_ids.is_empty() {
+        let resume_pat = if false { //scope_ids.is_empty() {
             ast_builder.pat().build_path(resume_path)
         } else {
-            ast_builder.pat().enum_().build(resume_path)
-                .with_pats(
-                    scope_ids.iter()
-                        .filter(|&&(scope, _)| {
-                            block != START_BLOCK || scope != COROUTINE_ARGS_VISIBILITY_SCOPE
-                        })
-                        .map(|&(_, id)| ast_builder.pat().id(id))
-                )
-                .build()
+            let pats = scope_ids.iter()
+                .filter(|&&(scope, _)| {
+                    block != START_BLOCK || scope != COROUTINE_ARGS_VISIBILITY_SCOPE
+                })
+                .map(|&(_, id)| ast_builder.pat().id(id))
+                .collect::<Vec<_>>();
+
+            if pats.is_empty() {
+                ast_builder.pat().build_path(resume_path)
+            } else {
+                ast_builder.pat().enum_().build(resume_path)
+                    .with_pats(pats)
+                    .build()
+            }
         };
 
         let internal_path = self.state_path(block, StateKind::Internal);

@@ -127,19 +127,38 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
             // if we have a matching `StorageLive` in this block. If we do, we must have
             // initialized the local. Otherwise ignore it.
             if !entry && kill {
+
+
+
+
+                /*
+                println!("might be live or dead!: bb={:?} local={:?}", block, local);
                 let mut live = true;
                 for predecessor in &predecessors[block] {
+                    println!("pred: {:?}", predecessor);
+                    let pred_entry_set = flow_inits.sets().on_entry_set_for(predecessor.index());
+                    let pred_gen_set = flow_inits.sets().gen_set_for(predecessor.index());
                     let pred_kill_set = flow_inits.sets().kill_set_for(predecessor.index());
+
+                    println!("pred: entry: {:?}", pred_entry_set.contains(&idx));
+                    println!("pred: gen: {:?}", pred_gen_set.contains(&idx));
+                    println!("pred: kill: {:?}", pred_kill_set.contains(&idx));
+
                     if pred_kill_set.contains(&idx) {
+                        println!("pred: {:?} is killed", local);
                         live = false;
                         break;
+                    } else {
+                        println!("pred: {:?} is not killed", local);
                     }
                 }
 
                 if live {
                     initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
                 }
-                /*
+                */
+
+
                 for stmt in block_data.statements() {
                     match stmt.kind {
                         StatementKind::StorageLive(ref lvalue) if Lvalue::Local(local) == *lvalue => {
@@ -149,7 +168,6 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                         _ => {}
                     }
                 }
-                */
             }
         }
 
@@ -181,6 +199,8 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
 
     println!("initialized: {:#?}", initialized);
     println!("assigned: {:#?}", assigned);
+
+    panic!();
 
     DefiniteAssignment {
         initialized: initialized,

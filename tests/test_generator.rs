@@ -43,6 +43,7 @@ impl<T> Iterator for EmptyIterator<T> {
     }
 }
 
+/*
 #[test]
 fn test_empty() {
     #[generator]
@@ -63,6 +64,7 @@ fn test_empty_if() {
     let mut gen = gen();
     assert_eq!(gen.next(), None);
 }
+*/
 
 #[test]
 fn test_empty_if_let() {
@@ -77,6 +79,7 @@ fn test_empty_if_let() {
     assert_eq!(gen.next(), None);
 }
 
+/*
 #[test]
 fn test_empty_loop() {
     #[generator]
@@ -370,4 +373,5 @@ fn test_if_yield() {
     assert_eq!(gen.next(), Some(3));
     assert_eq!(gen.next(), None);
 }
+*/
 */
