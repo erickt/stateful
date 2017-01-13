@@ -8,12 +8,14 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 
+use data_structures::bitslice::BitSlice; // adds set_bit/get_bit to &[usize] bitvector rep.
 use data_structures::bitslice::BitwiseOperator;
 use data_structures::indexed_set::{IdxSet};
+use data_structures::indexed_vec::Idx;
 use mir::{self, Location, Mir};
 use ty::TyCtxt;
 
-use super::super::gather_moves::{HasMoveData, MoveData, MovePathIndex};
+use super::super::gather_moves::{HasMoveData, MoveData, MoveOutIndex, MovePathIndex};
 use super::super::MoveDataParamEnv;
 use super::super::DropFlagState;
 use super::super::drop_flag_effects_for_function_entry;
@@ -26,7 +28,6 @@ use super::{BitDenotation, BlockSets, DataflowOperator};
 // bitvectors attached to each basic block, represented via a
 // zero-sized structure.
 
-/*
 /// `MaybeInitializedLvals` tracks all l-values that might be
 /// initialized upon reaching a particular point in the control flow
 /// for a function.
@@ -65,16 +66,21 @@ use super::{BitDenotation, BlockSets, DataflowOperator};
 pub struct MaybeInitializedLvals<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx>,
     mir: &'a Mir,
+    mdpe: &'a MoveDataParamEnv,
 }
 
 impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'a, 'tcx>, mir: &'a Mir) -> Self {
-        MaybeInitializedLvals { tcx: tcx, mir: mir }
+    pub fn new(tcx: TyCtxt<'a, 'tcx>,
+               mir: &'a Mir,
+               mdpe: &'a MoveDataParamEnv)
+               -> Self
+    {
+        MaybeInitializedLvals { tcx: tcx, mir: mir, mdpe: mdpe }
     }
 }
 
-impl<'a, 'tcx: 'a> HasMoveData<'tcx> for MaybeInitializedLvals<'a, 'tcx> {
-    fn move_data(&self) -> &MoveData<'tcx> { &self.mdpe.move_data }
+impl<'a, 'tcx: 'a> HasMoveData for MaybeInitializedLvals<'a, 'tcx> {
+    fn move_data(&self) -> &MoveData { &self.mdpe.move_data }
 }
 
 /// `MaybeUninitializedLvals` tracks all l-values that might be
@@ -115,14 +121,22 @@ impl<'a, 'tcx: 'a> HasMoveData<'tcx> for MaybeInitializedLvals<'a, 'tcx> {
 pub struct MaybeUninitializedLvals<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx>,
     mir: &'a Mir,
+    mdpe: &'a MoveDataParamEnv,
 }
 
 impl<'a, 'tcx: 'a> MaybeUninitializedLvals<'a, 'tcx> {
-    pub fn new(tcx: TyCtxt<'a, 'tcx>, mir: &'a Mir) -> Self {
-        MaybeUninitializedLvals { tcx: tcx, mir: mir }
+    pub fn new(tcx: TyCtxt<'a, 'tcx>,
+               mir: &'a Mir,
+               mdpe: &'a MoveDataParamEnv)
+               -> Self
+    {
+        MaybeUninitializedLvals { tcx: tcx, mir: mir, mdpe: mdpe }
     }
 }
-*/
+
+impl<'a, 'tcx: 'a> HasMoveData for MaybeUninitializedLvals<'a, 'tcx> {
+    fn move_data(&self) -> &MoveData { &self.mdpe.move_data }
+}
 
 /// `DefinitelyInitializedLvals` tracks all l-values that are definitely
 /// initialized upon reaching a particular point in the control flow
@@ -185,7 +199,6 @@ impl<'a, 'tcx: 'a> HasMoveData for DefinitelyInitializedLvals<'a, 'tcx> {
     fn move_data(&self) -> &MoveData { &self.mdpe.move_data }
 }
 
-/*
 /// `MovingOutStatements` tracks the statements that perform moves out
 /// of particular l-values. More precisely, it tracks whether the
 /// *effect* of such moves (namely, the uninitialization of the
@@ -200,8 +213,14 @@ impl<'a, 'tcx: 'a> HasMoveData for DefinitelyInitializedLvals<'a, 'tcx> {
 /// data of *which* particular statement causing the deinitialization
 /// that the borrow checker's error meessage may need to report.
 #[allow(dead_code)]
-pub struct MovingOutStatements<'a> {
+pub struct MovingOutStatements<'a, 'tcx: 'a> {
+    tcx: TyCtxt<'a, 'tcx>,
     mir: &'a Mir,
+    mdpe: &'a MoveDataParamEnv,
+}
+
+impl<'a, 'tcx> HasMoveData for MovingOutStatements<'a, 'tcx> {
+    fn move_data(&self) -> &MoveData { &self.mdpe.move_data }
 }
 
 impl<'a, 'tcx> MaybeInitializedLvals<'a, 'tcx> {
@@ -225,7 +244,6 @@ impl<'a, 'tcx> MaybeUninitializedLvals<'a, 'tcx> {
         }
     }
 }
-*/
 
 impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     fn update_bits(sets: &mut BlockSets<MovePathIndex>, path: MovePathIndex,
@@ -238,18 +256,17 @@ impl<'a, 'tcx> DefinitelyInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
 impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
     fn name() -> &'static str { "maybe_init" }
     fn bits_per_block(&self) -> usize {
-        self.move_data.move_paths.len()
+        self.move_data().move_paths.len()
     }
 
     fn start_block_effect(&self, sets: &mut BlockSets<MovePathIndex>)
     {
         drop_flag_effects_for_function_entry(
-            self.tcx, self.mir,
+            self.tcx, self.mir, self.mdpe,
             |path, s| {
                 assert!(s == DropFlagState::Present);
                 sets.on_entry.add(&path);
@@ -262,7 +279,7 @@ impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
                         idx: usize)
     {
         drop_flag_effects_for_location(
-            self.tcx, self.mir,
+            self.tcx, self.mir, self.mdpe,
             Location { block: bb, statement_index: idx },
             |path, s| Self::update_bits(sets, path, s)
         )
@@ -274,7 +291,7 @@ impl<'a, 'tcx> BitDenotation for MaybeInitializedLvals<'a, 'tcx> {
                          statements_len: usize)
     {
         drop_flag_effects_for_location(
-            self.tcx, self.mir,
+            self.tcx, self.mir, self.mdpe,
             Location { block: bb, statement_index: statements_len },
             |path, s| Self::update_bits(sets, path, s)
         )
@@ -306,7 +323,7 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
         for e in sets.on_entry.words_mut() { *e = !0; }
 
         drop_flag_effects_for_function_entry(
-            self.tcx, self.mir,
+            self.tcx, self.mir, self.mdpe,
             |path, s| {
                 assert!(s == DropFlagState::Present);
                 sets.on_entry.remove(&path);
@@ -319,7 +336,7 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                         idx: usize)
     {
         drop_flag_effects_for_location(
-            self.tcx, self.mir,
+            self.tcx, self.mir, self.mdpe,
             Location { block: bb, statement_index: idx },
             |path, s| Self::update_bits(sets, path, s)
         )
@@ -331,7 +348,7 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                          statements_len: usize)
     {
         drop_flag_effects_for_location(
-            self.tcx, self.mir,
+            self.tcx, self.mir, self.mdpe,
             Location { block: bb, statement_index: statements_len },
             |path, s| Self::update_bits(sets, path, s)
         )
@@ -349,7 +366,6 @@ impl<'a, 'tcx> BitDenotation for MaybeUninitializedLvals<'a, 'tcx> {
                               |mpi| { in_out.remove(&mpi); });
     }
 }
-*/
 
 impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
     type Idx = MovePathIndex;
@@ -407,10 +423,8 @@ impl<'a, 'tcx> BitDenotation for DefinitelyInitializedLvals<'a, 'tcx> {
     }
 }
 
-/*
-impl<'a> BitDenotation for MovingOutStatements<'a> {
+impl<'a, 'tcx> BitDenotation for MovingOutStatements<'a, 'tcx> {
     type Idx = MoveOutIndex;
-    type Ctxt = MoveDataParamEnv;
     fn name() -> &'static str { "moving_out" }
     fn bits_per_block(&self) -> usize {
         self.move_data().moves.len()
@@ -459,9 +473,13 @@ impl<'a> BitDenotation for MovingOutStatements<'a> {
                                          sets.kill_set.add(&moi);
                                      });
             }
+            mir::StatementKind::Stmt(_) |
+            mir::StatementKind::Let { .. } |
+            mir::StatementKind::Call { .. } |
+            mir::StatementKind::MethodCall { .. } |
             mir::StatementKind::StorageLive(_) |
-            mir::StatementKind::StorageDead(_) |
-            mir::StatementKind::Nop => {}
+            mir::StatementKind::StorageDead(_) => {}
+            //mir::StatementKind::Nop => {}
         }
     }
 
@@ -508,7 +526,7 @@ fn zero_to_one(bitvec: &mut [usize], move_index: MoveOutIndex) {
     assert!(retval);
 }
 
-impl<'a> BitwiseOperator for MovingOutStatements<'a> {
+impl<'a, 'tcx> BitwiseOperator for MovingOutStatements<'a, 'tcx> {
     #[inline]
     fn join(&self, pred1: usize, pred2: usize) -> usize {
         pred1 | pred2 // moves from both preds are in scope
@@ -528,7 +546,6 @@ impl<'a, 'tcx> BitwiseOperator for MaybeUninitializedLvals<'a, 'tcx> {
         pred1 | pred2 // "maybe" means we union effects of both preds
     }
 }
-*/
 
 impl<'a, 'tcx> BitwiseOperator for DefinitelyInitializedLvals<'a, 'tcx> {
     #[inline]
@@ -547,8 +564,7 @@ impl<'a, 'tcx> BitwiseOperator for DefinitelyInitializedLvals<'a, 'tcx> {
 // propagating, or you start at all-ones and then use Intersect as
 // your merge when propagating.
 
-/*
-impl<'a> DataflowOperator for MovingOutStatements<'a> {
+impl<'a, 'tcx> DataflowOperator for MovingOutStatements<'a, 'tcx> {
     #[inline]
     fn bottom_value() -> bool {
         false // bottom = no loans in scope by default
@@ -568,7 +584,6 @@ impl<'a, 'tcx> DataflowOperator for MaybeUninitializedLvals<'a, 'tcx> {
         false // bottom = initialized (start_block_effect counters this at outset)
     }
 }
-*/
 
 impl<'a, 'tcx> DataflowOperator for DefinitelyInitializedLvals<'a, 'tcx> {
     #[inline]
