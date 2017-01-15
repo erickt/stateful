@@ -1080,12 +1080,6 @@ impl Debug for Statement {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
-pub struct ShadowedDecl {
-    pub lvalue: ast::Ident,
-    pub decl: Local,
-}
-
 ///////////////////////////////////////////////////////////////////////////
 // Code Extents
 
