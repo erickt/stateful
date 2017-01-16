@@ -446,6 +446,9 @@ impl<'a, D> DataflowAnalysis<'a, D>
                 self.propagate_bits_into_entry_set_for(in_out, changed, target);
                 self.propagate_bits_into_entry_set_for(in_out, changed, after_target);
             }
+            mir::TerminatorKind::Drop { ref target, location: _ } => {
+                self.propagate_bits_into_entry_set_for(in_out, changed, target);
+            }
             mir::TerminatorKind::If { ref targets, .. } => {
                 debug!("propgate_bits: if {:?}", targets);
                 self.propagate_bits_into_entry_set_for(in_out, changed, &targets.0);

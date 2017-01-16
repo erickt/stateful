@@ -1,9 +1,22 @@
-use super::{DefinitelyInitializedLvals, do_dataflow};
-use super::{LookupResult, MoveData, MoveDataParamEnv};
-use super::gather_moves::HasMoveData;
-use data_structures::indexed_vec::{IndexVec, Idx};
+// Copyright 2016 The Rust Project Developers. See the COPYRIGHT
+// file at the top-level directory of this distribution and at
+// http://rust-lang.org/COPYRIGHT.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::{BTreeMap, BTreeSet};
+use super::dataflow::DataflowResults;
+use super::dataflow::DefinitelyInitializedLvals;
+use super::gather_moves::HasMoveData;
+use super::MoveDataParamEnv;
+use super::{MoveData, MovePathIndex};
+use syntax::codemap::Span;
 use ty::TyCtxt;
 
 pub struct DefiniteAssignment {
@@ -30,10 +43,16 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let env = MoveDataParamEnv { move_data: move_data };
 
     // Figure out when variables are initialized or assigned.
-    let flow_inits = do_dataflow(tcx, mir,
-                                 DefinitelyInitializedLvals::new(tcx, mir, &env),
-                                 |bd, p| &bd.move_data().move_paths[p]);
+    /*
+    let flow_maybe_inits = super::do_dataflow(tcx, mir,
+                                              MaybeInitializedLvals::new(tcx, mir, &env),
+                                              |bd, p| &bd.move_data().move_paths[p]);
+    */
+    let flow_inits = super::do_dataflow(tcx, mir,
+                                        DefinitelyInitializedLvals::new(tcx, mir, &env),
+                                        |bd, p| &bd.move_data().move_paths[p]);
 
+    /*
     // `flow_inits` works with `MoveIndex`s not locals, so we need a mapping from one to the other.
     let move_indices = mir.local_decls
         .indices()
@@ -50,140 +69,12 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         })
         .collect::<Vec<_>>();
 
-    let mut predecessors = IndexVec::from_elem(vec![], mir.basic_blocks());
-    for (bb, data) in mir.basic_blocks().iter_enumerated() {
-        if let Some(ref term) = data.terminator {
-            for &tgt in term.successors().iter() {
-                predecessors[tgt].push(bb);
-            }
-        }
-    }
-
-    // Now we're ready. Use the flow data to figure out when a local is first initialized, and all
-    // the blocks for which it is alive. In order to figure this out, we need the ENTRY set and the
-    // GEN set from the dataflow. In our case, for a given block:
-    //
-    // * ENTRY has a bit set for each local that was initialized in a parent block.
-    // * GEN has a bit set for each local initialized in this block.
-    let mut initialized = BTreeMap::new();
-    let mut assigned = BTreeMap::new();
-
     for (block, block_data) in mir.basic_blocks().iter_enumerated() {
         let entry_set = flow_inits.sets().on_entry_set_for(block.index());
         let gen_set = flow_inits.sets().gen_set_for(block.index());
         let kill_set = flow_inits.sets().kill_set_for(block.index());
 
-        // FIXME(stateful): We need to push down the fact that match arm lvalues have been defined
-        // by pulling apart the pattern. This would be best expressed implicitly though the
-        // dataflow, but, well, I couldn't figure out how to get that to work.
-        if let TerminatorKind::Match { ref arms, .. } = block_data.terminator().kind {
-            for arm in arms {
-                for lvalue in &arm.lvalues {
-                    match *lvalue {
-                        Lvalue::Local(local) => {
-                            assigned.entry(arm.block)
-                                .or_insert_with(BTreeSet::new)
-                                .insert(local);
-                        }
-                        _ => unreachable!(),
-                    }
-                }
-            }
-        }
-
-        for &(idx, local) in &move_indices {
-            let entry = entry_set.contains(&idx);
-            let gen = gen_set.contains(&idx);
-            let kill = kill_set.contains(&idx);
-
-            // If a local is both in the entry and the gen set, then that means that the local was
-            // generated externally from the state machine, such as for `Suspend`. If this is the
-            // case, only mark this variable as initialized, not assigned.
-            if gen {
-                initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-            } else if entry {
-                assigned.entry(block).or_insert_with(BTreeSet::new).insert(local);
-            }
-
-            // It's possible that if the local was killed in this block it was also initialized in
-            // this block. This can happen in code like this:
-            //
-            // ```rust
-            // {
-            //     let x = String::new();
-            //     // `x` is dropped
-            // }
-            // ```
-            //
-            // However, we also have the case where if a local was moved in a prior block, we still
-            // might end up still having a killed local in our set. This can happen in code like
-            // this:
-            //
-            // ```rust
-            // {
-            //     let x = String::new();
-            //     // `x` is marked live
-            //
-            //     if true {
-            //         mem::drop(x);
-            //     } else {
-            //         mem::drop(x);
-            //     }
-            //
-            //     // `x` is marked dead at the end of the scope
-            // }
-            // ```
-            //
-            // So to initialize the variable in the first case but not the second case, just check
-            // if we have a matching `StorageLive` in this block. If we do, we must have
-            // initialized the local. Otherwise ignore it.
-            if !entry && kill {
-                for stmt in block_data.statements() {
-                    match stmt.kind {
-                        StatementKind::StorageLive(ref lvalue) if Lvalue::Local(local) == *lvalue => {
-                            initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-                            break;
-                        }
-                        _ => {}
-                    }
-                }
-
-                /*
-                if !found {
-                }
-
-
-
-                println!("might be live or dead!: bb={:?} local={:?}", block, local);
-                let mut live = true;
-                for predecessor in &predecessors[block] {
-                    println!("pred: {:?}", predecessor);
-                    let pred_entry_set = flow_inits.sets().on_entry_set_for(predecessor.index());
-                    let pred_gen_set = flow_inits.sets().gen_set_for(predecessor.index());
-                    let pred_kill_set = flow_inits.sets().kill_set_for(predecessor.index());
-
-                    println!("pred: entry: {:?}", pred_entry_set.contains(&idx));
-                    println!("pred: gen: {:?}", pred_gen_set.contains(&idx));
-                    println!("pred: kill: {:?}", pred_kill_set.contains(&idx));
-
-                    if pred_kill_set.contains(&idx) {
-                        println!("pred: {:?} is killed", local);
-                        live = false;
-                        break;
-                    } else {
-                        println!("pred: {:?} is not killed", local);
-                    }
-                }
-
-                if live {
-                    //initialized.entry(block).or_insert_with(BTreeSet::new).insert(local);
-                //}
-            }
-                */
-            }
-        }
-
-        println!("entry: {:?} => {:?}",
+        println!("init entry: {:?} => {:?}",
                  block,
                  move_indices.iter()
                     .filter_map(|&(idx, local)| {
@@ -191,7 +82,7 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                     })
                     .collect::<Vec<_>>());
 
-        println!("gen: {:?} => {:?}",
+        println!("init gen: {:?} => {:?}",
                  block,
                  move_indices.iter()
                     .filter_map(|&(idx, local)| {
@@ -199,7 +90,65 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                     })
                     .collect::<Vec<_>>());
 
-        println!("kill: {:?} => {:?}",
+        println!("init kill: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if kill_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        /*
+        let entry_set = flow_uninits.sets().on_entry_set_for(block.index());
+        let gen_set = flow_uninits.sets().gen_set_for(block.index());
+        let kill_set = flow_uninits.sets().kill_set_for(block.index());
+
+        println!("uninit entry: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if entry_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("uninit gen: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if gen_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("uninit kill: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if kill_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+        */
+
+        let entry_set = flow_definits.sets().on_entry_set_for(block.index());
+        let gen_set = flow_definits.sets().gen_set_for(block.index());
+        let kill_set = flow_definits.sets().kill_set_for(block.index());
+
+        println!("definit entry: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if entry_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("definit gen: {:?} => {:?}",
+                 block,
+                 move_indices.iter()
+                    .filter_map(|&(idx, local)| {
+                        if gen_set.contains(&idx) { Some(local) } else { None }
+                    })
+                    .collect::<Vec<_>>());
+
+        println!("definit kill: {:?} => {:?}",
                  block,
                  move_indices.iter()
                     .filter_map(|&(idx, local)| {
@@ -208,12 +157,142 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
                     .collect::<Vec<_>>());
         println!();
     }
+    */
 
-    println!("initialized: {:#?}", initialized);
-    println!("assigned: {:#?}", assigned);
+    ElaborateAssignmentsCtxt {
+        tcx: tcx,
+        mir: mir,
+        env: &env,
+        //flow_maybe_inits: flow_maybe_inits,
+        flow_inits: flow_inits,
+        initialized: BTreeMap::new(),
+        assigned_on_entry: BTreeMap::new(),
+    }.elaborate()
+}
 
-    DefiniteAssignment {
-        initialized: initialized,
-        assigned_on_entry: assigned,
+struct ElaborateAssignmentsCtxt<'a, 'tcx: 'a> {
+    tcx: TyCtxt<'a, 'tcx>,
+    mir: &'a Mir,
+    env: &'a MoveDataParamEnv,
+    //flow_maybe_inits: DataflowResults<MaybeInitializedLvals<'a, 'tcx>>,
+    flow_inits: DataflowResults<DefinitelyInitializedLvals<'a, 'tcx>>,
+    initialized: BTreeMap<BasicBlock, BTreeSet<Local>>,
+    assigned_on_entry: BTreeMap<BasicBlock, BTreeSet<Local>>,
+}
+
+impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
+    fn move_data(&self) -> &'b MoveData { &self.env.move_data }
+
+    fn elaborate(mut self) -> DefiniteAssignment {
+        self.elaborate_assignments();
+
+        debug!("initialized: {:#?}", self.initialized);
+        debug!("assigned: {:#?}", self.assigned_on_entry);
+
+        DefiniteAssignment {
+            initialized: self.initialized,
+            assigned_on_entry: self.assigned_on_entry,
+        }
+    }
+
+    fn get_path_local(&self, span: Span, path: MovePathIndex) -> Local {
+        let move_path = &self.move_data().move_paths[path];
+        assert!(move_path.parent.is_none());
+
+        match move_path.lvalue {
+            Lvalue::Local(local) => local,
+            _ => {
+                span_bug!(&self.tcx, span, "no local in move path {:?}", move_path);
+            }
+        }
+    }
+
+    fn elaborate_assignments(&mut self) {
+        // FIXME: We aren't yet properly handling dynamic drops properly. For example, say we
+        // had this code:
+        //
+        // ```rust
+        // {
+        //     let x = String::new();
+        //     if pred {
+        //         mem::drop(x);
+        //     } else {
+        //         // place 1
+        //     }
+        //
+        //     ...
+        //
+        //     // place 2
+        // }
+        // ```
+        //
+        // In regular Rust, the compiler conditionally drop the variable `x` at "place 2" if the
+        // `pred` is false. Unfortunately the way Stateful is written it will actually insert the
+        // drop in "place 1". To do this properly, the simplest way of doing this is to just
+        // reimplement the dynamic drop semantics, where we add an `Option` type that will
+        // conditionally have `x` moved into it, and have it be dropped at the end of the scope.
+        //
+        // We can do this by way of using the `flow_maybe_inits`. It has a bit set for all locals
+        // that could possibly be initialized at any given point. If we take that set and subtract
+        // `flow_inits` from it then we'll get all the locals that need conditional dropping.
+
+        for (block, block_data) in self.mir.basic_blocks().iter_enumerated() {
+            /*
+            let maybe_init_entry_set = self.flow_maybe_inits.sets().on_entry_set_for(block.index());
+            let maybe_init_gen_set = self.flow_maybe_inits.sets().gen_set_for(block.index());
+            let maybe_init_kill_set = self.flow_maybe_inits.sets().kill_set_for(block.index());
+            */
+
+            let init_entry_set = self.flow_inits.sets().on_entry_set_for(block.index());
+            let init_gen_set = self.flow_inits.sets().gen_set_for(block.index());
+            let init_kill_set = self.flow_inits.sets().kill_set_for(block.index());
+
+            // First, add all the locals that are defined on entry into this block.
+            for path in init_entry_set.iter() {
+                let local = self.get_path_local(block_data.span, path);
+                self.assigned_on_entry.entry(block)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(local);
+            }
+
+            for path in init_gen_set.iter() {
+                let local = self.get_path_local(block_data.span, path);
+                self.initialized.entry(block)
+                    .or_insert_with(BTreeSet::new)
+                    .insert(local);
+            }
+
+            for path in init_kill_set.iter() {
+                if init_entry_set.contains(&path) { continue; }
+
+                let local = self.get_path_local(block_data.span, path);
+                let lvalue = Lvalue::Local(local);
+
+                let mut assigned = false;
+                for stmt in block_data.statements() {
+                    match stmt.kind {
+                        StatementKind::Stmt(_) |
+                        StatementKind::StorageLive(_) |
+                        StatementKind::StorageDead(_) => {}
+                        StatementKind::Let { lvalues: ref destinations, .. } => {
+                            for destination in destinations {
+                                assigned |= lvalue == *destination;
+                            }
+                        }
+                        StatementKind::Assign(ref destination, _) |
+                        StatementKind::Call { ref destination, .. } |
+                        StatementKind::MethodCall { ref destination, .. } => {
+                            assigned |= lvalue == *destination;
+                        }
+                    }
+                }
+
+                if assigned {
+                    self.initialized.entry(block)
+                        .or_insert_with(BTreeSet::new)
+                        .insert(local);
+                }
+            }
+        }
     }
 }

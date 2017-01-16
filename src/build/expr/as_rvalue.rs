@@ -1,5 +1,5 @@
 use build::expr::category::{Category, RvalueFunc};
-use build::mac::{is_mac, parse_mac};
+use build::mac::is_mac;
 use build::{BlockAnd, BlockAndExtension, Builder};
 use mir::*;
 use syntax::ast::{self, ExprKind};
@@ -168,19 +168,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 block.and(this.unit_rvalue())
             }
 
-            ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
-                let expr = parse_mac(this.cx, mac);
-                this.as_rvalue(block, &expr)
-            }
-
-            ExprKind::Mac(ref mac) if is_mac(mac, "copied") => {
-                let expr = parse_mac(this.cx, mac);
-                this.as_rvalue(block, &expr)
-            }
-            ExprKind::Mac(ref mac) => {
+            ExprKind::Mac(ref mac) if !is_mac(mac, "moved") => {
                 block.and(Rvalue::Mac(mac.clone()))
             }
 
+            ExprKind::Mac(_) |
             ExprKind::Paren(..) |
             ExprKind::Lit(..) |
             ExprKind::Block(..) |

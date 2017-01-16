@@ -45,12 +45,39 @@ impl<T> Iterator for EmptyIterator<T> {
 }
 
 #[generator]
-fn gen() -> Box<Iterator<Item = usize>> {
+fn gen(pred: bool) -> Box<Iterator<Item = usize>> {
+    /*
+    let a = Empty::new();
+    let mut b = Empty::new();
+    let c;
+    let d;
+
+    if pred {
+        mem::drop(moved!(a));
+        b = Empty::new();
+    } else {
+        mem::drop(moved!(b));
+        d = Empty::new();
+    }
+
+    c = Empty::new();
+    */
+
+    /*
+    let x = 1;
+    if true {
+        mem::drop(moved!(x));
+    } else {
+    }
+    let x = 1;
+    if true {}
+    println!("{:?}", x);
     yield_!(1);
+    */
 }
 
 fn main() {
-    for value in gen() {
+    for value in gen(true) {
         println!("{}", value);
     }
 }

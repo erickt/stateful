@@ -528,10 +528,15 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 self.gather_operand(loc, arg);
                 self.create_move_path(destination);
             }
+
+            TerminatorKind::Drop { ref location, target: _ } => {
+                self.gather_move(loc, location);
+            }
         }
     }
 
     fn gather_operand(&mut self, loc: Location, operand: &Operand) {
+        debug!("gather_operand({:?}, {:?})", loc, operand);
         match *operand {
             Operand::Constant(..) => {} // not-a-move
             Operand::Copy(..) => {} // not-a-move

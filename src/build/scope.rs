@@ -435,10 +435,16 @@ fn build_scope_drops(cfg: &mut CFG,
     debug!("build_scope_drops(block={:?}, scope={:?}, var={:?})", block, scope.id, var);
     let location = Lvalue::Local(var);
 
+    let next = cfg.start_new_block(source_info.span, Some("AfterDrop"));
+    cfg.terminate(block, source_info, TerminatorKind::Drop {
+        location: location.clone(),
+        target: next,
+    });
+
     cfg.push(block, Statement {
         source_info: source_info,
         kind: StatementKind::StorageDead(location),
     });
 
-    block.unit()
+    next.unit()
 }

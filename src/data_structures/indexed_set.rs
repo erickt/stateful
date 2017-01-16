@@ -156,7 +156,6 @@ impl<T: Idx> IdxSet<T> {
         bitwise(self.words_mut(), other.words(), &Subtract)
     }
 
-    /*
     /// Iterates over indexes of set bits in a sorted order
     pub fn iter<'a>(&'a self) -> Iter<'a, T> {
         Iter {
@@ -166,10 +165,8 @@ impl<T: Idx> IdxSet<T> {
             _pd: PhantomData,
         }
     }
-    */
 }
 
-/*
 pub struct Iter<'a, T: Idx> {
     iter: ::std::slice::Iter<'a, usize>,
     current: usize,
@@ -204,4 +201,3 @@ impl<'a, T: Idx> Iterator for Iter<'a, T> {
 fn usizes(elements: usize) -> usize {
     (elements + mem::size_of::<usize>() - 1) / mem::size_of::<usize>()
 }
-*/

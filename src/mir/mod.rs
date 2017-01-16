@@ -429,6 +429,12 @@ pub enum TerminatorKind {
     /// `END_BLOCK`.
     Return,
 
+    /// Drop the Lvalue
+    Drop {
+        location: Lvalue,
+        target: BasicBlock,
+    },
+
     /// jump to target on next iteration.
     Suspend {
         destination: (Lvalue, BasicBlock),
@@ -477,22 +483,22 @@ impl Debug for TerminatorKind {
 
 impl TerminatorKind {
     pub fn successors(&self) -> Vec<BasicBlock> {
+        use self::TerminatorKind::*;
         match *self {
-            TerminatorKind::Goto { target } => {
-                vec![target]
-            }
-            TerminatorKind::Break { target, after_target } => {
+            Goto { target } => vec![target],
+            If { targets: (then, else_), .. } => vec![then, else_],
+            Break { target, after_target } => {
                 // Explicitly don't add `after_target` to successors. It needs to be handled.
                 vec![target, after_target]
             }
-            TerminatorKind::Suspend { destination: (_, target), .. } => {
+            Suspend { destination: (_, target), .. } => {
                 vec![target]
             }
-            TerminatorKind::Match { ref arms, .. } => {
+            Match { ref arms, .. } => {
                 arms.iter().map(|arm| arm.block).collect()
             }
-            TerminatorKind::If { targets: (then, else_), .. } => vec![then, else_],
-            TerminatorKind::Return => vec![],
+            Return => vec![],
+            Drop { target, .. } => vec![target],
         }
     }
 
@@ -527,13 +533,14 @@ impl TerminatorKind {
         use self::TerminatorKind::*;
         match *self {
             Goto { .. } => write!(fmt, "goto"),
-            Break { .. } => write!(fmt, "break"),
             If { cond: ref lv, .. } => write!(fmt, "if({:?})", lv),
+            Break { .. } => write!(fmt, "break"),
             Match { discr: ref lv, .. } => write!(fmt, "match({:?})", lv),
             Return => write!(fmt, "return"),
             Suspend { destination: (ref destination, _), ref arg, .. } => {
                 write!(fmt, "{:?} = suspend({:?})", destination, arg)
             }
+            Drop { ref location, .. } => write!(fmt, "drop({:?})", location),
         }
     }
 
@@ -563,6 +570,7 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
+            Drop { .. } => vec!["return".into()],
         }
     }
 }
@@ -764,9 +772,9 @@ impl Debug for Operand {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {
         use self::Operand::*;
         match *self {
-            Constant(ref a) => write!(fmt, "{:?}", a),
-            Copy(ref a) => write!(fmt, "{:?}", a),
-            Consume(ref lv) => write!(fmt, "{:?}", lv),
+            Constant(ref a) => write!(fmt, "const {:?}", a),
+            Copy(ref a) => write!(fmt, "copy {:?}", a),
+            Consume(ref lv) => write!(fmt, "consume {:?}", lv),
         }
     }
 }
@@ -1018,7 +1026,7 @@ impl Debug for Statement {
         use self::StatementKind::*;
         match self.kind {
             Stmt(ref stmt) => {
-                write!(fmt, "stmt {:?}", pprust::stmt_to_string(stmt))
+                write!(fmt, "stmt {}", pprust::stmt_to_string(stmt))
             }
             Let { ref pat, ty: None, ref rvalue, .. } => {
                 write!(fmt, "let {:?} = {:?}", pat, rvalue)

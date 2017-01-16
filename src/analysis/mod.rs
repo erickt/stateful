@@ -21,7 +21,6 @@ mod gather_moves;
 use self::dataflow::{BitDenotation};
 use self::dataflow::{DataflowOperator};
 use self::dataflow::{Dataflow, DataflowAnalysis, DataflowResults};
-use self::dataflow::{DefinitelyInitializedLvals};
 use self::gather_moves::{MoveData, MovePathIndex, LookupResult};
 
 pub struct MoveDataParamEnv {
@@ -258,9 +257,6 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
             }
             StatementKind::StorageDead(ref lvalue) => {
                 debug!("drop_flag_effects: storage dead {:?}", lvalue);
-                on_lookup_result_bits(tcx, mir, move_data,
-                                      move_data.rev_lookup.find(lvalue),
-                                      |moi| callback(moi, DropFlagState::Absent))
             }
             //StatementKind::Nop => {}
         },
