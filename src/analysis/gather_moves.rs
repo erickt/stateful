@@ -423,8 +423,10 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 }
                 self.create_move_path(destination);
             }
-            StatementKind::StorageLive(_) |
-            StatementKind::StorageDead(_) => {}
+            StatementKind::StorageLive(_) => {}
+            StatementKind::StorageDead(ref lvalue) => {
+                self.create_move_path(lvalue);
+            }
             /*
             StatementKind::SetDiscriminant{ .. } => {
                 span_bug!(&self.tcx,
@@ -527,10 +529,6 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
             TerminatorKind::Suspend { destination: (ref destination, _), ref arg } => {
                 self.gather_operand(loc, arg);
                 self.create_move_path(destination);
-            }
-
-            TerminatorKind::Drop { ref location, target: _ } => {
-                self.gather_move(loc, location);
             }
         }
     }

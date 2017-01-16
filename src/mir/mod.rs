@@ -429,12 +429,6 @@ pub enum TerminatorKind {
     /// `END_BLOCK`.
     Return,
 
-    /// Drop the Lvalue
-    Drop {
-        location: Lvalue,
-        target: BasicBlock,
-    },
-
     /// jump to target on next iteration.
     Suspend {
         destination: (Lvalue, BasicBlock),
@@ -498,7 +492,6 @@ impl TerminatorKind {
                 arms.iter().map(|arm| arm.block).collect()
             }
             Return => vec![],
-            Drop { target, .. } => vec![target],
         }
     }
 
@@ -540,7 +533,6 @@ impl TerminatorKind {
             Suspend { destination: (ref destination, _), ref arg, .. } => {
                 write!(fmt, "{:?} = suspend({:?})", destination, arg)
             }
-            Drop { ref location, .. } => write!(fmt, "drop({:?})", location),
         }
     }
 
@@ -570,7 +562,6 @@ impl TerminatorKind {
                     .collect()
             }
             Suspend { .. } => vec!["".into()],
-            Drop { .. } => vec!["return".into()],
         }
     }
 }

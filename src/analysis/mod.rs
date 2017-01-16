@@ -257,6 +257,9 @@ fn drop_flag_effects_for_location<'a, 'tcx, F>(
             }
             StatementKind::StorageDead(ref lvalue) => {
                 debug!("drop_flag_effects: storage dead {:?}", lvalue);
+                on_lookup_result_bits(tcx, mir, move_data,
+                                      move_data.rev_lookup.find(lvalue),
+                                      |moi| callback(moi, DropFlagState::Absent))
             }
             //StatementKind::Nop => {}
         },

@@ -307,9 +307,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         .build(expr)
                 ]
             }
-            TerminatorKind::Drop { location: _, target } => {
-                self.goto(span, target)
-            }
         }
     }
 
