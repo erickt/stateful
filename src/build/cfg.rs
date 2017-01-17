@@ -42,7 +42,7 @@ impl CFG {
                      block: BasicBlock,
                      source_info: SourceInfo,
                      kind: TerminatorKind) {
-        debug!("terminate(block={:?}, kind={:?}", block, kind);
+        debug!("terminate(block={:?}, kind={:?})", block, kind);
 
         let block_data = self.block_data_mut(block);
 
