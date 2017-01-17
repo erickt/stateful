@@ -29,3 +29,7 @@ tokio-timer = { git = "https://github.com/tokio-rs/tokio-timer" }
 [[example]]
 name = "generator"
 path = "examples/generator.rs"
+
+[[test]]
+name = "test"
+path = "tests/test.rs"

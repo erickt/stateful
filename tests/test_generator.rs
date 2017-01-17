@@ -1,57 +1,12 @@
-#![feature(plugin)]
-#![cfg_attr(feature = "impl_trait", feature(conservative_impl_trait))]
-#![plugin(stateful)]
-#![allow(dead_code)]
-#![allow(non_shorthand_field_patterns)]
-#![allow(unused_assignments)]
-#![allow(unused_mut)]
-#![allow(unused_variables)]
+use super::empty::Empty;
 
-use std::iter::{IntoIterator, Iterator};
-use std::marker::PhantomData;
-
-struct Empty<T>(PhantomData<T>);
-
-impl<T> Empty<T> {
-    fn new() -> Self {
-        Empty(PhantomData)
-    }
-}
-
-impl<T> IntoIterator for Empty<T> {
-    type Item = T;
-    type IntoIter = EmptyIterator<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        EmptyIterator::new()
-    }
-}
-
-struct EmptyIterator<T>(PhantomData<T>);
-
-impl<T> EmptyIterator<T> {
-    fn new() -> Self {
-        EmptyIterator(PhantomData)
-    }
-}
-
-impl<T> Iterator for EmptyIterator<T> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        None
-    }
-}
-
-/*
 #[test]
 fn test_empty() {
     #[generator]
-    fn gen() -> Box<Iterator<Item=usize>> {
-    }
+    fn gen() -> Box<Iterator<Item=usize>> { }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -61,8 +16,8 @@ fn test_empty_if() {
         if true { }
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -74,8 +29,8 @@ fn test_empty_if_let() {
         if let Some(_) = iter.next() { }
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -87,8 +42,8 @@ fn test_empty_loop() {
         }
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -98,8 +53,8 @@ fn test_empty_while() {
         while false { }
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -111,23 +66,21 @@ fn test_empty_while_let() {
         while let Some(_) = iter.next() { }
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_empty_for() {
     #[generator]
     fn gen() -> Box<Iterator<Item=usize>> {
         let iter = Empty::<usize>::new();
-        for _ in iter { }
+        for _ in moved!(iter) { }
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
-*/
 
 #[should_panic]
 #[test]
@@ -137,11 +90,11 @@ fn test_empty_with_macro() {
         assert_eq!(true, false);
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
-*/
 
+/*
 #[test]
 fn test_break_value() {
     #[generator]
@@ -152,11 +105,11 @@ fn test_break_value() {
         yield_!(x);
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
 }
+*/
 
-/*
 #[test]
 fn test_ints() {
     #[generator]
@@ -170,11 +123,11 @@ fn test_ints() {
         yield_!(x);
     }
 
-    let mut gen = gen_ints();
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen_ints();
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), None);
 }
 
 /*
@@ -188,28 +141,29 @@ fn test_item_slice() {
     }
 
     let items = &[1, 2, 3];
-    let mut gen = gen_item_slice(items);
-    assert_eq!(gen.next(), Some(&1));
-    assert_eq!(gen.next(), Some(&2));
-    assert_eq!(gen.next(), Some(&3));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen_item_slice(items);
+    assert_eq!(iter.next(), Some(&1));
+    assert_eq!(iter.next(), Some(&2));
+    assert_eq!(iter.next(), Some(&3));
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
 fn test_moved() {
     #[generator]
     fn gen<T: 'static>(items: Vec<T>) -> Box<Iterator<Item=T>> {
-        for item in items {
+        for item in moved!(items) {
             yield_!(item);
         }
     }
 
-    let mut gen = gen(vec![1, 2, 3]);
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen(vec![1, 2, 3]);
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), None);
 }
+*/
 
 #[test]
 fn test_partial_decl() {
@@ -228,12 +182,12 @@ fn test_partial_decl() {
         };
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), Some(4));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), Some(4));
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -259,14 +213,14 @@ fn test_partial_decl_nested() {
         };
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), Some(4));
-    assert_eq!(gen.next(), Some(5));
-    assert_eq!(gen.next(), Some(6));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), Some(4));
+    assert_eq!(iter.next(), Some(5));
+    assert_eq!(iter.next(), Some(6));
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -278,11 +232,11 @@ fn test_yield_expr() {
         yield_!(3)
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), None);
 }
 
 #[test]
@@ -292,11 +246,12 @@ fn test_yield_in_assign() {
         let _x: () = yield_!(1);
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), None);
 }
 
+/*
 #[test]
 fn test_shadowing() {
     #[generator]
@@ -315,13 +270,13 @@ fn test_shadowing() {
         yield_!(moved!(x));
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), Some(format!("a")));
-    assert_eq!(gen.next(), Some(format!("b")));
-    assert_eq!(gen.next(), Some(format!("c")));
-    assert_eq!(gen.next(), Some(format!("b")));
-    assert_eq!(gen.next(), Some(format!("a")));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), Some(format!("a")));
+    assert_eq!(iter.next(), Some(format!("b")));
+    assert_eq!(iter.next(), Some(format!("c")));
+    assert_eq!(iter.next(), Some(format!("b")));
+    assert_eq!(iter.next(), Some(format!("a")));
+    assert_eq!(iter.next(), None);
 }
 
 #[cfg(feature = "impl_trait")]
@@ -343,14 +298,15 @@ fn test_impl_trait() {
         yield_!(x);
     }
 
-    let mut gen = gen();
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen();
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), None);
 }
+*/
 
 #[test]
 fn test_if_yield() {
@@ -363,15 +319,13 @@ fn test_if_yield() {
         }
     }
 
-    let mut gen = gen(true);
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(2));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen(true);
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(2));
+    assert_eq!(iter.next(), None);
 
-    let mut gen = gen(false);
-    assert_eq!(gen.next(), Some(1));
-    assert_eq!(gen.next(), Some(3));
-    assert_eq!(gen.next(), None);
+    let mut iter = gen(false);
+    assert_eq!(iter.next(), Some(1));
+    assert_eq!(iter.next(), Some(3));
+    assert_eq!(iter.next(), None);
 }
-*/
-*/
