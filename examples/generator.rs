@@ -45,10 +45,15 @@ impl<T> Iterator for EmptyIterator<T> {
 }
 
 #[generator]
-fn gen(pred: bool) -> Box<Iterator<Item = usize>> {
-    let a = Empty::<usize>::new();
+fn gen<T: 'static>(items: Vec<T>) -> Box<Iterator<Item = T>> {
+    let mut iter = items.into_iter();
 
     /*
+    for item in items {
+    }
+
+    let a = Empty::<usize>::new();
+
     let mut b = Empty::<usize>::new();
     let c;
     let d;
@@ -66,7 +71,7 @@ fn gen(pred: bool) -> Box<Iterator<Item = usize>> {
 }
 
 fn main() {
-    for value in gen(true) {
+    for value in gen(vec![1, 2, 3]) {
         println!("{}", value);
     }
 }

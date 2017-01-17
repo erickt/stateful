@@ -16,7 +16,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut arms = Vec::with_capacity(blocks.len());
 
         for block in blocks.indices() {
-            let (variant, tp) = self.state_variant(block);
+            let (variant, tp) = self.state_variant(block, StateKind::Internal);
             variants.push(variant);
 
             // It's possible for a declaration to be created but not actually get used in the state
@@ -32,7 +32,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             arms.push(self.internal_arm(block));
         }
 
-        let generics = self.ast_builder.generics()
+        let generics = self.ast_builder.from_generics(self.mir.fn_decl.generics.clone())
             .with_ty_param_ids(ty_param_ids.iter())
             .build();
 
@@ -65,6 +65,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn internal_state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
         self.state_expr(block, StateKind::Internal)
     }
+
 
     /// Build up an `ast::Arm` for an internal state variant.
     fn internal_arm(&self, block: BasicBlock) -> ast::Arm {

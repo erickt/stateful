@@ -67,7 +67,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .build()
     }
 
-    pub fn state_variant(&self, block: BasicBlock) -> (ast::Variant, Vec<ast::Ident>) {
+    pub fn state_variant(&self,
+                         block: BasicBlock,
+                         kind: StateKind) -> (ast::Variant, Vec<ast::Ident>) {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
@@ -76,33 +78,47 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Create type parameters for each alive local in this block.
         let scope_locals = &self.scope_locals[&block];
 
-        let ty_param_ids = scope_locals.iter()
-            .flat_map(|&(_, ref locals)| locals)
-            .map(|local| ast_builder.id(format!("T{}", local.index())))
-            .collect::<Vec<_>>();
+        let mut tys = vec![];
+        let mut ty_param_ids = vec![];
 
-        let variant = if ty_param_ids.is_empty() {
-            ast_builder.variant(state_id).unit()
-        } else {
-            let mut tys = scope_locals.iter()
-                .map(|&(_, ref locals)| {
-                    ast_builder.ty().tuple()
-                        .with_tys(
-                            locals.iter()
-                                .map(|local| {
-                                    ast_builder.ty().id(format!("T{}", local.index()))
-                                })
-                        )
-                        .build()
-                });
+        for &(scope, ref locals) in scope_locals.iter() {
+            // The start block doesn't get the coroutine arguments.
+            if kind == StateKind::Resume
+                && block == START_BLOCK
+                && scope == COROUTINE_ARGS_VISIBILITY_SCOPE
+            {
+                continue;
+            }
 
-            let ty = tys.next().unwrap();
+            let mut tuple_tys = vec![];
 
+            for local in locals {
+                if let Some(ref ty) = self.mir.local_decls[*local].ty {
+                    tuple_tys.push(ty.clone());
+                } else {
+                    let id = ast_builder.id(format!("T{}", local.index()));
+                    tuple_tys.push(ast_builder.ty().id(id));
+                    ty_param_ids.push(id);
+                }
+            }
+
+            let ty = ast_builder.ty().tuple()
+                .with_tys(tuple_tys)
+                .build();
+
+            tys.push(ty);
+        }
+
+        let mut tys = tys.into_iter();
+
+        let variant = if let Some(ty) = tys.next() {
             ast_builder.variant(state_id).tuple().ty().build(ty)
                 .with_fields(
                     tys.map(|ty| ast_builder.tuple_field().ty().build(ty))
                 )
                 .build()
+        } else {
+            ast_builder.variant(state_id).unit()
         };
 
         (variant, ty_param_ids)
