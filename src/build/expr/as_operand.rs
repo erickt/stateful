@@ -36,17 +36,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
                 let expr = parse_mac(this.cx, mac);
 
-                let category = Category::of(&expr.node).unwrap();
-                debug!("expr_as_operand: category={:?} for={:?}", category, expr.node);
-                match category {
-                    Category::Constant => {
-                        let constant = this.as_constant(&expr);
-                        block.and(Operand::Constant(constant))
-                    }
-                    Category::Lvalue |
-                    Category::Rvalue(..) => {
-                        let operand = unpack!(block = this.as_temp(block, &expr));
+                match expr.node {
+                    ExprKind::Path(..) => {
+                        // Path operands don't need a temporary.
+                        let operand = unpack!(block = this.as_lvalue(block, &expr));
                         block.and(Operand::Consume(operand))
+                    }
+                    _ => {
+                        let category = Category::of(&expr.node).unwrap();
+                        debug!("expr_as_operand: category={:?} for={:?}", category, expr.node);
+                        match category {
+                            Category::Constant => {
+                                let constant = this.as_constant(&expr);
+                                block.and(Operand::Constant(constant))
+                            }
+                            Category::Lvalue |
+                            Category::Rvalue(..) => {
+                                let operand = unpack!(block = this.as_temp(block, &expr));
+                                block.and(Operand::Consume(operand))
+                            }
+                        }
                     }
                 }
             }
