@@ -247,6 +247,24 @@ impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
             let init_gen_set = self.flow_inits.sets().gen_set_for(block.index());
             let init_kill_set = self.flow_inits.sets().kill_set_for(block.index());
 
+            // FIXME: We need to push down the fact that match arm lvalues have been defined by
+            // pulling apart the pattern. This would be best expressed implicitly though the
+            // dataflow, but, well, I couldn't figure out how to get that to work.
+            if let TerminatorKind::Match { ref arms, .. } = block_data.terminator().kind {
+                for arm in arms {
+                    for lvalue in &arm.lvalues {
+                        match *lvalue {
+                            Lvalue::Local(local) => {
+                                self.assigned_on_entry.entry(arm.block)
+                                    .or_insert_with(BTreeSet::new)
+                                    .insert(local);
+                            }
+                            _ => unreachable!(),
+                        }
+                    }
+                }
+            }
+
             // First, add all the locals that are defined on entry into this block.
             for path in init_entry_set.iter() {
                 let local = self.get_path_local(block_data.span, path);
