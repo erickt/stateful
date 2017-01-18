@@ -94,7 +94,6 @@ fn test_empty_with_macro() {
     assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_break_value() {
     #[generator]
@@ -106,9 +105,9 @@ fn test_break_value() {
     }
 
     let mut iter = gen();
+    assert_eq!(iter.next(), Some(5));
     assert_eq!(iter.next(), None);
 }
-*/
 
 #[test]
 fn test_ints() {
@@ -130,11 +129,10 @@ fn test_ints() {
     assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_item_slice() {
     #[generator]
-    fn gen_item_slice<'a, T>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
+    fn gen_item_slice<'a, T: 'a>(items: &'a [T]) -> Box<Iterator<Item=&'a T> + 'a> {
         for item in items.iter() {
             yield_!(item);
         }
@@ -163,7 +161,6 @@ fn test_moved() {
     assert_eq!(iter.next(), Some(3));
     assert_eq!(iter.next(), None);
 }
-*/
 
 #[test]
 fn test_partial_decl() {

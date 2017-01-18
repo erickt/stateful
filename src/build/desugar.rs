@@ -225,13 +225,18 @@ fn desugar_for_loop(pat: P<ast::Pat>,
                     label: Option<ast::SpannedIdent>) -> P<ast::Expr> {
     let builder = AstBuilder::new().span(iter.span);
 
-    // ::std::iter::IntoIterator::into_iter($expr)
+    // moved!($expr)
+    let iter = builder.expr().mac().path().id("moved").build()
+        .expr().build(iter.clone())
+        .build();
+
+    // ::std::iter::IntoIterator::into_iter(moved!($expr))
     let into_iter = builder.expr().call()
         .path()
             .global()
             .ids(&["std", "iter", "IntoIterator", "into_iter"])
             .build()
-        .with_arg(iter.clone())
+        .with_arg(iter)
         .build();
 
     // ::std::iter::Iterator::next(&mut $into_iter)
@@ -243,12 +248,10 @@ fn desugar_for_loop(pat: P<ast::Pat>,
         .arg().mut_ref().id("__stateful_iter")
         .build();
 
-    /*
     // moved!(iter.next())
     let iter_next = builder.expr().mac().path().id("moved").build()
         .expr().build(iter_next)
         .build();
-    */
 
     // ::std::option::Option::Some($pat)
     let some_pat = builder.pat().enum_()

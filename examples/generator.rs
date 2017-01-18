@@ -46,12 +46,11 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen<T: 'static>(items: Vec<T>) -> Box<Iterator<Item = T>> {
-    let mut iter = items.into_iter();
-
-    /*
-    for item in items {
+    let mut iter = moved!(items).into_iter();
+    for item in iter {
     }
 
+    /*
     let a = Empty::<usize>::new();
 
     let mut b = Empty::<usize>::new();

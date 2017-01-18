@@ -518,7 +518,11 @@ impl<'a, 'tcx> MoveDataBuilder<'a, 'tcx> {
                 // branching terminators - these don't move anything
             }
 
-            TerminatorKind::Match { ref arms, .. } => {
+            TerminatorKind::Match { ref discr, ref arms, .. } => {
+                // NOTE(stateful): As opposed to rust-proper, stateful matches can explicitly move
+                // out of their discriminants.
+                self.gather_operand(loc, discr);
+
                 for arm in arms {
                     for lvalue in &arm.lvalues {
                         self.create_move_path(lvalue);
