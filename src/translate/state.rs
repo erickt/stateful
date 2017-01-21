@@ -17,19 +17,29 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         let state_path = self.state_path(block, kind);
-        let locals = &self.scope_locals[&block];
+        let scope_locals = &self.scope_locals[&block];
 
-        if locals.is_empty() {
+        let local_names = &self.local_names[&block];
+
+        if scope_locals.is_empty() {
             ast_builder.expr().build_path(state_path)
         } else {
             // Pack up all the locals back into scope tuples.
-            let exprs = locals.iter()
+            let exprs = scope_locals.iter()
                 .map(|&(_, ref locals)| {
                     ast_builder.expr().tuple()
                         .with_exprs(
                             locals.iter().map(|local| {
-                                let name = &self.mir.local_decls[*local].name;
-                                ast_builder.expr().id(name)
+                                if let Some(name) = local_names.get(local) {
+                                    ast_builder.expr().id(name)
+                                } else {
+                                    span_bug!(
+                                        self.cx,
+                                        span,
+                                        "No name for local={:?} local_names={:#?}",
+                                        local,
+                                        local_names);
+                                }
                             })
                         )
                         .build()

@@ -99,6 +99,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .with_stmts(self.block(block))
             .build();
 
+        let local_names = &self.local_names[&block];
+
         // Finally, we'll unpack the variables in a unique block in order to get shadowing to work
         // correctly.
         for &(scope, ref locals) in scope_locals.iter().rev() {
@@ -106,11 +108,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .tuple()
                 .with_pats(
                     locals.iter().map(|local| {
+                        let name = local_names[local];
                         let local_data = &self.mir.local_decls[*local];
 
                         match local_data.mutability {
-                            ast::Mutability::Immutable => ast_builder.pat().id(local_data.name),
-                            ast::Mutability::Mutable => ast_builder.pat().mut_id(local_data.name),
+                            ast::Mutability::Immutable => ast_builder.pat().id(name),
+                            ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
                         }
                     })
                 )

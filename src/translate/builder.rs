@@ -2,7 +2,7 @@ use analysis::elaborate_assignments::DefiniteAssignment;
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
 use mir::*;
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use super::internal_state::InternalState;
 use super::resume_state::ResumeState;
 use syntax::ast;
@@ -13,6 +13,7 @@ use ty::TyCtxt;
 
 type ScopeLocals = HashMap<BasicBlock, Vec<(VisibilityScope, Vec<Local>)>>;
 type ScopePaths = BTreeMap<VisibilityScope, Vec<VisibilityScope>>;
+type LocalNames = BTreeMap<BasicBlock, BTreeMap<Local, ast::Ident>>;
 
 pub struct Builder<'a, 'b: 'a> {
     pub cx: &'a ExtCtxt<'b>,
@@ -28,26 +29,35 @@ pub struct Builder<'a, 'b: 'a> {
 
     /// A map of a scope to their path to the root scope.
     pub scope_paths: ScopePaths,
+
+    /// A map of basoc blocks to a mapping of the local names, taking in consideration for variable
+    /// shadowing.
+    pub local_names: LocalNames,
 }
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn new(tcx: TyCtxt<'a, 'b>,
                mir: &'a Mir,
                assignments: &'a DefiniteAssignment) -> Self {
+        let scope_locals = group_locals_by_scope(mir, assignments);
+        let local_names = compute_local_names(mir, &scope_locals);
+
+        println!("{:#?}", local_names);
+
         Builder {
             cx: &tcx,
             ast_builder: AstBuilder::new().span(mir.span),
             mir: mir,
             assignments: assignments,
             resume_blocks: find_resume_blocks(mir),
-            scope_locals: group_locals_by_scope(mir, assignments),
+            scope_locals: scope_locals,
             scope_paths: compute_scope_paths(mir),
+            local_names: local_names,
         }
     }
 
     pub fn shadowed_ident(&self, local: Local) -> ast::Ident {
-        let decl_ident = self.mir.local_decls[local].name;
-        self.ast_builder.id(format!("{}_shadowed_{}", decl_ident, local.index()))
+        shadowed_ident(self.mir, local)
     }
 
     pub fn state_machine(&self) -> P<ast::Block> {
@@ -226,7 +236,7 @@ fn group_locals_by_scope(mir: &Mir, assignments: &DefiniteAssignment) -> ScopeLo
 }
 
 /// Compute the path from a scope to the root scope.
-pub fn compute_scope_paths(mir: &Mir) -> ScopePaths {
+fn compute_scope_paths(mir: &Mir) -> ScopePaths {
     let mut scope_paths = BTreeMap::new();
 
     for scope in mir.visibility_scopes.indices() {
@@ -241,4 +251,39 @@ pub fn compute_scope_paths(mir: &Mir) -> ScopePaths {
     }
 
     scope_paths
+}
+
+fn shadowed_ident(mir: &Mir, local: Local) -> ast::Ident {
+    let name = mir.local_decls[local].name;
+    AstBuilder::new().id(format!("{}_shadowed_{}", name, local.index()))
+}
+
+/// Determine the local idents taking consideration for shadowing. We'll walk backwards
+/// through the scopes and the locals to find if there are any aliases. If so, we'll use
+/// the alias name instead of the real name.
+fn compute_local_names(mir: &Mir, scope_locals: &ScopeLocals) -> LocalNames {
+    let mut local_names = BTreeMap::new();
+
+    for block in mir.basic_blocks().indices() {
+        let mut block_local_names = BTreeMap::new();
+        let mut names = HashSet::new();
+
+        for &(_, ref locals) in scope_locals[&block].iter().rev() {
+            for &local in locals.iter().rev() {
+                let name = mir.local_decls[local].name;
+
+                if names.insert(name) {
+                    // We haven't seen this name yet, so insert it with the original name.
+                    block_local_names.insert(local, name);
+                } else {
+                    // Otherwise, this local is aliased.
+                    block_local_names.insert(local, shadowed_ident(mir, local));
+                }
+            }
+        }
+
+        local_names.insert(block, block_local_names);
+    }
+
+    local_names
 }
