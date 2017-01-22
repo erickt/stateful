@@ -71,7 +71,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let rhs = unpack!(block = this.as_rvalue(block, rhs));
                 let lhs = unpack!(block = this.as_lvalue(block, lhs));
 
-                this.push_assign(block, expr_span, &lhs, rhs);
+                this.cfg.push_assign(block, source_info, &lhs, rhs);
 
                 block.unit()
             }
@@ -89,7 +89,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         Operand::Consume(lhs.clone()),
                         rhs));
 
-                this.push_assign(block, expr_span, &lhs, result);
+                this.cfg.push_assign(block, source_info, &lhs, result);
 
                 block.unit()
             }
@@ -129,12 +129,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 mut block: BasicBlock,
                 span: Span,
                 value: &Option<P<ast::Expr>>) -> BlockAnd<()> {
+        let source_info = self.source_info(span);
+
         block = match *value {
             Some(ref value) => {
                 unpack!(self.into(Lvalue::Local(RETURN_POINTER), block, value))
             }
             None => {
-                self.push_assign_unit(span, block, &Lvalue::Local(RETURN_POINTER));
+                self.cfg.push_assign_unit(block, source_info, &Lvalue::Local(RETURN_POINTER));
                 block
             }
         };

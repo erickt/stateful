@@ -65,7 +65,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Some(block) => block,
                     None => {
                         let rvalue = unpack!(block = this.as_rvalue(block, expr));
-                        this.push_assign(block, expr_span, &destination, rvalue);
+                        this.cfg.push_assign(block, source_info, &destination, rvalue);
                         block.unit()
                     }
                 }
@@ -117,7 +117,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Ret(..) => {
                 // As a difference from MIR, we need to make sure the destination is actually
                 // assigned.
-                this.push_assign_unit(expr.span, block, &destination);
+                this.cfg.push_assign_unit(block, source_info, &destination);
                 this.stmt_expr(block, expr)
             }
 
@@ -145,7 +145,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 });
 
                 let rvalue = unpack!(block = this.as_rvalue(block, expr));
-                this.push_assign(block, expr_span, &destination, rvalue);
+                this.cfg.push_assign(block, source_info, &destination, rvalue);
                 block.unit()
             }
 
@@ -166,6 +166,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                cond_expr: &P<ast::Expr>,
                then_expr: &P<ast::Block>,
                else_expr: &Option<P<ast::Expr>>) -> BlockAnd<()> {
+        let source_info = self.source_info(span);
+
         let operand = unpack!(block = self.as_operand(block, cond_expr));
 
         let mut then_block = self.cfg.start_new_block(span, Some("Then"));
@@ -182,7 +184,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         } else {
             // Body of the `if` expression without an `else` clause must return `()`, thus
             // we implicitly generate a `else {}` if it is not specified.
-            self.push_assign_unit(span, else_block, &destination);
+            self.cfg.push_assign_unit(else_block, source_info, &destination);
             else_block
         };
 
@@ -326,7 +328,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // If the loop may reach its exit_block, we assign an empty tuple to the
         // destination to keep the MIR well-formed.
         if might_break {
-            this.push_assign_unit(source_info.span, exit_block, &destination);
+            this.cfg.push_assign_unit(exit_block, source_info, &destination);
         }
         exit_block.unit()
         */

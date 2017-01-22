@@ -18,6 +18,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                      destination: Lvalue,
                      mut block: BasicBlock,
                      ast_block: &ast::Block) -> BlockAnd<()> {
+        let span = ast_block.span;
         let extent = self.start_new_extent();
         self.in_scope(extent, ast_block.span, block, |this| {
             let (stmts, expr) = split_stmts(&ast_block.stmts[..]);
@@ -63,7 +64,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                         kind: StatementKind::Stmt(stmt.clone()),
                                     });
 
-                                    this.push_assign_unit(stmt.span, block, &temp);
+                                    this.cfg.push_assign_unit(block, source_info, &temp);
                                     block.unit()
                                 }
                             }
@@ -107,7 +108,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             if let Some(expr) = expr {
                 unpack!(block = this.into(destination, block, &expr));
             } else {
-                this.push_assign_unit(ast_block.span, block, &destination);
+                let source_info = this.source_info(span);
+                this.cfg.push_assign_unit(block, source_info, &destination);
             }
             // Finally, we pop all the let scopes before exiting out from teh scope of the block
             // itself.

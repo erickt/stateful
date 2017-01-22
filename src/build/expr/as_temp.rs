@@ -26,6 +26,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let temp = this.temp(block, expr.span, "temp_expr");
         let expr_span = expr.span;
+        let source_info = this.source_info(expr_span);
 
         match expr.node {
             ExprKind::Mac(ref mac) if is_mac(mac, "moved") => {
@@ -50,7 +51,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     Category::Lvalue => {
                         let lvalue = unpack!(block = this.as_lvalue(block, expr));
                         let rvalue = Rvalue::Use(Operand::Consume(lvalue));
-                        this.push_assign(block, expr_span, &temp, rvalue);
+                        this.cfg.push_assign(block, source_info, &temp, rvalue);
                     }
                     _ => {
                         unpack!(block = this.into(temp.clone(), block, expr));

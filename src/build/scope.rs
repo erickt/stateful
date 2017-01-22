@@ -310,36 +310,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes[1].extent
     }
 
-    pub fn push_assign(&mut self,
-                       block: BasicBlock,
-                       span: Span,
-                       lvalue: &Lvalue,
-                       rvalue: Rvalue) {
-        debug!("push_assign: block={:?} lvalue={:?} rvalue={:?}", block, lvalue, rvalue);
-
-        match *lvalue {
-            Lvalue::Local(_) => {
-                let source_info = self.source_info(span);
-
-                self.cfg.push(block, Statement {
-                    source_info: source_info,
-                    kind: StatementKind::Assign(lvalue.clone(), rvalue),
-                });
-            }
-            _ => {
-                span_bug!(self.cx, span, "cannot assign yet: {:?}", lvalue)
-            }
-        }
-    }
-
-    pub fn push_assign_unit(&mut self,
-                            span: Span,
-                            block: BasicBlock,
-                            lvalue: &Lvalue) {
-        let rvalue = self.unit_rvalue();
-        self.push_assign(block, span, lvalue, rvalue)
-    }
-
     pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {
         debug!("find_local: {:?} scopes={:#?}", ident, self.scopes); 
 

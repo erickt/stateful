@@ -10,6 +10,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         mut block: BasicBlock,
                         arg: P<ast::Expr>) -> BlockAnd<()> {
         let arg_span = arg.span;
+        let source_info = self.source_info(arg_span);
 
         let arg = unpack!(block = self.as_operand(block, &arg));
         let next_block = self.cfg.start_new_block(arg_span, Some("Resume"));
@@ -24,7 +25,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let coroutine_args = Operand::Consume(coroutine_args);
         let coroutine_args = Rvalue::Use(coroutine_args);
 
-        self.push_assign(next_block, arg_span, &destination, coroutine_args);
+        self.cfg.push_assign(next_block, source_info, &destination, coroutine_args);
 
         next_block.unit()
     }
