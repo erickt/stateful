@@ -66,7 +66,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.state_expr(block, StateKind::Internal)
     }
 
-
     /// Build up an `ast::Arm` for an internal state variant.
     fn internal_arm(&self, block: BasicBlock) -> ast::Arm {
         let span = self.block_span(block);
@@ -76,7 +75,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let scope_locals = &self.scope_locals[&block];
 
         let pats = scope_locals.iter()
-            .map(|&(scope, _)| {
+            .map(|(scope, _)| {
                 ast_builder.pat().id(format!("scope{}", scope.index()))
             })
             .collect::<Vec<_>>();
@@ -103,7 +102,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Finally, we'll unpack the variables in a unique block in order to get shadowing to work
         // correctly.
-        for &(scope, ref locals) in scope_locals.iter().rev() {
+        for (scope, locals) in scope_locals.iter().rev() {
             let pat = ast_builder.pat()
                 .tuple()
                 .with_pats(

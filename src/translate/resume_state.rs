@@ -86,7 +86,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let scope_locals = self.scope_locals[&START_BLOCK].iter()
             // The start expression doesn't yet have coroutine args initialized yet.
-            .filter(|&&(scope, _)| scope != COROUTINE_ARGS_VISIBILITY_SCOPE)
+            .filter(|&(&scope, _)| scope != COROUTINE_ARGS_VISIBILITY_SCOPE)
             .collect::<Vec<_>>();
         
         if scope_locals.is_empty() {
@@ -94,7 +94,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         } else {
             // Pack up all the locals back into scope tuples.
             let exprs = scope_locals.iter()
-                .map(|&&(_, ref locals)| {
+                .map(|&(_, locals)| {
                     ast_builder.expr().tuple()
                         .with_exprs(
                             locals.iter().map(|local| {
@@ -129,7 +129,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(span);
 
         let scope_ids = self.scope_locals[&block].iter()
-            .map(|&(scope, _)| (scope, ast_builder.id(format!("scope{}", scope.index()))))
+            .map(|(&scope, _)| (scope, ast_builder.id(format!("scope{}", scope.index()))))
             .collect::<Vec<_>>();
 
         // Build the resume arm. Note that the resume start block does not get the

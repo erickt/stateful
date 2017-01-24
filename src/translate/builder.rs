@@ -11,7 +11,7 @@ use syntax::ext::base::ExtCtxt;
 use syntax::ptr::P;
 use ty::TyCtxt;
 
-type ScopeLocals = HashMap<BasicBlock, Vec<(VisibilityScope, Vec<Local>)>>;
+type ScopeLocals = HashMap<BasicBlock, BTreeMap<VisibilityScope, Vec<Local>>>;
 type ScopePaths = BTreeMap<VisibilityScope, Vec<VisibilityScope>>;
 type LocalNames = BTreeMap<BasicBlock, BTreeMap<Local, ast::Ident>>;
 
@@ -228,8 +228,7 @@ fn group_locals_by_scope(mir: &Mir, assignments: &DefiniteAssignment) -> ScopeLo
             }
         }
 
-        let locals = block_map.into_iter().collect::<Vec<_>>();
-        map.insert(block, locals);
+        map.insert(block, block_map);
     }
 
     map
@@ -268,7 +267,7 @@ fn compute_local_names(mir: &Mir, scope_locals: &ScopeLocals) -> LocalNames {
         let mut block_local_names = BTreeMap::new();
         let mut names = HashSet::new();
 
-        for &(_, ref locals) in scope_locals[&block].iter().rev() {
+        for (_, locals) in scope_locals[&block].iter().rev() {
             for &local in locals.iter().rev() {
                 let name = mir.local_decls[local].name;
 

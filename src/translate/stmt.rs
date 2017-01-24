@@ -1,4 +1,3 @@
-use aster::AstBuilder;
 use mir::*;
 use syntax::ast;
 use super::builder::Builder;
@@ -10,7 +9,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         match stmt.kind {
             StatementKind::Stmt(ref stmt) => vec![stmt.clone()],
-            StatementKind::Let { ref pat, ref lvalues, ref ty, ref rvalue } => {
+            StatementKind::Let { ref pat, lvalues: _, ref ty, ref rvalue } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
                 /*

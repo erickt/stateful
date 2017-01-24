@@ -26,7 +26,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         } else {
             // Pack up all the locals back into scope tuples.
             let exprs = scope_locals.iter()
-                .map(|&(_, ref locals)| {
+                .map(|(_, locals)| {
                     ast_builder.expr().tuple()
                         .with_exprs(
                             locals.iter().map(|local| {
@@ -91,11 +91,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let mut tys = vec![];
         let mut ty_param_ids = vec![];
 
-        for &(scope, ref locals) in scope_locals.iter() {
+        for (scope, locals) in scope_locals.iter() {
             // The start block doesn't get the coroutine arguments.
             if kind == StateKind::Resume
                 && block == START_BLOCK
-                && scope == COROUTINE_ARGS_VISIBILITY_SCOPE
+                && *scope == COROUTINE_ARGS_VISIBILITY_SCOPE
             {
                 continue;
             }
