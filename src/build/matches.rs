@@ -45,7 +45,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Get the arm bodies and their scopes, while declaring bindings.
         let arm_bodies: Vec<_> = arms.iter().map(|arm| {
-            let scope = self.declare_bindings(None, arm.body.span, &arm.pats[0], &None);
+            let scope = self.declare_bindings(block, None, arm.body.span, &arm.pats[0], &None);
             (arm, scope.unwrap_or(self.visibility_scope))
         }).collect();
 
@@ -152,6 +152,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     pub fn declare_bindings(&mut self,
+                            block: BasicBlock,
                             mut var_scope: Option<VisibilityScope>,
                             scope_span: Span,
                             pat: &P<ast::Pat>,
@@ -174,6 +175,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     scope: var_scope.unwrap()
                 };
                 self.declare_binding(
+                    block,
                     source_info,
                     mutability,
                     id.node,
@@ -185,6 +187,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             PatKind::Struct(_, ref subpatterns, _) => {
                 for field in subpatterns {
                     var_scope = self.declare_bindings(
+                        block,
                         var_scope,
                         scope_span,
                         &field.node.pat,
@@ -196,6 +199,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             PatKind::Tuple(ref subpatterns, _) => {
                 for subpattern in subpatterns {
                     var_scope = self.declare_bindings(
+                        block,
                         var_scope,
                         scope_span,
                         subpattern,
@@ -206,6 +210,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             PatKind::Slice(ref prefix, ref slice, ref suffix) => {
                 for subpattern in prefix.iter().chain(slice).chain(suffix) {
                     var_scope = self.declare_bindings(
+                        block,
                         var_scope,
                         scope_span,
                         subpattern,
@@ -306,6 +311,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     fn declare_binding<T>(&mut self,
+                          block: BasicBlock,
                           source_info: SourceInfo,
                           mutability: ast::Mutability,
                           name: T,
@@ -320,12 +326,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                var_id,
                var_ty);
 
-        let shadowed_decl = self.find_local(name);
+        // If we're shadowing another local, then it's no longer accessible, but it needs to stay
+        // alive to the end of the block. To accomplish this, we'll just move it into a temporary.
+        if let Some(shadowed_local) = self.find_local_in_current_scope(name) {
+            let shadowed_lvalue = Lvalue::Local(shadowed_local);
+
+            let temp = self.temp(block, source_info.span, "shadowed");
+            let rvalue = Rvalue::Use(Operand::Consume(shadowed_lvalue));
+            self.cfg.push_assign(block, source_info, &temp, rvalue);
+        }
+
         let var = self.local_decls.push(LocalDecl {
             mutability: mutability,
             name: name,
             ty: var_ty,
-            shadowed_decl: shadowed_decl,
             source_info: source_info,
         });
         let extent = self.extent_of_innermost_scope();

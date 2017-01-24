@@ -250,6 +250,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Bind the argument patterns
         for arg in arguments.iter() {
             scope = self.declare_bindings(
+                block,
                 scope,
                 ast_block.span,
                 &arg.pat,

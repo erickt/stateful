@@ -326,3 +326,17 @@ fn test_if_yield() {
     assert_eq!(iter.next(), Some(3));
     assert_eq!(iter.next(), None);
 }
+
+#[test]
+fn test_let_assign() {
+    #[generator]
+    fn gen() -> Box<Iterator<Item=usize>> {
+        let x;
+        x = format!("a");
+        let x;
+        x = format!("b");
+    }
+
+    let mut iter = gen();
+    assert_eq!(iter.next(), None);
+}

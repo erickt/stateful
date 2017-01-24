@@ -78,6 +78,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         // Declare the bindings, which may cause a visibility scope.
                         let scope = this.declare_bindings(
+                            block,
                             None,
                             stmt.span,
                             &local.pat,

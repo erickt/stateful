@@ -15,20 +15,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Add a unique number to the name.
         let name = format!("{}{}", name.to_ident(), self.local_decls.len());
         let ident = name.to_ident();
-        let shadowed_decl = self.find_local(ident);
-
-        if shadowed_decl.is_some() {
-            span_bug!(self.cx, span,
-                      "temp is shadowing another decl? name={:?} decl={:?}",
-                      name, shadowed_decl);
-        }
 
         let source_info = self.source_info(span);
         let temp = self.local_decls.push(LocalDecl {
             mutability: ast::Mutability::Mutable,
             name: ident,
             ty: None,
-            shadowed_decl: None,
             source_info: source_info,
         });
         let lvalue = Lvalue::Local(temp);

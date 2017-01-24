@@ -13,6 +13,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             StatementKind::Let { ref pat, ref lvalues, ref ty, ref rvalue } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
+                /*
                 // Rename shadowed variables.
                 let mut stmts = lvalues.iter()
                     .filter_map(|lvalue| {
@@ -23,6 +24,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         }
                     })
                     .collect::<Vec<_>>();
+                */
+                let mut stmts = vec![];
 
                 stmts.push(
                     ast_builder.stmt().let_()
@@ -100,6 +103,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
+    /*
     pub fn rename_shadowed_local(&self, ast_builder: &AstBuilder, local: Local) -> Option<ast::Stmt> {
         let local_decl = self.mir.local_decl_data(local);
 
@@ -113,4 +117,5 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             None
         }
     }
+    */
 }

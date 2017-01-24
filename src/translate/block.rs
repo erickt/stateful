@@ -170,9 +170,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let ast_builder = self.ast_builder.span(local_decl.source_info.span);
 
+        /*
         let mut stmts = self.rename_shadowed_local(&ast_builder, local)
             .into_iter()
             .collect::<Vec<_>>();
+        */
+        let mut stmts = vec![];
 
         let stmt_builder = match local_decl.mutability {
             ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),

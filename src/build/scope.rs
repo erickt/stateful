@@ -310,10 +310,24 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.scopes[1].extent
     }
 
-    pub fn find_local(&self, ident: ast::Ident) -> Option<Local> {
+    fn find_local(&self, ident: ast::Ident) -> Option<Local> {
         debug!("find_local: {:?} scopes={:#?}", ident, self.scopes); 
 
         for scope in self.scopes.iter().rev() {
+            for var in scope.drops.iter().rev() {
+                if ident == self.local_decls[*var].name {
+                    return Some(*var);
+                }
+            }
+        }
+
+        None
+    }
+
+    pub fn find_local_in_current_scope(&self, ident: ast::Ident) -> Option<Local> {
+        debug!("find_local_in_current_scope: {:?} scopes={:#?}", ident, self.scopes); 
+
+        if let Some(ref scope) = self.scopes.last() {
             for var in scope.drops.iter().rev() {
                 if ident == self.local_decls[*var].name {
                     return Some(*var);

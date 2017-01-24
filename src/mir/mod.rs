@@ -312,8 +312,6 @@ pub struct LocalDecl {
     /// This is the primary way to differentiate between user-declared
     /// variables and compiler-generated temporaries.
     pub source_info: SourceInfo,
-
-    pub shadowed_decl: Option<Local>,
 }
 
 impl LocalDecl {
@@ -328,7 +326,6 @@ impl LocalDecl {
             ty: return_ty,
             source_info: source_info,
             name: "return_pointer".to_ident(),
-            shadowed_decl: None,
         }
     }
 
@@ -343,7 +340,6 @@ impl LocalDecl {
             ty: return_ty,
             source_info: source_info,
             name: "coroutine_args".to_ident(),
-            shadowed_decl: None,
         }
     }
 }
