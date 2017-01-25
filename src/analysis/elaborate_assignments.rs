@@ -12,7 +12,7 @@ use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::{BTreeMap, BTreeSet};
 use super::dataflow::DataflowResults;
-use super::dataflow::{MaybeInitializedLvals, DefinitelyInitializedLvals};
+use super::dataflow::DefinitelyInitializedLvals;
 use super::gather_moves::HasMoveData;
 use super::MoveDataParamEnv;
 use super::{MoveData, MovePathIndex};
@@ -22,7 +22,7 @@ use ty::TyCtxt;
 pub struct DefiniteAssignment {
     initialized: BTreeMap<BasicBlock, BTreeSet<Local>>,
     assigned_on_entry: BTreeMap<BasicBlock, BTreeSet<Local>>,
-    moved_on_exit: BTreeMap<BasicBlock, BTreeSet<Local>>,
+    //moved_on_exit: BTreeMap<BasicBlock, BTreeSet<Local>>,
 }
 
 impl DefiniteAssignment {
@@ -36,10 +36,12 @@ impl DefiniteAssignment {
         self.assigned_on_entry.get(&block)
     }
 
+    /*
     /// Return all the locals that were moved in this block.
     pub fn moved_on_exit(&self, block: BasicBlock) -> Option<&BTreeSet<Local>> {
         self.moved_on_exit.get(&block)
     }
+    */
 }
 
 /// Use the definite-assignment algorithm to find all the locations where a local
@@ -49,9 +51,11 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
     let env = MoveDataParamEnv { move_data: move_data };
 
     // Figure out when variables are initialized or assigned.
+    /*
     let flow_maybe_inits = super::do_dataflow(tcx, mir,
                                               MaybeInitializedLvals::new(tcx, mir, &env),
                                               |bd, p| &bd.move_data().move_paths[p]);
+    */
     let flow_inits = super::do_dataflow(tcx, mir,
                                         DefinitelyInitializedLvals::new(tcx, mir, &env),
                                         |bd, p| &bd.move_data().move_paths[p]);
@@ -167,11 +171,11 @@ pub fn analyze_assignments<'a, 'tcx>(tcx: TyCtxt<'a, 'tcx>,
         tcx: tcx,
         mir: mir,
         env: &env,
-        flow_maybe_inits: flow_maybe_inits,
+        //flow_maybe_inits: flow_maybe_inits,
         flow_inits: flow_inits,
         initialized: BTreeMap::new(),
         assigned_on_entry: BTreeMap::new(),
-        moved_on_exit: BTreeMap::new(),
+        //moved_on_exit: BTreeMap::new(),
     }.elaborate()
 }
 
@@ -179,11 +183,11 @@ struct ElaborateAssignmentsCtxt<'a, 'tcx: 'a> {
     tcx: TyCtxt<'a, 'tcx>,
     mir: &'a Mir,
     env: &'a MoveDataParamEnv,
-    flow_maybe_inits: DataflowResults<MaybeInitializedLvals<'a, 'tcx>>,
+    //flow_maybe_inits: DataflowResults<MaybeInitializedLvals<'a, 'tcx>>,
     flow_inits: DataflowResults<DefinitelyInitializedLvals<'a, 'tcx>>,
     initialized: BTreeMap<BasicBlock, BTreeSet<Local>>,
     assigned_on_entry: BTreeMap<BasicBlock, BTreeSet<Local>>,
-    moved_on_exit: BTreeMap<BasicBlock, BTreeSet<Local>>,
+    //moved_on_exit: BTreeMap<BasicBlock, BTreeSet<Local>>,
 }
 
 impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
@@ -194,12 +198,12 @@ impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
 
         debug!("initialized: {:#?}", self.initialized);
         debug!("assigned_on_entry: {:#?}", self.assigned_on_entry);
-        debug!("moved_on_exit: {:#?}", self.moved_on_exit);
+        //debug!("moved_on_exit: {:#?}", self.moved_on_exit);
 
         DefiniteAssignment {
             initialized: self.initialized,
             assigned_on_entry: self.assigned_on_entry,
-            moved_on_exit: self.moved_on_exit,
+            //moved_on_exit: self.moved_on_exit,
         }
     }
 
@@ -245,9 +249,11 @@ impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
         // `flow_inits` from it then we'll get all the locals that need conditional dropping.
 
         for (block, block_data) in self.mir.basic_blocks().iter_enumerated() {
+            /*
             let maybe_init_entry_set = self.flow_maybe_inits.sets().on_entry_set_for(block.index());
             let maybe_init_gen_set = self.flow_maybe_inits.sets().gen_set_for(block.index());
             let maybe_init_kill_set = self.flow_maybe_inits.sets().kill_set_for(block.index());
+            */
 
             let init_entry_set = self.flow_inits.sets().on_entry_set_for(block.index());
             let init_gen_set = self.flow_inits.sets().gen_set_for(block.index());
@@ -331,6 +337,7 @@ impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
                 }
             }
 
+            /*
             for path in maybe_init_entry_set.iter().chain(maybe_init_gen_set.iter()) {
                 if init_kill_set.contains(&path) { continue; }
 
@@ -339,6 +346,7 @@ impl<'b, 'tcx> ElaborateAssignmentsCtxt<'b, 'tcx> {
                     .or_insert_with(BTreeSet::new)
                     .insert(local);
             }
+            */
         }
     }
 }

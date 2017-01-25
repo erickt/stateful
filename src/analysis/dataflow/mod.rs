@@ -23,7 +23,7 @@ use std::usize;
 
 use super::MirBorrowckCtxtPreDataflow;
 
-pub use self::impls::{MaybeInitializedLvals, DefinitelyInitializedLvals};
+pub use self::impls::DefinitelyInitializedLvals;
 
 mod graphviz;
 mod impls;
