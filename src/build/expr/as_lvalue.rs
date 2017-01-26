@@ -103,7 +103,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Try(..) |
             ExprKind::Mac(..) |
             ExprKind::Paren(..) |
-            ExprKind::Vec(..) |
+            ExprKind::Array(..) |
             ExprKind::Tup(..) |
             ExprKind::Struct(..) |
             ExprKind::Range(..) |

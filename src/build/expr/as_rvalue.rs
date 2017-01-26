@@ -87,7 +87,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let source = unpack!(block = this.as_operand(block, source));
                 block.and(Rvalue::Cast(CastKind::Unsize, source, expr.ty))
             }
-            ExprKind::Vec { fields } => {
+            ExprKind::Array { fields } => {
                 // (*) We would (maybe) be closer to trans if we
                 // handled this and other aggregate cases via
                 // `into()`, not `as_rvalue` -- in that case, instead
@@ -185,7 +185,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Closure(..) |
             ExprKind::Loop(..) |
             ExprKind::Repeat(..) |
-            ExprKind::Vec(..) |
+            ExprKind::Array(..) |
             ExprKind::Call(..) |
             ExprKind::MethodCall(..) |
             ExprKind::Field(..) |

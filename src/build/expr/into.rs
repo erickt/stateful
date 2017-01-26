@@ -128,7 +128,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             ExprKind::Cast(..) |
             ExprKind::Repeat(..) |
             ExprKind::Path(..) |
-            ExprKind::Vec(..) |
+            ExprKind::Array(..) |
             ExprKind::Tup(..) |
             ExprKind::Struct(..) |
             ExprKind::Range(..) |

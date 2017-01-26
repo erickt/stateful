@@ -64,7 +64,7 @@ impl Category {
             ExprKind::Mac(..) =>
                 Some(Category::Rvalue(RvalueFunc::Into)),
 
-            ExprKind::Vec(..) |
+            ExprKind::Array(..) |
             ExprKind::Tup(..) |
             ExprKind::Struct(..) |
             ExprKind::Range(..) |
