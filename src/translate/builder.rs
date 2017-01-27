@@ -56,11 +56,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn shadowed_ident(&self, local: Local) -> ast::Ident {
-        shadowed_ident(self.mir, local)
-    }
-
-    pub fn state_machine(&self) -> P<ast::Block> {
+    pub fn state_machine(&mut self) -> P<ast::Block> {
         let start_state_expr = self.start_state_expr();
 
         let state_machine_impl = self.state_machine_impl();

@@ -1,30 +1,31 @@
 use mir::*;
-use syntax::ast;
 use super::builder::Builder;
+use super::local_stack::LocalStack;
+use syntax::ast;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn stmt(&self, _block: BasicBlock, stmt: &Statement) -> Vec<ast::Stmt> {
+    pub fn stmt(&mut self,
+                _block: BasicBlock,
+                local_stack: &mut LocalStack,
+                stmt: &Statement) -> Vec<ast::Stmt> {
         let stmt_span = stmt.source_info.span;
         let ast_builder = self.ast_builder.span(stmt_span);
 
         match stmt.kind {
             StatementKind::Stmt(ref stmt) => vec![stmt.clone()],
-            StatementKind::Let { ref pat, lvalues: _, ref ty, ref rvalue } => {
+            StatementKind::Let { ref pat, ref lvalues, ref ty, ref rvalue } => {
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
-                /*
                 // Rename shadowed variables.
                 let mut stmts = lvalues.iter()
                     .filter_map(|lvalue| {
                         if let Lvalue::Local(local) = *lvalue {
-                            self.rename_shadowed_local(&ast_builder, local)
+                            local_stack.push(local)
                         } else {
                             None
                         }
                     })
                     .collect::<Vec<_>>();
-                */
-                let mut stmts = vec![];
 
                 stmts.push(
                     ast_builder.stmt().let_()
@@ -101,20 +102,4 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
     }
-
-    /*
-    pub fn rename_shadowed_local(&self, ast_builder: &AstBuilder, local: Local) -> Option<ast::Stmt> {
-        let local_decl = self.mir.local_decl_data(local);
-
-        if let Some(shadowed_decl) = local_decl.shadowed_decl {
-            let shadowed_ident = self.shadowed_ident(shadowed_decl);
-
-            Some(ast_builder.stmt().let_id(shadowed_ident)
-                .expr().id(local_decl.name)
-            )
-        } else {
-            None
-        }
-    }
-    */
 }

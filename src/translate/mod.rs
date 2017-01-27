@@ -8,7 +8,7 @@ use ty::TyCtxt;
 pub fn translate(tcx: TyCtxt, mir: &Mir) -> P<ast::Item> {
     let assignments = elaborate_assignments::analyze_assignments(tcx, &mir);
 
-    let builder = builder::Builder::new(tcx, mir, &assignments);
+    let mut builder = builder::Builder::new(tcx, mir, &assignments);
     let block = builder.state_machine();
 
     let ast_builder = AstBuilder::new().span(mir.span);
@@ -26,6 +26,7 @@ pub fn translate(tcx: TyCtxt, mir: &Mir) -> P<ast::Item> {
 mod block;
 mod builder;
 mod internal_state;
+mod local_stack;
 mod resume_state;
 mod state;
 mod stmt;

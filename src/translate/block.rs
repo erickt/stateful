@@ -1,18 +1,25 @@
 use mir::*;
 use std::collections::HashMap;
 use super::builder::Builder;
+use super::local_stack::LocalStack;
 use syntax::ast;
 use syntax::codemap::Span;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn block(&self, block: BasicBlock) -> Vec<ast::Stmt> {
+    pub fn block(&mut self, block: BasicBlock) -> Vec<ast::Stmt> {
         let block_data = &self.mir[block];
 
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
         let scope_block = self.build_scope_block(block);
-        self.scope_block(block, scope_block)
+
+        // Create a stack to track renames while expanding this block.
+        let mut local_stack = LocalStack::new(self.mir);
+        let (terminated, stmts) = self.scope_block(block, scope_block, &mut local_stack);
+        assert!(terminated);
+
+        stmts
     }
 
     /// Rebuild an AST block from a MIR block.
@@ -138,44 +145,53 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         scope_block
     }
 
-    fn scope_block(&self, block: BasicBlock, scope_block: ScopeBlock) -> Vec<ast::Stmt> {
-        scope_block.stmts.into_iter()
+    fn scope_block(&mut self,
+                   block: BasicBlock,
+                   scope_block: ScopeBlock,
+                   local_stack: &mut LocalStack) -> (bool, Vec<ast::Stmt>) {
+        let mut terminated = false;
+
+        let stmts = scope_block.stmts.into_iter()
             .flat_map(|stmt| {
                 match stmt {
                     ScopeStatement::Declare(local) => {
-                        self.declare(local)
+                        self.declare(local_stack, local)
                     }
                     ScopeStatement::Statement(stmt) => {
-                        self.stmt(block, stmt)
+                        self.stmt(block, local_stack, stmt)
                     }
                     ScopeStatement::Block(scope_block) => {
-                        let stmts = self.scope_block(block, scope_block);
+                        let (terminated_, stmts) = local_stack.in_scope(|local_stack| {
+                            self.scope_block(block, scope_block, local_stack)
+                        });
+                        terminated = terminated_;
 
-                        vec![
+                        let stmts = vec![
                             self.ast_builder.stmt().semi().block()
                                 .with_stmts(stmts)
                                 .build()
-                        ]
+                        ];
+
+                        stmts
                     }
                     ScopeStatement::Terminator(terminator) => {
+                        terminated = true;
                         self.terminator(terminator)
                     }
                 }
             })
-            .collect()
+            .collect();
+
+        (terminated, stmts)
     }
 
-    fn declare(&self, local: Local) -> Vec<ast::Stmt> {
+    fn declare(&mut self, local_stack: &mut LocalStack, local: Local) -> Vec<ast::Stmt> {
         let local_decl = self.mir.local_decl_data(local);
 
         let ast_builder = self.ast_builder.span(local_decl.source_info.span);
 
-        /*
-        let mut stmts = self.rename_shadowed_local(&ast_builder, local)
-            .into_iter()
+        let mut stmts = local_stack.push(local).into_iter()
             .collect::<Vec<_>>();
-        */
-        let mut stmts = vec![];
 
         let stmt_builder = match local_decl.mutability {
             ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
