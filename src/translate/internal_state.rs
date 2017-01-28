@@ -2,6 +2,7 @@ use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::HashSet;
 use super::builder::Builder;
+use super::local_stack::LocalStack;
 use super::state::StateKind;
 use syntax::ast;
 use syntax::ptr::P;
@@ -62,8 +63,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     }
 
     /// Construct a `P<ast::Expr>` to represent the state expression for a given basic block.
-    pub fn internal_state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
-        self.state_expr(block, StateKind::Internal)
+    pub fn internal_state_expr(&self,
+                               block: BasicBlock,
+                               local_stack: &LocalStack) -> P<ast::Expr> {
+        self.state_expr(block, local_stack, StateKind::Internal)
     }
 
     /// Build up an `ast::Arm` for an internal state variant.
@@ -71,9 +74,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
-        // First, setup the arm body.
+        let mut local_stack = LocalStack::new(self.mir);
+
+        // First, Load up all the locals into the stack.
+        for locals in self.scope_locals[&block].values() {
+            for local in locals {
+                local_stack.push(*local);
+            }
+        }
+
+        // Next, setup the arm body.
+        let body_stmts = self.block(block, &mut local_stack);
         let mut body = ast_builder.block()
-            .with_stmts(self.block(block))
+            .with_stmts(body_stmts)
             .build();
 
         let state_path = self.state_path(block, StateKind::Internal);
@@ -98,8 +111,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .build()
         };
 
-        let local_names = &self.local_names[&block];
-
         // Finally, we'll unpack the variables in a unique block in order to get shadowing to work
         // correctly.
         for (scope, locals) in scope_locals.iter().rev() {
@@ -107,12 +118,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .tuple()
                 .with_pats(
                     locals.iter().map(|local| {
-                        let name = local_names[local];
-                        let local_data = &self.mir.local_decls[*local];
-
-                        match local_data.mutability {
-                            ast::Mutability::Immutable => ast_builder.pat().id(name),
-                            ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
+                        if let Some(name) = local_stack.get_name(*local) {
+                            match self.mir.local_decls[*local].mutability {
+                                ast::Mutability::Immutable => ast_builder.pat().id(name),
+                                ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
+                            }
+                        } else {
+                            span_bug!(
+                                self.cx,
+                                self.mir.local_decls[*local].source_info.span,
+                                "local {:?} has no associated name?",
+                                local);
                         }
                     })
                 )
@@ -126,147 +142,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .stmt().build(stmt)
                 .expr().build_block(body);
         }
-
-        /*
-        let state_path = self.state_path(block, StateKind::Internal);
-
-        let pats = self.scope_locals[&block].iter()
-            .map(|(scope, _)| {
-                ast_builder.pat().id(format!("scope{}", scope.index()))
-            })
-            .collect::<Vec<_>>();
-
-        // Construct the pattern, which looks like:
-        //
-        // ```rust
-        // InternalState::State2(scope1, scope2, ...)
-        // ```
-        let pat = if pats.is_empty() {
-            ast_builder.pat().build_path(state_path)
-        } else {
-            ast_builder.pat().enum_().build(state_path)
-                .with_pats(pats)
-                .build()
-        };
-
-        //let mut stmts = self.block(block);
-
-        // Next, setup the arm body.
-        let mut body = ast_builder.block()
-            .with_stmts(self.block(block))
-            .build();
-
-        // Finally, we'll unpack the variables in a unique block in order to get shadowing to work
-        // correctly.
-        for (scope, locals) in self.scope_locals[&block].iter().rev() {
-            let mut stmts = vec![];
-            let mut pats = vec![];
-
-            for local in locals {
-                let name = self.local_names[&block][local];
-                let local_data = &self.mir.local_decls[*local];
-
-                // If this local is shadowing another local, 
-                if let Some(stmt) = self.rename_shadowed_local(*local) {
-                    stmts.push(stmt);
-                }
-
-                let pat = match local_data.mutability {
-                    ast::Mutability::Immutable => ast_builder.pat().id(name),
-                    ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
-                };
-
-                pats.push(pat);
-            }
-
-            let pat = ast_builder.pat()
-                .tuple()
-                .with_pats(pats)
-                .build();
-
-            let stmt = ast_builder.stmt()
-                .let_().build(pat)
-                .expr().id(format!("scope{}", scope.index()));
-
-            body = ast_builder.block()
-                .with_stmts(stmts)
-                .stmt().build(stmt)
-                .expr().build_block(body);
-        }
-        */
-
-        /*
-        let successors = self.mir[block].terminator().successors();
-        let next_block = successors.first();
-
-        // Finally, we'll unpack the variables in a unique block in order to get shadowing to work
-        // correctly.
-        for (scope, locals) in scope_locals.iter().rev() {
-            let pat = ast_builder.pat()
-                .tuple()
-                .with_pats(
-                    locals.iter().map(|local| {
-                        let name = local_names[local];
-                        let local_data = &self.mir.local_decls[*local];
-
-                        match local_data.mutability {
-                            ast::Mutability::Immutable => ast_builder.pat().id(name),
-                            ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
-                        }
-                    })
-                )
-                .build();
-
-            let stmt = ast_builder.stmt()
-                .let_().build(pat)
-                .expr().id(format!("scope{}", scope.index()));
-
-            let mut body_builder = ast_builder.block()
-                .stmt().build(stmt)
-                .with_stmts(stmts);
-
-            if let Some(next_block) = next_block {
-                let next_scope_locals = &self.scope_locals[next_block];
-                let next_local_names = &self.local_names[next_block];
-
-                if let Some(ref next_locals) = next_scope_locals.get(scope) {
-                    let next_scope = ast_builder.expr().tuple()
-                        .with_exprs(
-                            next_locals.iter().map(|local| {
-                                let name = next_local_names[local];
-                                ast_builder.expr().id(name)
-                            })
-                        )
-                        .build();
-
-                    body_builder = body_builder.stmt().semi().assign()
-                        .id(format!("out_scope{}", scope.index()))
-                        .build(next_scope);
-                }
-            }
-
-            let body = body_builder.build();
-
-            stmts = vec![
-                ast_builder.stmt().semi().build_block(body),
-            ];
-        }
-
-        let mut body_builder = ast_builder.block();
-
-        // Finally, declare all the out scopes
-        if let Some(next_block) = next_block {
-            for scope in self.scope_locals[next_block].keys() {
-                body_builder = body_builder.stmt()
-                    .let_id(format!("out_scope{}", scope.index()))
-                    .build();
-            }
-        }
-
-        let body = body_builder
-            .with_stmts(stmts)
-            .build();
-        */
 
         ast_builder.arm()
             .with_pat(pat)

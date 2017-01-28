@@ -327,6 +327,7 @@ fn test_if_yield() {
     assert_eq!(iter.next(), None);
 }
 
+/*
 #[test]
 fn test_let_assign() {
     #[generator]
@@ -340,3 +341,4 @@ fn test_let_assign() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
+*/

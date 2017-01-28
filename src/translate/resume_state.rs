@@ -2,6 +2,7 @@ use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::HashSet;
 use super::builder::Builder;
+use super::local_stack::LocalStack;
 use super::state::StateKind;
 use syntax::ast;
 use syntax::ptr::P;
@@ -111,8 +112,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    pub fn resume_state_expr(&self, block: BasicBlock) -> P<ast::Expr> {
-        self.state_expr(block, StateKind::Resume)
+    pub fn resume_state_expr(&self,
+                             block: BasicBlock,
+                             local_stack: &LocalStack) -> P<ast::Expr> {
+        self.state_expr(block, local_stack, StateKind::Resume)
     }
 
     /// Build up an `ast::Arm` for a resume state variant. This arm's role is to lift up the

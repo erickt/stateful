@@ -6,7 +6,7 @@ use syntax::ast;
 use syntax::codemap::Span;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn block(&mut self, block: BasicBlock) -> Vec<ast::Stmt> {
+    pub fn block(&mut self, block: BasicBlock, local_stack: &mut LocalStack) -> Vec<ast::Stmt> {
         let block_data = &self.mir[block];
 
         assert!(block_data.terminator.is_some(),
@@ -15,8 +15,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let scope_block = self.build_scope_block(block);
 
         // Create a stack to track renames while expanding this block.
-        let mut local_stack = LocalStack::new(self.mir);
-        let (terminated, stmts) = self.scope_block(block, scope_block, &mut local_stack);
+        let (terminated, stmts) = self.scope_block(block, scope_block, local_stack);
         assert!(terminated);
 
         stmts
@@ -176,7 +175,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                     ScopeStatement::Terminator(terminator) => {
                         terminated = true;
-                        self.terminator(terminator)
+                        self.terminator(local_stack, terminator)
                     }
                 }
             })
@@ -204,16 +203,18 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         stmts
     }
 
-    fn terminator(&self, terminator: &Terminator) -> Vec<ast::Stmt> {
+    fn terminator(&self,
+                  local_stack: &mut LocalStack,
+                  terminator: &Terminator) -> Vec<ast::Stmt> {
         let span = terminator.source_info.span;
         let ast_builder = self.ast_builder.span(span);
 
         match terminator.kind {
             TerminatorKind::Goto { target } => {
-                self.goto(span, target)
+                self.goto(span, target, local_stack)
             }
             TerminatorKind::Break { target, after_target: _ } => {
-                self.goto(span, target)
+                self.goto(span, target, local_stack)
             }
             TerminatorKind::If { ref cond, targets: (then_block, else_block) } => {
                 let cond = cond.to_expr(&self.mir.local_decls);
@@ -221,13 +222,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 let then_block = ast_builder
                     .span(self.block_span(then_block))
                     .block()
-                    .with_stmts(self.goto(span, then_block))
+                    .with_stmts(self.goto(span, then_block, local_stack))
                     .build();
 
                 let else_block = ast_builder
                     .span(self.block_span(else_block))
                     .block()
-                    .with_stmts(self.goto(span, else_block))
+                    .with_stmts(self.goto(span, else_block, local_stack))
                     .build();
 
                 vec![
@@ -242,11 +243,22 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let arms = arms.iter()
                     .map(|arm| {
-                        let ast_builder = ast_builder.span(self.block_span(arm.block));
+                        let (_, stmts) = local_stack.in_scope(|local_stack| {
+                            // Push any locals defined in the match arm onto the stack to make sure
+                            // values are properly shadowed.
+                            for lvalue in arm.lvalues.iter() {
+                                if let Lvalue::Local(local) = *lvalue {
+                                    local_stack.push(local);
+                                }
+                            }
 
+                            (true, self.goto(span, arm.block, local_stack))
+                        });
+
+                        let ast_builder = ast_builder.span(self.block_span(arm.block));
                         let block = ast_builder.block()
                             .span(self.mir.span)
-                            .with_stmts(self.goto(span, arm.block))
+                            .with_stmts(stmts)
                             .build();
 
                         ast_builder.arm()
@@ -308,7 +320,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref arg,
             } => {
                 let arg = arg.to_expr(&self.mir.local_decls);
-                let next_state = self.resume_state_expr(target);
+                let next_state = self.resume_state_expr(target, local_stack);
 
                 let ast_builder = ast_builder.span(arg.span);
                 let expr = ast_builder.expr().tuple()
@@ -329,8 +341,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
     }
 
-    fn goto(&self, span: Span, target: BasicBlock) -> Vec<ast::Stmt> {
-        let next_state = self.internal_state_expr(target);
+    fn goto(&self, span: Span,
+            target: BasicBlock,
+            local_stack: &LocalStack) -> Vec<ast::Stmt> {
+        let next_state = self.internal_state_expr(target, local_stack);
 
         let ast_builder = self.ast_builder.span(span);
         let next_expr = ast_builder.expr()

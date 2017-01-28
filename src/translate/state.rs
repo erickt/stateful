@@ -1,6 +1,7 @@
 use data_structures::indexed_vec::Idx;
 use mir::*;
 use super::builder::Builder;
+use super::local_stack::LocalStack;
 use syntax::ast;
 use syntax::ptr::P;
 
@@ -12,14 +13,15 @@ pub enum StateKind {
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// Construct a `P<ast::Expr>` to represent the state expression for a given basic block.
-    pub fn state_expr(&self, block: BasicBlock, kind: StateKind) -> P<ast::Expr> {
+    pub fn state_expr(&self,
+                      block: BasicBlock,
+                      local_stack: &LocalStack,
+                      kind: StateKind) -> P<ast::Expr> {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
         let state_path = self.state_path(block, kind);
         let scope_locals = &self.scope_locals[&block];
-
-        let local_names = &self.local_names[&block];
 
         if scope_locals.is_empty() {
             ast_builder.expr().build_path(state_path)
@@ -30,15 +32,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     ast_builder.expr().tuple()
                         .with_exprs(
                             locals.iter().map(|local| {
-                                if let Some(name) = local_names.get(local) {
+                                if let Some(name) = local_stack.get_name(*local) {
                                     ast_builder.expr().id(name)
                                 } else {
                                     span_bug!(
                                         self.cx,
                                         span,
-                                        "No name for local={:?} local_names={:#?}",
+                                        "No name found for local={:?} real name={:?}?",
                                         local,
-                                        local_names);
+                                        self.mir.local_decls[*local].name)
                                 }
                             })
                         )

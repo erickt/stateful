@@ -46,6 +46,11 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=String>> {
+    let items = vec![1, 2, 3];
+    for x in moved!(items).into_iter() {
+    }
+
+    /*
         let x = format!("a");
         {
             //yield_!(x.clone());
@@ -58,6 +63,7 @@ fn gen() -> Box<Iterator<Item=String>> {
             //yield_!(moved!(x));
         }
         //yield_!(moved!(x));
+    */
 
         /*
     let x = format!("a");

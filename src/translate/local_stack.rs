@@ -1,6 +1,6 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
-use mir::{Local, LocalDecl, Mir};
+use mir::{self, Local, LocalDecl, Mir};
 use std::collections::HashMap;
 use syntax::ast;
 
@@ -27,10 +27,15 @@ impl Scope {
 
 impl<'a> LocalStack<'a> {
     pub fn new(mir: &'a Mir) -> Self {
-        LocalStack {
+        let mut local_stack = LocalStack {
             mir: mir,
             scope_stack: vec![Scope::new()],
-        }
+        };
+
+        //local_stack.push(mir::RETURN_POINTER);
+        local_stack.push(mir::COROUTINE_ARGS);
+
+        local_stack
     }
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
@@ -84,6 +89,7 @@ impl<'a> LocalStack<'a> {
 
         // Next, insert the local into our mapping. Since it's just been defined, it gets to use
         // the real name.
+        //let name = AstBuilder::new().id(format!("{:?}_shadowed_{}", name, local.index()));
         scope.name_to_local.entry(name).or_insert_with(Vec::new).push(local);
         scope.local_to_name.insert(local, name);
 
