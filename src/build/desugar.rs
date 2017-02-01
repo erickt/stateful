@@ -53,7 +53,7 @@ impl<'a, 'b> Desugar<'a, 'b> {
         match (self.state_machine_kind, transition::parse_mac_transition(self.cx, mac)) {
             (StateMachineKind::Generator, Some(transition::Transition::Yield(expr))) => {
                 let expr = self.fold_sub_expr(expr);
-                Some(desugar_yield(self.cx, expr))
+                Some(desugar_yield(expr))
             }
             (StateMachineKind::Async, Some(transition::Transition::Await(expr))) => {
                 let expr = self.fold_sub_expr(expr);
@@ -227,7 +227,7 @@ fn desugar_for_loop(pat: P<ast::Pat>,
 
     // moved!($expr)
     let iter = builder.expr().mac().path().id("moved").build()
-        .expr().build(iter.clone())
+        .expr().build(iter)
         .build();
 
     // ::std::iter::IntoIterator::into_iter(moved!($expr))
@@ -321,7 +321,6 @@ fn desugar_if_let(pat: P<ast::Pat>,
                   expr: P<ast::Expr>,
                   then_block: P<ast::Block>,
                   else_block: Option<P<ast::Expr>>) -> P<ast::Expr> {
-
     let builder = AstBuilder::new().span(expr.span);
 
     // $then_pat => $then_block
@@ -438,8 +437,21 @@ fn desugar_try(expr: P<ast::Expr>) -> P<ast::Expr> {
 ///     ...
 /// }
 /// ```
-fn desugar_yield(cx: &ExtCtxt, expr: P<ast::Expr>) -> P<ast::Expr> {
-    quote_expr!(cx, suspend!(moved!(Some(moved!($expr)))))
+fn desugar_yield(expr: P<ast::Expr>) -> P<ast::Expr> {
+    let builder = AstBuilder::new().span(expr.span);
+
+    // Some($expr)
+    let some = builder.expr().some().build(expr);
+
+    // moved!(Some($expr))
+    let moved = builder.expr().mac().path().id("moved").build()
+        .expr().build(some)
+        .build();
+
+    // suspend!(moved!(Some($expr)))
+    builder.expr().mac().path().id("suspend").build()
+        .expr().build(moved)
+        .build()
 }
 
 /// Compile `$result = await!($expr)` into:

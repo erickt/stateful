@@ -255,10 +255,10 @@ fn test_shadowing() {
     fn gen() -> Box<Iterator<Item=String>> {
         let x = format!("a");
         {
-            yield_!(x.clone());
+            yield_!(moved!(x.clone()));
             let x = format!("b");
             {
-                yield_!(x.clone());
+                yield_!(moved!(x.clone()));
                 let x = format!("c");
                 yield_!(moved!(x));
             }

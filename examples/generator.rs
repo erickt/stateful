@@ -45,56 +45,43 @@ impl<T> Iterator for EmptyIterator<T> {
 }
 
 #[generator]
-fn gen() -> Box<Iterator<Item=String>> {
-    let items = vec![1, 2, 3];
-    for x in moved!(items).into_iter() {
+fn gen() -> Box<Iterator<Item=usize>> {
+    let x = 1;
+    {
+        let x = 2;
     }
-
-    /*
-        let x = format!("a");
-        {
-            //yield_!(x.clone());
-            let x = format!("b");
-            {
-                yield_!(x.clone());
-                let x = format!("c");
-                yield_!(moved!(x));
-            }
-            //yield_!(moved!(x));
-        }
-        //yield_!(moved!(x));
-    */
+    yield_!(x);
 
         /*
+        yield_!(x);
+        let x = 2;
+        {
+            yield_!(x);
+            let x = 3;
+            yield_!(x);
+        }
+        yield_!(x);
+    }
+        */
+}
+
+/*
+#[generator]
+fn gen() -> Box<Iterator<Item=String>> {
     let x = format!("a");
     {
-        yield_!(x.clone());
-        if true {
-            let x = format!("b");
-            yield_!(x.clone());
+        yield_!(moved!(x.clone()));
+        let x = format!("b");
+        {
+            yield_!(moved!(x.clone()));
+            let x = format!("c");
+            yield_!(moved!(x));
         }
+        yield_!(moved!(x));
     }
-    //yield_!(x.clone());
-    */
-
-    /*
-    let a = Empty::<usize>::new();
-
-    let mut b = Empty::<usize>::new();
-    let c;
-    let d;
-
-    if pred {
-        mem::drop(moved!(a));
-        b = Empty::<usize>::new();
-    } else {
-        mem::drop(moved!(b));
-        d = Empty::<usize>::new();
-    }
-
-    c = Empty::<usize>::new();
-    */
+    yield_!(moved!(x));
 }
+*/
 
 fn main() {
     for value in gen() {
