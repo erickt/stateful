@@ -221,7 +221,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // These patterns don't contain any bindings
             PatKind::Lit(_) |
             PatKind::Path(_, _) |
-            PatKind::Range(_, _) |
+            PatKind::Range(..) |
             PatKind::Wild => { }
 
             PatKind::Ident(ast::BindingMode::ByRef(_), _, _) |
@@ -278,7 +278,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             // These patterns don't contain any bindings
             PatKind::Lit(_) |
             PatKind::Path(_, _) |
-            PatKind::Range(_, _) |
+            PatKind::Range(..) |
             PatKind::Wild => { }
 
             PatKind::Ident(ast::BindingMode::ByRef(_), _, _) |
