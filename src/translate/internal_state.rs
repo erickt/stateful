@@ -74,14 +74,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
-        let mut local_stack = LocalStack::new(self.mir);
-
         // First, Load up all the locals into the stack.
-        for locals in self.scope_locals[&block].values() {
-            for local in locals {
-                local_stack.push(*local);
-            }
-        }
+        let mut local_stack = LocalStack::new(self, block);
 
         // Next, setup the arm body.
         let body_stmts = self.block(block, &mut local_stack);

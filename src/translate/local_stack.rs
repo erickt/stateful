@@ -1,7 +1,8 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
-use mir::{self, Local, LocalDecl, Mir};
+use mir::{self, BasicBlock, Local, LocalDecl, Mir};
 use std::collections::HashMap;
+use super::builder::Builder;
 use syntax::ast;
 
 /// `LocalStack` tracks the definitions and aliases of locals during the translation of MIR into
@@ -26,14 +27,20 @@ impl Scope {
 }
 
 impl<'a> LocalStack<'a> {
-    pub fn new(mir: &'a Mir) -> Self {
+    pub fn new<'b>(builder: &Builder<'a, 'b>, block: BasicBlock) -> Self {
         let mut local_stack = LocalStack {
-            mir: mir,
+            mir: builder.mir,
             scope_stack: vec![Scope::new()],
         };
 
-        //local_stack.push(mir::RETURN_POINTER);
         local_stack.push(mir::COROUTINE_ARGS);
+
+        // Insert all the locals that have been initialized prior to this block.
+        for locals in builder.scope_locals[&block].values() {
+            for local in locals {
+                local_stack.push(*local);
+            }
+        }
 
         local_stack
     }
