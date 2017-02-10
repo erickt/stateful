@@ -257,12 +257,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         terminated = terminated_;
 
-                        let stmts = vec![
-                            self.ast_builder.stmt().semi().block()
-                                .with_stmts(stmts)
-                                .build()
-                        ];
-
                         stmts
                     }
                     ScopeStatement::Terminator(terminator) => {
