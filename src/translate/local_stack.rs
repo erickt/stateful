@@ -1,17 +1,20 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
 use mir::{self, BasicBlock, Local, LocalDecl, Lvalue, Mir};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use super::builder::Builder;
 use syntax::ast;
 use syntax::codemap::Span;
+use syntax::ext::base::ExtCtxt;
 
 /// `LocalStack` tracks the definitions and aliases of locals during the translation of MIR into
 /// Rust source code.
-pub struct LocalStack<'a> {
+pub struct LocalStack<'a, 'b: 'a> {
+    cx: &'a ExtCtxt<'b>,
     mir: &'a Mir,
     span: Span,
     scope_stack: Vec<Scope>,
+    uninitialized_locals: HashSet<Local>,
 }
 
 struct Scope {
@@ -28,14 +31,23 @@ impl Scope {
     }
 }
 
-impl<'a> LocalStack<'a> {
-    pub fn new<'b>(builder: &Builder<'a, 'b>, block: BasicBlock) -> Self {
+impl<'a, 'b: 'a> LocalStack<'a, 'b> {
+    pub fn new(builder: &Builder<'a, 'b>, block: BasicBlock) -> Self {
         let span = builder.mir[block].span;
 
+        // Next, collect all the uninitialized locals for this block.
+        let uninitialized_locals = builder.assignments.initialized(block).into_iter()
+            .flat_map(|initialized| initialized.iter())
+            .map(|local| *local)
+            .filter(|local| *local == mir::COROUTINE_ARGS) // coroutine args is always initialized.
+            .collect::<HashSet<_>>();
+
         let mut local_stack = LocalStack {
+            cx: builder.cx,
             mir: builder.mir,
             span: span,
             scope_stack: vec![Scope::new()],
+            uninitialized_locals: uninitialized_locals,
         };
 
         local_stack.push(&Lvalue::Local(mir::COROUTINE_ARGS), false);
@@ -204,5 +216,17 @@ impl<'a> LocalStack<'a> {
         }
 
         None
+    }
+}
+
+impl<'a, 'b: 'a> Drop for LocalStack<'a, 'b> {
+    fn drop(&mut self) {
+        if !self.uninitialized_locals.is_empty() {
+            span_bug!(
+                self.cx,
+                self.span,
+                "still some uninitialized locals: {:?}",
+                self.uninitialized_locals);
+        }
     }
 }
