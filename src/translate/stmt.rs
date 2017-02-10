@@ -14,18 +14,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         match stmt.kind {
             StatementKind::Stmt(ref stmt) => vec![stmt.clone()],
             StatementKind::Let { ref pat, ref lvalues, ref ty, ref rvalue } => {
-                let rvalue = rvalue.to_expr(&self.mir.local_decls);
+                let mut stmts = local_stack.extend(lvalues.iter(), false);
 
-                // Rename shadowed variables.
-                let mut stmts = lvalues.iter()
-                    .filter_map(|lvalue| {
-                        if let Lvalue::Local(local) = *lvalue {
-                            local_stack.push(local)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
+                let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
                 stmts.push(
                     ast_builder.stmt().let_()
@@ -37,20 +28,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts
             }
             StatementKind::Assign(ref lvalue, ref rvalue) => {
+                let mut stmts = local_stack.push(lvalue, true);
+
                 let lvalue = lvalue.to_expr(&self.mir.local_decls);
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
-                vec![
+                stmts.push(
                     ast_builder.stmt().semi()
                         .assign().build(lvalue)
                         .build(rvalue)
-                ]
+                );
+
+                stmts
             }
             StatementKind::Call {
                 ref destination,
                 ref func,
                 ref args,
             } => {
+                let mut stmts = local_stack.push(destination, true);
+
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 
                 let func = func.to_expr(&self.mir.local_decls);
@@ -62,11 +59,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .with_args(args)
                     .build();
 
-                vec![
+                stmts.push(
                     ast_builder.stmt().semi()
                         .assign().build(lvalue)
                         .build(rvalue)
-                ]
+                );
+
+                stmts
             }
             StatementKind::MethodCall {
                 ref destination,
@@ -75,6 +74,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref self_,
                 ref args,
             } => {
+                let mut stmts = local_stack.push(destination, true);
+
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 
                 let self_ = self_.to_expr(&self.mir.local_decls);
@@ -89,11 +90,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     .with_args(args)
                     .build();
 
-                vec![
+                stmts.push(
                     ast_builder.stmt().semi().assign()
                         .build(lvalue)
                         .build(rvalue)
-                ]
+                );
+
+                stmts
             }
             StatementKind::StorageLive(_) |
             StatementKind::StorageDead(_) => {

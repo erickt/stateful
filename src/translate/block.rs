@@ -112,9 +112,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 // Walk up the scope tree to the current scope point, pushing new blocks along the
                 // way.
                 for scope in current_scope_path {
-                    let scope_block = ScopeBlock::new(
-                            *scope,
-                            scope_decls.remove(scope));
+                    let scope_block = ScopeBlock::new(*scope);
                     stack.push(scope_block);
                 }
             }
@@ -143,7 +141,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                    ARGUMENT_VISIBILITY_SCOPE,
                    "block is not root scope: {:?}",
                    scope_block);
-        assert!(scope_decls.is_empty(), "scope decls is not empty: {:?}", scope_decls);
 
         scope_block
     }
@@ -189,7 +186,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .let_().build(pat)
                 .expr().id(format!("scope{}", scope.index()));
 
-            let mut scope_block = ScopeBlock::new(*scope, scope_decls.remove(scope));
+            let mut scope_block = ScopeBlock::new(*scope);
             scope_block.stmts.push(ScopeStatement::AstStatement(stmt));
             stack.push(scope_block);
         }
@@ -208,7 +205,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
 
             self.build_scope_stack_parents(stack, parent, scope_decls);
-            stack.push(ScopeBlock::new(parent, scope_decls.remove(&parent)));
+            stack.push(ScopeBlock::new(parent));
         }
     }
 
@@ -224,16 +221,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     ScopeStatement::AstStatement(ref stmt) => {
                         vec![stmt.clone()]
                     }
-                    ScopeStatement::Declare(local) => {
-                        self.declare(local_stack, local)
-                    }
                     ScopeStatement::Statement(stmt) => {
                         self.stmt(block, local_stack, stmt)
                     }
                     ScopeStatement::Block(scope_block) => {
-                        let (terminated_, stmts) = local_stack.in_scope(|local_stack| {
-                            self.scope_block(block, scope_block, local_stack)
-                        });
+                        let (terminated_, stmts) = local_stack.in_scope(
+                            |local_stack| self.scope_block(block, scope_block, local_stack));
+
                         terminated = terminated_;
 
                         let stmts = vec![
@@ -253,25 +247,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .collect();
 
         (terminated, stmts)
-    }
-
-    fn declare(&mut self, local_stack: &mut LocalStack, local: Local) -> Vec<ast::Stmt> {
-        let local_decl = self.mir.local_decl_data(local);
-
-        let ast_builder = self.ast_builder.span(local_decl.source_info.span);
-
-        let mut stmts = local_stack.push(local).into_iter()
-            .collect::<Vec<_>>();
-
-        let stmt_builder = match local_decl.mutability {
-            ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
-            ast::Mutability::Immutable => ast_builder.stmt().let_().id(local_decl.name),
-        };
-
-        stmts.push(stmt_builder.build_option_ty(local_decl.ty.clone())
-            .build());
-
-        stmts
     }
 
     fn terminator(&self,
@@ -317,11 +292,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         let (_, stmts) = local_stack.in_scope(|local_stack| {
                             // Push any locals defined in the match arm onto the stack to make sure
                             // values are properly shadowed.
-                            for lvalue in arm.lvalues.iter() {
-                                if let Lvalue::Local(local) = *lvalue {
-                                    local_stack.push(local);
-                                }
-                            }
+                            local_stack.extend(arm.lvalues.iter(), false);
 
                             (true, self.goto(span, arm.block, local_stack))
                         });
@@ -439,19 +410,16 @@ struct ScopeBlock<'a> {
 #[derive(Debug)]
 enum ScopeStatement<'a> {
     AstStatement(ast::Stmt),
-    Declare(Local),
     Statement(&'a Statement),
     Block(ScopeBlock<'a>),
     Terminator(&'a Terminator),
 }
 
 impl<'a> ScopeBlock<'a> {
-    fn new(scope: VisibilityScope, locals: Option<Vec<Local>>) -> Self {
+    fn new(scope: VisibilityScope) -> Self {
         ScopeBlock {
             scope: scope,
-            stmts: locals.unwrap_or_else(Vec::new).into_iter()
-                .map(ScopeStatement::Declare)
-                .collect(),
+            stmts: vec![],
         }
     }
 

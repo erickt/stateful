@@ -46,9 +46,9 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=usize>> {
-    let x = 1;
+    let x: usize = 1;
     {
-        let x = 2;
+        let x: usize = 2;
     }
     yield_!(x);
 

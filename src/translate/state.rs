@@ -31,18 +31,20 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .map(|(_, locals)| {
                     ast_builder.expr().tuple()
                         .with_exprs(
-                            locals.iter().map(|local| {
-                                if let Some(name) = local_stack.get_name(*local) {
-                                    ast_builder.expr().id(name)
-                                } else {
-                                    span_bug!(
-                                        self.cx,
-                                        span,
-                                        "No name found for local={:?} real name={:?}?",
-                                        local,
-                                        self.mir.local_decls[*local].name)
-                                }
-                            })
+                            locals.iter()
+                                .filter_map(|local| {
+                                    if let Some(name) = local_stack.get_name(*local) {
+                                        Some(ast_builder.expr().id(name))
+                                    } else {
+                                        span_warn!(
+                                            self.cx,
+                                            span,
+                                            "No name found for local={:?} real name={:?}?",
+                                            local,
+                                            self.mir.local_decls[*local].name);
+                                        None
+                                    }
+                                })
                         )
                         .build()
                 });
