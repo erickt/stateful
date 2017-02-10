@@ -16,7 +16,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Create a stack to track renames while expanding this block.
         let (terminated, stmts) = self.scope_block(block, scope_block, local_stack);
-        assert!(terminated);
+
+        if !terminated {
+            span_bug!(
+                self.cx,
+                block_data.span,
+                "scope block did not terminate?");
+        }
+
 
         stmts
     }
