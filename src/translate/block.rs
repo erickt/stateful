@@ -65,8 +65,35 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         // Next, loop through the statements and insert them into the right block. If they have a
         // different scope, we'll push and pop the scopes until.
         for stmt in block_data.statements() {
+
             let last_scope = stack.last().unwrap().scope;
-            let current_scope = stmt.source_info.scope;
+
+            let current_scope = match stmt.kind {
+                StatementKind::Stmt(_) => {
+                    stmt.source_info.scope
+                }
+                StatementKind::Let { ref lvalues, .. } => {
+                    match *lvalues.first().unwrap() {
+                        Lvalue::Local(local) => {
+                            self.mir.local_decls[local].source_info.scope
+                        }
+                        _ => { unreachable!() }
+                    }
+
+                }
+                StatementKind::Assign(ref lvalue, _) |
+                StatementKind::Call { destination: ref lvalue, .. } |
+                StatementKind::MethodCall { destination: ref lvalue, .. } |
+                StatementKind::StorageLive(ref lvalue) |
+                StatementKind::StorageDead(ref lvalue) => {
+                    match *lvalue {
+                        Lvalue::Local(local) => {
+                            self.mir.local_decls[local].source_info.scope
+                        }
+                        _ => { unreachable!() }
+                    }
+                }
+            };
 
             // Things are a little tricky when this statement's scope is different from the prior
             // statement. Consider:
