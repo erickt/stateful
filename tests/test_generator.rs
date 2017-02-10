@@ -70,6 +70,7 @@ fn test_empty_while_let() {
     assert_eq!(iter.next(), None);
 }
 
+/*
 #[test]
 fn test_empty_for() {
     #[generator]
@@ -248,7 +249,6 @@ fn test_yield_in_assign() {
     assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_shadowing() {
     #[generator]
@@ -303,7 +303,6 @@ fn test_impl_trait() {
     assert_eq!(iter.next(), Some(1));
     assert_eq!(iter.next(), None);
 }
-*/
 
 #[test]
 fn test_if_yield() {
@@ -341,4 +340,5 @@ fn test_let_assign() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
+*/
 */

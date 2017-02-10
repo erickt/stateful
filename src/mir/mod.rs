@@ -964,6 +964,15 @@ pub struct Statement {
     pub kind: StatementKind,
 }
 
+/*
+impl Statement {
+    /// Return all the lvalues referenced in this statement.
+    pub fn lvalues(&self) -> Vec<&Lvalue> {
+        self.kind.lvalues()
+    }
+}
+*/
+
 #[derive(Debug)]
 pub enum StatementKind {
     Stmt(ast::Stmt),
@@ -1007,6 +1016,22 @@ pub enum StatementKind {
     Nop,
     */
 }
+
+/*
+impl StatementKind {
+    pub fn lvalues(&self) -> Vec<&Lvalue> {
+        match *self {
+            StatementKind::Stmt(_) => vec![],
+            Let { ref lvalues, .. } => lvalues.iter().collect(),
+            Assign(ref lvalue, _) |
+            Call { destination: ref lvalue, .. } |
+            MethodCall { destination: ref lvalue, .. } |
+
+            }
+        }
+    }
+}
+*/
 
 impl Debug for Statement {
     fn fmt(&self, fmt: &mut Formatter) -> fmt::Result {

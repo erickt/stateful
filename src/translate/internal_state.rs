@@ -69,18 +69,92 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         self.state_expr(block, local_stack, StateKind::Internal)
     }
 
+    /*
+    fn recurse<I>(&mut self,
+                  block: BasicBlock,
+                  local_stack: &mut LocalStack,
+                  iter: I) -> (bool, Vec<ast::Stmt>)
+        where I: Iterator<Item=(VisibilityScope, Vec<Local>)>,
+    {
+                return (true, self.block(block, local_stack));
+
+                /*
+        let (scope, locals) = match iter.next() {
+            Some((scope, locals)) => (scope, locals),
+            None => {
+                return (true, vec![])
+                //return (true, self.block(block, local_stack));
+            }
+        };
+
+        let (terminated, stmt) = local_stack.in_scope(scope, |local_stack| {
+            for local in locals {
+                local_stack.push_lvalue(&Lvalue::Local(local), false);
+            }
+
+            self.recurse(block, local_stack, iter)
+        });
+
+        (terminated, vec![stmt])
+        */
+    }
+*/
+
     /// Build up an `ast::Arm` for an internal state variant.
     fn internal_arm(&mut self, block: BasicBlock) -> ast::Arm {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
-        // First, Load up all the locals into the stack.
         let mut local_stack = LocalStack::new(self, block);
 
-        // Next, setup the arm body.
-        let body_stmts = self.block(block, &mut local_stack);
+        /*
+        let locals = self.scope_locals[&block].iter()
+            .map(|(scope, locals)| (*scope, locals.clone()))
+            .collect::<Vec<_>>();
+            */
+
+        //let (terminated, stmts) = self.recurse(block, &mut local_stack, locals.into_iter());
+        let stmts = self.block(block, &mut local_stack);
+
+        /*
+        // First, push start a scope for all the arm parameters.
+        let (terminated, stmt) = local_stack.in_scope(scope, |local_stack| {
+            /*
+            // Next, Load up all the locals into the stack.
+            local_stack.push_lvalue(&Lvalue::Local(COROUTINE_ARGS), false);
+            */
+
+            let locals = self.scope_locals[&block].values()
+                .map(|locals| locals.clone())
+                .collect::<Vec<_>>();
+
+            self.recurse(block, local_stack, locals.into_iter())
+
+            /*
+            // Insert all the locals that have been initialized prior to this block.
+            for locals in self.scope_locals[&block].values() {
+                local_stack.scope_stack.push(Scope::new());
+
+                for local in locals {
+                    local_stack.push_lvalue(&Lvalue::Local(*local), false);
+                }
+            }
+
+            // Next, setup the arm body.
+            self.block(block, &mut local_stack)
+            */
+        });
+
+        if !terminated {
+            span_bug!(
+                self.cx,
+                self.mir[block].span,
+                "scope block did not terminate?");
+        }
+        */
+
         let body = ast_builder.block()
-            .with_stmts(body_stmts)
+            .with_stmts(stmts)
             .build();
 
         let state_path = self.state_path(block, StateKind::Internal);

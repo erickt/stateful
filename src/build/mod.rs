@@ -231,6 +231,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
+        debug!("{:#?}", self.local_decls.iter_enumerated().collect::<Vec<_>>());
+        debug!("{:#?}", self.cfg.basic_blocks.iter_enumerated()
+                 .map(|(index, block_data)| {
+                     let stmts = block_data.statements.iter()
+                         .map(|stmt| {
+                             (stmt.source_info.scope, stmt)
+                         })
+                         .collect::<Vec<_>>();
+
+                     (index, stmts)
+                 })
+                 .collect::<Vec<_>>());
+
         Mir::new(
             self.state_machine_kind,
             self.cfg.basic_blocks,

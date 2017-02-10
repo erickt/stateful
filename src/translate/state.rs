@@ -23,6 +23,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let state_path = self.state_path(block, kind);
         let scope_locals = &self.scope_locals[&block];
 
+        debug!("scope_locals: {:#?}", scope_locals);
+        debug!("local_stack: {:#?}", local_stack.scope_stack);
+
         if scope_locals.is_empty() {
             ast_builder.expr().build_path(state_path)
         } else {
@@ -36,13 +39,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                                     if let Some(name) = local_stack.get_name(*local) {
                                         Some(ast_builder.expr().id(name))
                                     } else {
-                                        span_warn!(
+                                        span_bug!(
                                             self.cx,
                                             span,
                                             "No name found for local={:?} real name={:?}?",
                                             local,
-                                            self.mir.local_decls[*local].name);
-                                        None
+                                            self.mir.local_decls[*local].name)
                                     }
                                 })
                         )

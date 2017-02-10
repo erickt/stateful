@@ -28,7 +28,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts
             }
             StatementKind::Assign(ref lvalue, ref rvalue) => {
-                let mut stmts = local_stack.push(lvalue, true);
+                let mut stmts = local_stack.push_lvalue(lvalue, true);
 
                 let lvalue = lvalue.to_expr(&self.mir.local_decls);
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
@@ -46,7 +46,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref func,
                 ref args,
             } => {
-                let mut stmts = local_stack.push(destination, true);
+                let mut stmts = local_stack.push_lvalue(destination, true);
 
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 
@@ -74,7 +74,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref self_,
                 ref args,
             } => {
-                let mut stmts = local_stack.push(destination, true);
+                let mut stmts = local_stack.push_lvalue(destination, true);
 
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 

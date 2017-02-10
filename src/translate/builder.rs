@@ -2,6 +2,7 @@ use analysis::elaborate_assignments::DefiniteAssignment;
 use aster::AstBuilder;
 use mir::*;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::btree_map::Entry;
 use super::internal_state::InternalState;
 use super::resume_state::ResumeState;
 use syntax::ast;
@@ -206,8 +207,21 @@ fn group_locals_by_scope(mir: &Mir, assignments: &DefiniteAssignment) -> ScopeLo
 
         if let Some(ref locals) = assignments.on_entry(block) {
             for &local in locals.iter() {
-                let local_data = &mir.local_decls[local];
-                let decls = block_map.entry(local_data.source_info.scope)
+                let scope = mir.local_decls[local].source_info.scope;
+
+                // Make sure all the parent scopes have entries.
+                let mut parent = scope;
+                while let Some(parent_) = mir.visibility_scopes[parent].parent_scope {
+                    if let Entry::Vacant(entry) = block_map.entry(parent_) {
+                        entry.insert(Vec::new());
+                        parent = parent_;
+                    } else {
+                        // Exit early if we've found a block that's already been added.
+                        break;
+                    }
+                }
+
+                let decls = block_map.entry(scope)
                     .or_insert_with(Vec::new);
 
                 decls.push(local);

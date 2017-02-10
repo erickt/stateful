@@ -45,12 +45,30 @@ impl<T> Iterator for EmptyIterator<T> {
 }
 
 #[generator]
-fn gen() -> Box<Iterator<Item=usize>> {
-    let x: usize = 1;
+fn gen() -> Box<Iterator<Item=String>> {
+    let x: String = format!("1");
     {
-        let x: usize = 2;
+        let x: String = format!("2");
+    };
+    yield_!(moved!(x));
+
+
+    /*
+    let items: Empty<usize> = Empty::<usize>::new();
+    let mut iter: EmptyIterator<usize> = moved!(items).into_iter();
+    while let Some(_) = iter.next() { }
+    */
+
+    /*
+    let x: String = "a".to_owned();
+    yield_!(moved!(x.clone()));
+
+    {
+        let x: String = "b".to_owned();
+        yield_!(moved!(x.clone()));
     }
-    yield_!(x);
+    yield_!(moved!(x.clone()));
+    */
 
         /*
         yield_!(x);
