@@ -85,7 +85,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         // Next, setup the arm body.
         let body_stmts = self.block(block, &mut local_stack);
-        let mut body = ast_builder.block()
+        let body = ast_builder.block()
             .with_stmts(body_stmts)
             .build();
 
@@ -110,38 +110,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .with_pats(pats)
                 .build()
         };
-
-        // Finally, we'll unpack the variables in a unique block in order to get shadowing to work
-        // correctly.
-        for (scope, locals) in scope_locals.iter().rev() {
-            let pat = ast_builder.pat()
-                .tuple()
-                .with_pats(
-                    locals.iter().map(|local| {
-                        if let Some(name) = local_stack.get_name(*local) {
-                            match self.mir.local_decls[*local].mutability {
-                                ast::Mutability::Immutable => ast_builder.pat().id(name),
-                                ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
-                            }
-                        } else {
-                            span_bug!(
-                                self.cx,
-                                self.mir.local_decls[*local].source_info.span,
-                                "local {:?} has no associated name?",
-                                local);
-                        }
-                    })
-                )
-                .build();
-
-            let stmt = ast_builder.stmt()
-                .let_().build(pat)
-                .expr().id(format!("scope{}", scope.index()));
-
-            body = ast_builder.block()
-                .stmt().build(stmt)
-                .expr().build_block(body);
-        }
 
         ast_builder.arm()
             .with_pat(pat)

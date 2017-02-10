@@ -1,9 +1,12 @@
+use data_structures::indexed_vec::Idx;
 use mir::*;
 use std::collections::HashMap;
 use super::builder::Builder;
 use super::local_stack::LocalStack;
 use syntax::ast;
 use syntax::codemap::Span;
+
+type ScopeDecls = HashMap<VisibilityScope, Vec<Local>>;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
     pub fn block(&mut self, block: BasicBlock, local_stack: &mut LocalStack) -> Vec<ast::Stmt> {
@@ -12,7 +15,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         assert!(block_data.terminator.is_some(),
                 "block does not have a terminator");
 
-        let scope_block = self.build_scope_block(block);
+        let scope_block = self.build_scope_block(block, local_stack);
 
         // Create a stack to track renames while expanding this block.
         let (terminated, stmts) = self.scope_block(block, scope_block, local_stack);
@@ -34,7 +37,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     /// compiler when we raise MIR back into the AST. Unfortunately, MIR flattens out all of our
     /// scopes, so we need to rebuild this from the visibility scope information we parsed out
     /// during MIR construction.
-    fn build_scope_block(&self, block: BasicBlock) -> ScopeBlock<'a> {
+    fn build_scope_block(&self,
+                         block: BasicBlock,
+                         local_stack: &LocalStack) -> ScopeBlock<'a> {
         // First, we need to group all our declarations by their scope.
         let mut scope_decls = HashMap::new();
 
@@ -53,15 +58,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        // Next, we'll start rebuilding the scope stack. We'll start with the root block, and work
-        // our ways up. Each time we build a block, we pull all the associated declarations and
-        // move them into this block.
-        let mut stack = vec![
-            ScopeBlock::new(
-                ARGUMENT_VISIBILITY_SCOPE,
-                scope_decls.remove(&ARGUMENT_VISIBILITY_SCOPE),
-            ),
-        ];
+        let mut stack = self.build_scope_stack(block, local_stack, &mut scope_decls);
 
         let block_data = &self.mir[block];
 
@@ -151,6 +148,70 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         scope_block
     }
 
+    fn build_scope_stack(&self,
+                         block: BasicBlock,
+                         local_stack: &LocalStack,
+                         scope_decls: &mut ScopeDecls) -> Vec<ScopeBlock<'a>> {
+        // Next, we'll start rebuilding the scope stack. We'll start with the root block, and work
+        // our ways up. Each time we build a block, we pull all the associated declarations and
+        // move them into this block.
+        let mut stack: Vec<ScopeBlock> = vec![];
+
+        let block_data = &self.mir[block];
+
+        // Next, add the scope locals to the scope block.
+        let ast_builder = self.ast_builder.span(block_data.span);
+        for (scope, locals) in self.scope_locals[&block].iter() {
+            // Make sure the parents are added to the stack.
+            self.build_scope_stack_parents(&mut stack, *scope, scope_decls);
+
+            let pat = ast_builder.pat()
+                .tuple()
+                .with_pats(
+                    locals.iter().map(|local| {
+                        if let Some(name) = local_stack.get_name(*local) {
+                            match self.mir.local_decls[*local].mutability {
+                                ast::Mutability::Immutable => ast_builder.pat().id(name),
+                                ast::Mutability::Mutable => ast_builder.pat().mut_id(name),
+                            }
+                        } else {
+                            span_bug!(
+                                self.cx,
+                                self.mir.local_decls[*local].source_info.span,
+                                "local {:?} has no associated name?",
+                                local);
+                        }
+                    })
+                )
+                .build();
+
+            let stmt = ast_builder.stmt()
+                .let_().build(pat)
+                .expr().id(format!("scope{}", scope.index()));
+
+            let mut scope_block = ScopeBlock::new(*scope, scope_decls.remove(scope));
+            scope_block.stmts.push(ScopeStatement::AstStatement(stmt));
+            stack.push(scope_block);
+        }
+
+        stack
+    }
+
+    fn build_scope_stack_parents(&self,
+                                 stack: &mut Vec<ScopeBlock<'a>>,
+                                 child: VisibilityScope,
+                                 scope_decls: &mut ScopeDecls) {
+        if let Some(parent) = self.mir.visibility_scopes[child].parent_scope {
+            match stack.last() {
+                Some(last) if last.scope == parent => { return; }
+                _ => {}
+            }
+
+            self.build_scope_stack_parents(stack, parent, scope_decls);
+            stack.push(ScopeBlock::new(parent, scope_decls.remove(&parent)));
+        }
+    }
+
     fn scope_block(&mut self,
                    block: BasicBlock,
                    scope_block: ScopeBlock,
@@ -160,6 +221,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let stmts = scope_block.stmts.into_iter()
             .flat_map(|stmt| {
                 match stmt {
+                    ScopeStatement::AstStatement(ref stmt) => {
+                        vec![stmt.clone()]
+                    }
                     ScopeStatement::Declare(local) => {
                         self.declare(local_stack, local)
                     }
@@ -374,6 +438,7 @@ struct ScopeBlock<'a> {
 
 #[derive(Debug)]
 enum ScopeStatement<'a> {
+    AstStatement(ast::Stmt),
     Declare(Local),
     Statement(&'a Statement),
     Block(ScopeBlock<'a>),
