@@ -3,7 +3,8 @@ use build::{BlockAnd, Builder, transition};
 use mir::*;
 use syntax::ast;
 use syntax::ext::base::ExtCtxt;
-use syntax::ext::tt::transcribe::transcribe;
+use syntax::ext::tt::quoted;
+use syntax::ext::tt::transcribe;
 use syntax::parse::parser::Parser;
 use syntax::parse::token::Token;
 use syntax::ptr::P;
@@ -33,10 +34,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 }
 
 pub fn parse_mac(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
-    let rdr = transcribe(
-        &cx.parse_sess().span_diagnostic,
-        None,
-        mac.node.tts.clone());
+    let tts = quoted::parse(&mac.node.tts, false, &cx.parse_sess());
+    let rdr = transcribe::transcribe(&cx.parse_sess().span_diagnostic, None, tts);
 
     let mut parser = Parser::new(
         cx.parse_sess(),

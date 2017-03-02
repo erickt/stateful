@@ -4,7 +4,8 @@ use mir::*;
 use syntax::ast::{self, ExprKind, StmtKind};
 use syntax::codemap::respan;
 use syntax::ext::base::ExtCtxt;
-use syntax::ext::tt::transcribe::transcribe;
+use syntax::ext::tt::quoted;
+use syntax::ext::tt::transcribe;
 use syntax::fold::{self, Folder};
 use syntax::parse::parser::Parser;
 use syntax::parse::token::Token;
@@ -394,10 +395,8 @@ fn desugar_while_let(pat: P<ast::Pat>,
 }
 
 fn parse_mac_try(cx: &ExtCtxt, mac: &ast::Mac) -> P<ast::Expr> {
-    let rdr = transcribe(
-        &cx.parse_sess().span_diagnostic,
-        None,
-        mac.node.tts.clone());
+    let tts = quoted::parse(&mac.node.tts, false, &cx.parse_sess());
+    let rdr = transcribe::transcribe(&cx.parse_sess().span_diagnostic, None, tts);
 
     let mut parser = Parser::new(
         cx.parse_sess(),
