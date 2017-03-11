@@ -226,10 +226,12 @@ fn desugar_for_loop(pat: P<ast::Pat>,
                     label: Option<ast::SpannedIdent>) -> P<ast::Expr> {
     let builder = AstBuilder::new().span(iter.span);
 
+    /*
     // moved!($expr)
     let iter = builder.expr().mac().path().id("moved").build()
         .expr().build(iter)
         .build();
+    */
 
     // ::std::iter::IntoIterator::into_iter(moved!($expr))
     let into_iter = builder.expr().call()

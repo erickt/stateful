@@ -60,9 +60,54 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
     }
     */
 
+    fn current_visibility_scope(&self) -> VisibilityScope {
+        self.scope_stack.last().unwrap().visibility_scope
+    }
+
+    fn with_locals<I, F>(&mut self, stmts: &mut Vec<ast::Stmt>, mut iter: I, f: F) -> bool
+        where I: IntoIterator<Item=(VisibilityScope, Local)>,
+              F: FnOnce(&mut Self) -> (bool, Vec<ast::Stmt>),
+    {
+        let mut iter = iter.into_iter();
+
+        let (scope, local) = match iter.next() {
+            Some((scope, local)) => (scope, local),
+            None => { return f(self); }
+        };
+
+        let terminated = if scope == self.current_visibility_scope() {
+            stmts.extend(self.push(local));
+            false
+        } else {
+            let terminated = self.with_locals(stmts, iter, |local_stack| {
+                stmts.extend(self.push(local));
+
+            });
+                
+                
+                stmts.extend(self.push_lvalue(lvalue, declare));
+                self.with_locals_(stmts, iter, f)
+            });
+
+            stmts.push(stmt);
+            terminated
+        };
+
+        terminated
+    }
+
+    fn with_local<F>(&mut self,
+                     stmts: &mut Stmt,
+                     visibility_scope: VisibilityScope,
+                     local: Local,
+                     f: F) -> bool
+        where F: FnOnce(&mut Self) -> bool
+    {
+    }
+
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
-    pub fn in_scope<F>(&mut self, visibility_scope: VisibilityScope, f: F) -> (bool, ast::Stmt)
+    fn in_scope<F>(&mut self, visibility_scope: VisibilityScope, f: F) -> (bool, Vec<ast::Stmt>)
         where F: FnOnce(&mut Self) -> (bool, Vec<ast::Stmt>)
     {
         debug!("push scope: {:?}", visibility_scope);
@@ -149,10 +194,11 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             .collect()
     }
 
+    /*
     /// Push a new local on the stack. If this local is uninitialized, or shadowing another local,
     /// this method will return a series of statements that renames the local to a unique alias.
     /// This allows it to stay alive but unreachable until the end of the scope.
-    pub fn push_lvalue(&mut self, lvalue: &Lvalue, declare: bool) -> Vec<ast::Stmt> {
+    fn push_lvalue(&mut self, lvalue: &Lvalue, declare: bool) -> Vec<ast::Stmt> {
         debug!("local_stack.push_lvalue({:?}, {:?}, {:?})", lvalue, declare, self.uninitialized_locals);
 
         // Exit early if the lvalue is not local.
@@ -171,6 +217,12 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         }
 
         stmts
+    }
+    */
+
+    fn push(&mut self, stmts: &mut Vec<ast::Stmt>, local: Local) {
+        let mut stmts = self.shadow(local);
+        stmts.extend(self.declare(local));
     }
 
     fn shadow(&mut self, local: Local) -> Vec<ast::Stmt> {

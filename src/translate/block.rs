@@ -219,7 +219,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     ScopeStatement::Terminator(terminator) => {
                         terminated = true;
 
-                        stmts.extend(self.terminator(local_stack, scope, terminator));
+                        stmts.extend(self.terminator(local_stack, terminator));
                     }
                 }
             }
@@ -276,7 +276,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     fn terminator(&self,
                   local_stack: &mut LocalStack,
-                  scope: VisibilityScope,
                   terminator: &Terminator) -> Vec<ast::Stmt> {
         let span = terminator.source_info.span;
         let ast_builder = self.ast_builder.span(span);

@@ -46,9 +46,11 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=String>> {
-    let items = Empty::<usize>::new();
-    let mut iter = moved!(items).into_iter();
-    while let Some(_) = moved!(iter.next()) { }
+    let item = String::new();
+    match moved!(item) {
+        item2 => { }
+    }
+    //for item in items {}
 
 
     /*
