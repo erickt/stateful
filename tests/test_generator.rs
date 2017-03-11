@@ -1,6 +1,5 @@
 use super::empty::Empty;
 
-/*
 #[test]
 fn test_empty() {
     #[generator]
@@ -57,7 +56,6 @@ fn test_empty_while() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
-*/
 
 #[test]
 fn test_empty_while_let() {
@@ -72,19 +70,19 @@ fn test_empty_while_let() {
     assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_empty_for() {
     #[generator]
     fn gen() -> Box<Iterator<Item=usize>> {
-        let iter = Empty::<usize>::new();
-        for _ in moved!(iter) { }
+        let items = Empty::<usize>::new();
+        for _ in items { }
     }
 
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
 
+/*
 #[should_panic]
 #[test]
 fn test_empty_with_macro() {
@@ -96,7 +94,9 @@ fn test_empty_with_macro() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
+*/
 
+/*
 #[test]
 fn test_break_value() {
     #[generator]
@@ -111,7 +111,9 @@ fn test_break_value() {
     assert_eq!(iter.next(), Some(5));
     assert_eq!(iter.next(), None);
 }
+*/
 
+/*
 #[test]
 fn test_ints() {
     #[generator]
@@ -148,12 +150,13 @@ fn test_item_slice() {
     assert_eq!(iter.next(), Some(&3));
     assert_eq!(iter.next(), None);
 }
+*/
 
 #[test]
 fn test_moved() {
     #[generator]
     fn gen<T: 'static>(items: Vec<T>) -> Box<Iterator<Item=T>> {
-        for item in moved!(items) {
+        for item in items {
             yield_!(item);
         }
     }
@@ -165,6 +168,7 @@ fn test_moved() {
     assert_eq!(iter.next(), None);
 }
 
+/*
 #[test]
 fn test_partial_decl() {
     #[generator]
