@@ -46,11 +46,9 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=String>> {
-    let x: String = format!("1");
-    {
-        let x: String = format!("2");
-    };
-    yield_!(moved!(x));
+    let items = Empty::<usize>::new();
+    let mut iter = moved!(items).into_iter();
+    while let Some(_) = moved!(iter.next()) { }
 
 
     /*

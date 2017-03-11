@@ -14,6 +14,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let block_data = &self.mir[block];
 
+        println!("block: {:?}", block);
         println!("decls: {:#?}",
                  self.mir.local_decls.iter_enumerated()
                  .collect::<Vec<_>>());
@@ -27,6 +28,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             get_dest_scopes(self.mir, stmt))
                     })
                     .collect::<Vec<_>>());
+        println!("terminator: {:#?}",
+                 block_data.terminator.as_ref().map(|terminator| {
+                     format!("terminator: {:?}; // {:?}",
+                             terminator,
+                             terminator.source_info.scope)
+                 }));
 
         println!("scope locals: {:#?}",
                  self.scope_locals[&block].iter()
@@ -76,18 +83,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let block_data = &self.mir[block];
         let stmts = self.mir[block].statements();
+        let terminator = block_data.terminator.as_ref().expect("terminator not set?");
 
+        // Only process the statements if we have any.
         if !stmts.is_empty() {
-            let prev_scope = stack.last().unwrap().scope;
-            let first_scope = stmts.first().unwrap().source_info.scope;
-            if prev_scope != first_scope {
-                self.adjust_scope(&mut stack, prev_scope, first_scope);
-            };
+            // First, we need to adjust the scope from the the last scope local to the scope of
+            // this statement.
+            {
+                let prev_scope = stack.last().unwrap().scope;
+                let first_scope = stmts.first().unwrap().source_info.scope;
 
+                if prev_scope != first_scope {
+                    self.adjust_scope(&mut stack, prev_scope, first_scope);
+                };
+            }
+
+            // Now that our stack is ready, we need to process all the statements.
             let next_scopes = stmts.iter()
                 .skip(1)
                 .map(|stmt| stmt.source_info.scope)
-                .chain(iter::repeat(stmts.last().unwrap().source_info.scope));
+                .chain(iter::once(terminator.source_info.scope));
 
             for (stmt, next_scope) in stmts.iter().zip(next_scopes) {
                 let current_scope = stmt.source_info.scope;
@@ -100,11 +115,8 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             }
         }
 
-        // Finally, push the terminator if we have one.
-        if let Some(ref terminator) = block_data.terminator {
-            let terminator = ScopeStatement::Terminator(terminator);
-            stack.last_mut().unwrap().push(terminator);
-        }
+        // Finally, push the terminator.
+        stack.last_mut().unwrap().push(ScopeStatement::Terminator(terminator));
 
         // Our block should now be terminated, but we still might have a few scopes on our stack,
         // so pop them off.

@@ -23,8 +23,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let state_path = self.state_path(block, kind);
         let scope_locals = &self.scope_locals[&block];
 
-        debug!("scope_locals: {:#?}", scope_locals);
-        debug!("local_stack: {:#?}", local_stack.scope_stack);
+        debug!("state_expr block: {:?}", block);
+        debug!("state_expr scope_locals: {:#?}", scope_locals);
+        debug!("state_expr local_stack: {:#?}", local_stack.scope_stack);
 
         if scope_locals.is_empty() {
             ast_builder.expr().build_path(state_path)

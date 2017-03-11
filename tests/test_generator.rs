@@ -1,5 +1,6 @@
 use super::empty::Empty;
 
+/*
 #[test]
 fn test_empty() {
     #[generator]
@@ -56,6 +57,7 @@ fn test_empty_while() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
+*/
 
 #[test]
 fn test_empty_while_let() {
@@ -63,7 +65,7 @@ fn test_empty_while_let() {
     fn gen() -> Box<Iterator<Item=usize>> {
         let items = Empty::<usize>::new();
         let mut iter = moved!(items).into_iter();
-        while let Some(_) = iter.next() { }
+        while let Some(_) = moved!(iter.next()) { }
     }
 
     let mut iter = gen();

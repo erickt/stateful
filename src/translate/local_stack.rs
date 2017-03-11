@@ -294,7 +294,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 impl<'a, 'b: 'a> Drop for LocalStack<'a, 'b> {
     fn drop(&mut self) {
         if !self.scope_stack.is_empty() {
-            span_err!(
+            span_warn!(
                 self.cx,
                 self.span,
                 "still some unpopped scopes: {:#?}",
@@ -302,7 +302,7 @@ impl<'a, 'b: 'a> Drop for LocalStack<'a, 'b> {
         }
 
         if !self.uninitialized_locals.is_empty() {
-            span_err!(
+            span_warn!(
                 self.cx,
                 self.span,
                 "still some uninitialized locals: {:?}",
