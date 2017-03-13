@@ -14,7 +14,12 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         match stmt.kind {
             StatementKind::Stmt(ref stmt) => vec![stmt.clone()],
             StatementKind::Let { ref pat, ref lvalues, ref ty, ref rvalue } => {
-                let mut stmts = local_stack.extend(lvalues.iter(), false);
+                // First, shadow all the locals in the pattern. We don't declare them because that
+                // inherently gets done by this statement.
+                let mut stmts = lvalues.iter()
+                    .filter_map(|lvalue| lvalue.to_local())
+                    .flat_map(|local| local_stack.shadow_local(local))
+                    .collect::<Vec<_>>();
 
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
 
@@ -28,7 +33,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 stmts
             }
             StatementKind::Assign(ref lvalue, ref rvalue) => {
-                let mut stmts = local_stack.push_lvalue(lvalue, true);
+                let mut stmts = lvalue.to_local()
+                    .map(|local| local_stack.declare_local(local))
+                    .unwrap_or_else(Vec::new);
 
                 let lvalue = lvalue.to_expr(&self.mir.local_decls);
                 let rvalue = rvalue.to_expr(&self.mir.local_decls);
@@ -46,7 +53,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref func,
                 ref args,
             } => {
-                let mut stmts = local_stack.push_lvalue(destination, true);
+                let mut stmts = destination.to_local()
+                    .map(|local| local_stack.declare_local(local))
+                    .unwrap_or_else(Vec::new);
 
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 
@@ -74,7 +83,9 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 ref self_,
                 ref args,
             } => {
-                let mut stmts = local_stack.push_lvalue(destination, true);
+                let mut stmts = destination.to_local()
+                    .map(|local| local_stack.declare_local(local))
+                    .unwrap_or_else(Vec::new);
 
                 let lvalue = destination.to_expr(&self.mir.local_decls);
 

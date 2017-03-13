@@ -1,6 +1,6 @@
 use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
-use mir::{self, BasicBlock, Local, LocalDecl, Lvalue, Mir, VisibilityScope};
+use mir::{self, BasicBlock, Local, LocalDecl, Mir, VisibilityScope};
 use std::collections::{BTreeMap, HashMap, HashSet};
 use super::builder::Builder;
 use syntax::ast;
@@ -60,11 +60,13 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
     }
     */
 
-    fn current_visibility_scope(&self) -> VisibilityScope {
-        self.scope_stack.last().unwrap().visibility_scope
+    fn current_visibility_scope(&self) -> Option<VisibilityScope> {
+        self.scope_stack.last().map(|scope| scope.visibility_scope)
     }
 
-    fn with_locals<I, F>(&mut self, stmts: &mut Vec<ast::Stmt>, mut iter: I, f: F) -> bool
+    pub fn with_locals<I, F>(&mut self,
+                             iter: I,
+                             f: F) -> (bool, Vec<ast::Stmt>)
         where I: IntoIterator<Item=(VisibilityScope, Local)>,
               F: FnOnce(&mut Self) -> (bool, Vec<ast::Stmt>),
     {
@@ -75,130 +77,129 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             None => { return f(self); }
         };
 
-        let terminated = if scope == self.current_visibility_scope() {
-            stmts.extend(self.push(local));
-            false
+        if Some(scope) == self.current_visibility_scope() {
+            let mut stmts = self.shadow_local(local);
+            let (terminated, child_stmt) = self.with_locals(iter, f);
+            stmts.extend(child_stmt);
+            (terminated, stmts)
         } else {
-            let terminated = self.with_locals(stmts, iter, |local_stack| {
-                stmts.extend(self.push(local));
-
+            let (terminated, stmt) = self.with_local(scope, local, |this| {
+                this.with_locals(iter, f)
             });
-                
-                
-                stmts.extend(self.push_lvalue(lvalue, declare));
-                self.with_locals_(stmts, iter, f)
-            });
-
-            stmts.push(stmt);
-            terminated
-        };
-
-        terminated
+            (terminated, vec![stmt])
+        }
     }
 
     fn with_local<F>(&mut self,
-                     stmts: &mut Stmt,
-                     visibility_scope: VisibilityScope,
+                     scope: VisibilityScope,
                      local: Local,
-                     f: F) -> bool
-        where F: FnOnce(&mut Self) -> bool
+                     f: F) -> (bool, ast::Stmt)
+        where F: FnOnce(&mut Self) -> (bool, Vec<ast::Stmt>)
     {
+        self.push_scope(scope);
+
+        let mut stmts = self.shadow_local(local);
+        let (terminated, child_stmts) = f(self);
+        stmts.extend(child_stmts);
+
+        (terminated, self.pop_scope(terminated, stmts))
     }
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
-    fn in_scope<F>(&mut self, visibility_scope: VisibilityScope, f: F) -> (bool, Vec<ast::Stmt>)
-        where F: FnOnce(&mut Self) -> (bool, Vec<ast::Stmt>)
-    {
+    fn push_scope(&mut self, visibility_scope: VisibilityScope) {
         debug!("push scope: {:?}", visibility_scope);
 
         self.scope_stack.push(Scope::new(visibility_scope));
+    }
 
-        let (terminated, mut stmts) = f(self);
+    /// Pop the scope, and add all the statements into an `ast::Stmt`. This may or may not be an
+    /// `ast::Block`, depending on if we're returning any locals up the stack.
+    fn pop_scope(&mut self, terminated: bool, mut stmts: Vec<ast::Stmt>) -> ast::Stmt {
+        debug!("pop_scope: terminated={:?}, stmts={:#?}", terminated, stmts);
 
         // When we exit a scope, we need to also rename all the shadowed names to their real names.
         // We can figure out what's been renamed by just going through all the names we aliased,
         // and for any that still have locals, rename them back to the original name.
         let scope = self.scope_stack.pop().expect("scope stack is empty?");
-
-        debug!("popped scope: {:#?}", scope);
+        debug!("pop_scope: scope={:#?}", scope);
 
         let builder = AstBuilder::new().span(self.span);
 
         // If the inner scope terminated, it would have already consumed all the scope variables.
         // Otherwise, we need to bubble up all the shadowed locals up the scope.
-        let stmt = if terminated {
-            builder.stmt().semi().block()
+        if terminated {
+            return builder.stmt().semi().block()
                 .with_stmts(stmts)
-                .build()
-        } else {
-            let mut pats = vec![];
-            let mut exprs = vec![];
+                .build();
+        }
 
-            // Step through all the locals defined in the scope we just popped. If any are still
-            // defined, then we'll create `let (a,b) = { ... (shadowed_a, shadowed_b) }` to extract
-            // out locals from the inner scope.
-            for (local, child_name) in scope.local_to_name.iter() {
-                debug!("popping: local={:?} child_name={:?}", local, child_name);
+        let mut pats = vec![];
+        let mut exprs = vec![];
 
-                let local_scope = self.mir.local_decls[*local].source_info.scope;
+        // Step through all the locals defined in the scope we just popped. If any are still
+        // defined, then we'll create `let (a,b) = { ... (shadowed_a, shadowed_b) }` to extract
+        // out locals from the inner scope.
+        for (local, child_name) in scope.local_to_name.iter() {
+            debug!("popping: local={:?} child_name={:?}", local, child_name);
 
-                // Only include the locals that are still in scope.
-                if scope.visibility_scope != local_scope {
-                    if let Some(parent_name) = self.get_name(*local) {
-                        debug!("parent_name: local={:?} parent_name={:?}", local, parent_name);
-                        pats.push(builder.pat().id(parent_name));
-                        exprs.push(builder.expr().id(child_name));
-                    } else {
-                        pats.push(builder.pat().id(child_name));
-                        exprs.push(builder.expr().id(child_name));
-                    }
+            let local_scope = self.mir.local_decls[*local].source_info.scope;
+
+            // Only include the locals that are still in scope.
+            if scope.visibility_scope != local_scope {
+                if let Some(parent_name) = self.get_name(*local) {
+                    debug!("parent_name: local={:?} parent_name={:?}", local, parent_name);
+                    pats.push(builder.pat().id(parent_name));
+                    exprs.push(builder.expr().id(child_name));
+                } else {
+                    pats.push(builder.pat().id(child_name));
+                    exprs.push(builder.expr().id(child_name));
                 }
             }
+        }
 
-            // Don't do anything if we didn't rename any locals.
-            if pats.is_empty() {
-                builder.stmt().semi().block()
-                    .with_stmts(stmts)
+        // Don't do anything if we didn't rename any locals.
+        if pats.is_empty() {
+            return builder.stmt().semi().block()
+                .with_stmts(stmts)
+                .build();
+        } else {
+            // Insert an expression into the block that returns all the locals.
+            stmts.push(
+                builder.stmt().expr().tuple()
+                    .with_exprs(exprs)
                     .build()
-            } else {
-                // Insert an expression into the block that returns all the locals.
-                stmts.push(
-                    builder.stmt().expr().tuple()
-                        .with_exprs(exprs)
-                        .build()
-                );
+            );
 
-                // Bundle up the stmts into a block.
-                let block_expr = builder.expr().block()
-                    .with_stmts(stmts)
-                    .build();
+            // Bundle up the stmts into a block.
+            let block_expr = builder.expr().block()
+                .with_stmts(stmts)
+                .build();
 
-                let tuple_pat = builder.pat().tuple()
-                    .with_pats(pats)
-                    .build();
+            let tuple_pat = builder.pat().tuple()
+                .with_pats(pats)
+                .build();
 
-                builder.stmt().let_()
-                    .build(tuple_pat)
-                    .build_expr(block_expr)
-            }
-        };
-
-        (terminated, stmt)
+            builder.stmt().let_()
+                .build(tuple_pat)
+                .build_expr(block_expr)
+        }
     }
 
+    /*
     pub fn extend<'c, T>(&mut self, iter: T, declare: bool) -> Vec<ast::Stmt>
         where T: Iterator<Item=&'c Lvalue>
     {
         iter.flat_map(|lvalue| self.push_lvalue(lvalue, declare))
             .collect()
     }
+    */
 
     /*
     /// Push a new local on the stack. If this local is uninitialized, or shadowing another local,
     /// this method will return a series of statements that renames the local to a unique alias.
     /// This allows it to stay alive but unreachable until the end of the scope.
-    fn push_lvalue(&mut self, lvalue: &Lvalue, declare: bool) -> Vec<ast::Stmt> {
+    pub fn push_lvalue(&mut self, lvalue: &Lvalue, declare: bool) -> Vec<ast::Stmt> {
         debug!("local_stack.push_lvalue({:?}, {:?}, {:?})", lvalue, declare, self.uninitialized_locals);
 
         // Exit early if the lvalue is not local.
@@ -213,19 +214,48 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         let mut stmts = self.shadow(local);
 
         if declare {
-            stmts.extend(self.declare(local));
+            stmts.push(self.declare(local));
         }
 
         stmts
     }
+
+    fn push(&mut self, local: Local) -> Vec<ast::Stmt> {
+        let mut stmts = self.shadow_local(local);
+        stmts.push(self.declare_local(local));
+        stmts
+    }
     */
 
-    fn push(&mut self, stmts: &mut Vec<ast::Stmt>, local: Local) {
-        let mut stmts = self.shadow(local);
-        stmts.extend(self.declare(local));
+    /// Declares a local and shadows any other locals with the same name.
+    pub fn declare_local(&mut self, local: Local) -> Vec<ast::Stmt> {
+        /*
+        // Exit early if we've already initialized this local.
+        if !self.uninitialized_locals.remove(&local) {
+            debug!("local already initialized: {:?}", local);
+            return vec![];
+        }
+        */
+
+        // First, shadow any locals.
+        let mut stmts = self.shadow_local(local);
+
+        // Next, declare the local.
+        let local_decl = self.mir.local_decl_data(local);
+        let ast_builder = AstBuilder::new().span(local_decl.source_info.span);
+
+        let stmt_builder = match local_decl.mutability {
+            ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
+            ast::Mutability::Immutable => ast_builder.stmt().let_().id(local_decl.name),
+        };
+
+        stmts.push(stmt_builder.build_option_ty(local_decl.ty.clone()).build());
+
+        stmts
     }
 
-    fn shadow(&mut self, local: Local) -> Vec<ast::Stmt> {
+    /// Renames already defined local that shares this local's name.
+    pub fn shadow_local(&mut self, local: Local) -> Vec<ast::Stmt> {
         let LocalDecl { name, source_info, .. } = self.mir.local_decls[local];
         let local_scope = source_info.scope;
 
@@ -293,31 +323,6 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         }
 
         stmts
-    }
-
-    fn declare(&mut self, local: Local) -> Vec<ast::Stmt> {
-        /*
-        // Exit early if we've already initialized this local.
-        if !self.uninitialized_locals.remove(&local) {
-            debug!("local already initialized: {:?}", local);
-            return vec![];
-        }
-        */
-
-        let local_decl = self.mir.local_decl_data(local);
-
-        let ast_builder = AstBuilder::new().span(local_decl.source_info.span);
-
-        let stmt_builder = match local_decl.mutability {
-            ast::Mutability::Mutable => ast_builder.stmt().let_().mut_id(local_decl.name),
-            ast::Mutability::Immutable => ast_builder.stmt().let_().id(local_decl.name),
-        };
-
-        let stmt = stmt_builder
-            .build_option_ty(local_decl.ty.clone())
-            .build();
-
-        vec![stmt]
     }
 
     pub fn get_local(&self, name: ast::Ident) -> Option<Local> {

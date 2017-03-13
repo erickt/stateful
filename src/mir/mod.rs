@@ -587,6 +587,15 @@ pub enum Lvalue {
     Projection(Box<LvalueProjection>),
 }
 
+impl Lvalue {
+    pub fn to_local(&self) -> Option<Local> {
+        match *self {
+            Lvalue::Local(local) => Some(local),
+            _ => None,
+        }
+    }
+}
+
 /// The `Projection` data structure defines things of the form `B.x`
 /// or `*B` or `B[index]`. Note that it is parameterized because it is
 /// shared between `Constant` and `Lvalue`. See the aliases
