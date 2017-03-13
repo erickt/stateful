@@ -50,7 +50,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             cx: builder.cx,
             mir: builder.mir,
             span: span,
-            scope_stack: vec![],
+            scope_stack: vec![Scope::new(mir::ARGUMENT_VISIBILITY_SCOPE)],
             uninitialized_locals: uninitialized_locals,
         }
     }
@@ -61,8 +61,9 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
     }
     */
 
-    fn current_visibility_scope(&self) -> Option<VisibilityScope> {
-        self.scope_stack.last().map(|scope| scope.visibility_scope)
+    fn current_visibility_scope(&self) -> VisibilityScope {
+        let scope = self.scope_stack.last().expect("scope stack empty?");
+        scope.visibility_scope
     }
 
     /*
@@ -120,10 +121,11 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
     */
 
     /// Pop stacks off until we get to `visibility_scope`.
-    fn pop_scopes(&mut self,
-                  visibility_scope: VisibilityScope,
+    pub fn pop_scopes(&mut self,
+                  scope: VisibilityScope,
+                  terminated: bool,
                   mut stmts: Vec<ast::Stmt>) -> Vec<ast::Stmt> {
-        debug!("pop_scopes: scope={:?}", visibility_scope);
+        debug!("pop_scopes: scope={:?}", scope);
 
         loop {
             if self.scope_stack.is_empty() {
@@ -131,7 +133,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
                     self.cx,
                     self.span,
                     "scope stack is empty trying to pop to scope={:?}",
-                    visibility_scope);
+                    scope);
             }
 
             let mut stmts_ = vec![];
@@ -150,10 +152,18 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
-    fn push_scope(&mut self, visibility_scope: VisibilityScope) {
-        debug!("push_scope: {:?}", visibility_scope);
+    fn push_scope(&mut self, scope: VisibilityScope) {
+        debug!("push_scope: scope={:?}", scope);
 
-        self.scope_stack.push(Scope::new(visibility_scope));
+        let current_scope = self.current_visibility_scope();
+
+        if scope != current_scope {
+            if let Some(parent_scope) = self.mir.visibility_scopes[scope].parent_scope {
+                self.push_scope(parent_scope);
+            }
+        }
+
+        self.scope_stack.push(Scope::new(scope));
     }
 
     /// Pop the scope, and add all the statements into an `ast::Stmt`. This may or may not be an
@@ -314,9 +324,11 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         debug!("shadow_local: local={:?}, name={:?}, scope={:?}",
                local, name, local_scope);
 
+        self.push_scope(local_scope);
+
+        /*
         // First, make sure the scope of this local is actually in our stack.
         if !self.scope_stack.iter().any(|scope| scope.visibility_scope == local_scope) {
-            let current_scope = self.current_visibility_scope().expect("scope stack empty?");
             let local_scope_parent = self.mir.visibility_scopes[local_scope].parent_scope
                 .expect("no parent?");
 
@@ -336,6 +348,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
                     self.scope_stack);
             }
         }
+        */
 
         // First, get the local that's currently using this name.
         let shadowed_local = self.get_local(name);

@@ -48,7 +48,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         debug!("block: scope_block: {:#?}", scope_block);
 
         let mut local_stack = LocalStack::new(self, block);
-        let (terminated, stmts) = self.scope_block(block, &mut local_stack, scope_block);
+        let (terminated, stmts) = self.scope_block(
+            block,
+            &mut local_stack,
+            ARGUMENT_VISIBILITY_SCOPE,
+            scope_block);
 
         debug!("block: local_stack: {:#?}", local_stack.scope_stack);
 
@@ -188,52 +192,45 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     fn scope_block(&mut self,
                    block: BasicBlock,
-                   parent_scope: VisibilityScope,
                    local_stack: &mut LocalStack,
+                   parent_scope: VisibilityScope,
                    scope_block: ScopeBlock) -> (bool, Vec<ast::Stmt>) {
         let scope = scope_block.scope;
         let scope_stmts = scope_block.stmts;
 
-        /*
-        let locals = self.scope_locals[&block].get(&scope).into_iter()
-            .flat_map(|locals| {
-                locals.iter().map(|local| (scope, *local))
-            })
-            .collect::<Vec<_>>();
-        */
+        let mut stmts = vec![];
 
-        //local_stack.with_locals(locals, |local_stack| {
-            let mut stmts = vec![];
+        stmts.extend(self.extract_scope_locals(block, local_stack, scope));
+        let mut terminated = false;
 
-            stmts.extend(self.extract_scope_locals(block, local_stack, scope));
+        for stmt in scope_stmts.into_iter() {
+            match stmt {
+                ScopeStatement::Statement(stmt) => {
+                    stmts.extend(self.stmt(block, local_stack, stmt));
+                }
+                ScopeStatement::Block(scope_block) => {
+                    let (terminated_, child_stmts) = self.scope_block(
+                        block,
+                        local_stack,
+                        scope,
+                        scope_block);
 
-            let mut terminated = false;
+                    terminated = terminated_;
 
-            for stmt in scope_stmts.into_iter() {
-                match stmt {
-                    ScopeStatement::Statement(stmt) => {
-                        stmts.extend(self.stmt(block, local_stack, stmt));
-                    }
-                    ScopeStatement::Block(scope_block) => {
-                        let (terminated_, child_stmts) = self.scope_block(
-                            block,
-                            local_stack,
-                            scope_block);
+                    stmts.extend(child_stmts);
+                }
+                ScopeStatement::Terminator(terminator) => {
+                    terminated = true;
 
-                        terminated = terminated_;
-
-                        stmts.extend(child_stmts);
-                    }
-                    ScopeStatement::Terminator(terminator) => {
-                        terminated = true;
-
-                        stmts.extend(self.terminator(local_stack, terminator));
-                    }
+                    stmts.extend(self.terminator(local_stack, scope, terminator));
                 }
             }
+        }
 
-            (terminated, stmts)
-        })
+        // Pop off the scopes we've processed.
+        let stmts = local_stack.pop_scopes(parent_scope, terminated, stmts);
+
+        (terminated, stmts)
     }
 
     fn extract_scope_locals(&mut self,
@@ -243,12 +240,10 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let ast_builder = self.ast_builder.span(self.mir[block].span);
 
         let pat = if let Some(locals) = self.scope_locals[&block].get(&scope) {
-            /*
             // Push any locals onto the stack.
             for local in locals.iter() {
-                local_stack.push_lvalue(&Lvalue::Local(*local), false);
+                local_stack.shadow_local(*local);
             }
-            */
 
             // Next, extract the locals from the scope tuple.
             ast_builder.pat()
@@ -286,6 +281,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     fn terminator(&self,
                   local_stack: &mut LocalStack,
+                  scope: VisibilityScope,
                   terminator: &Terminator) -> Vec<ast::Stmt> {
         let span = terminator.source_info.span;
         let ast_builder = self.ast_builder.span(span);
@@ -324,6 +320,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 let arms = arms.iter()
                     .map(|arm| {
+                        /*
                         // Push any locals defined in the match arm onto the stack to make sure
                         // values are properly shadowed.
                         let scope_locals = arm.lvalues.iter()
@@ -338,6 +335,17 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             scope_locals,
                             |local_stack| (true, self.goto(span, arm.block, local_stack)));
                         assert!(terminated);
+                        */
+
+                        // Push any locals defined in the match arm onto the stack to make sure
+                        // values are properly shadowed.
+                        for lvalue in arm.lvalues.iter() {
+                            let local = lvalue.to_local().expect("arm lvalue is not local?");
+                            local_stack.shadow_local(local);
+                        }
+
+                        let stmts = self.goto(span, arm.block, local_stack);
+                        let stmts = local_stack.pop_scopes(scope, true, stmts);
 
                         let ast_builder = ast_builder.span(self.block_span(arm.block));
 

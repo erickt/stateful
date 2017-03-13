@@ -45,24 +45,8 @@ impl<T> Iterator for EmptyIterator<T> {
 }
 
 #[generator]
-fn gen() -> Box<Iterator<Item=String>> {
-    let item = Some(String::new());
-    match moved!(item) {
-        Some(item2) => {
-            //println!("item2: {:?}", item2);
-        }
-        _ => {
-            //println!("none: {:?}", none);
-        }
-    }
-    //for item in items {}
-
-
-    /*
-    let items: Empty<usize> = Empty::<usize>::new();
-    let mut iter: EmptyIterator<usize> = moved!(items).into_iter();
-    while let Some(_) = iter.next() { }
-    */
+fn gen(pred: bool) -> Box<Iterator<Item=String>> {
+    while pred { }
 
     /*
     let x: String = "a".to_owned();
@@ -107,7 +91,7 @@ fn gen() -> Box<Iterator<Item=String>> {
 */
 
 fn main() {
-    for value in gen() {
+    for value in gen(false) {
         println!("{}", value);
     }
 }
