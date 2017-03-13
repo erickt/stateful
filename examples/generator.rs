@@ -46,9 +46,14 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen() -> Box<Iterator<Item=String>> {
-    let item = String::new();
+    let item = Some(String::new());
     match moved!(item) {
-        item2 => { }
+        Some(item2) => {
+            //println!("item2: {:?}", item2);
+        }
+        _ => {
+            //println!("none: {:?}", none);
+        }
     }
     //for item in items {}
 

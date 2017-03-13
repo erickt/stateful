@@ -108,7 +108,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
     fn push_scope(&mut self, visibility_scope: VisibilityScope) {
-        debug!("push scope: {:?}", visibility_scope);
+        debug!("push_scope: {:?}", visibility_scope);
 
         self.scope_stack.push(Scope::new(visibility_scope));
     }
@@ -229,6 +229,12 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Declares a local and shadows any other locals with the same name.
     pub fn declare_local(&mut self, local: Local) -> Vec<ast::Stmt> {
+        let local_decl = self.mir.local_decl_data(local);
+        debug!("declare_local: local={:?}, name={:?}, scope={:?}",
+            local,
+            local_decl.name,
+            local_decl.source_info.scope);
+
         /*
         // Exit early if we've already initialized this local.
         if !self.uninitialized_locals.remove(&local) {
@@ -241,7 +247,6 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         let mut stmts = self.shadow_local(local);
 
         // Next, declare the local.
-        let local_decl = self.mir.local_decl_data(local);
         let ast_builder = AstBuilder::new().span(local_decl.source_info.span);
 
         let stmt_builder = match local_decl.mutability {
@@ -259,7 +264,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         let LocalDecl { name, source_info, .. } = self.mir.local_decls[local];
         let local_scope = source_info.scope;
 
-        debug!("shadow: local={:?}, local_name={:?}, local_scope={:?}",
+        debug!("shadow_local: local={:?}, name={:?}, scope={:?}",
                local, name, local_scope);
 
         // First, make sure the scope of this local is actually in our stack.
@@ -279,7 +284,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         // Next, insert the local into our mapping. Since it's just been defined, it gets to
         // use the real name.
         for scope in self.scope_stack.iter_mut().rev() {
-            debug!("shadow: adding local={:?} with scope={:?} to scope={:?}",
+            debug!("shadow_local: adding local={:?} with scope={:?} to scope={:?}",
                    local,
                    source_info.scope,
                    scope.visibility_scope);
