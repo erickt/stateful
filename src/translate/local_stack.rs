@@ -2,6 +2,7 @@ use aster::AstBuilder;
 use data_structures::indexed_vec::Idx;
 use mir::{self, BasicBlock, Local, LocalDecl, Mir, VisibilityScope};
 use std::collections::{BTreeMap, HashMap, HashSet};
+use std::mem;
 use super::builder::Builder;
 use syntax::ast;
 use syntax::codemap::Span;
@@ -64,6 +65,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         self.scope_stack.last().map(|scope| scope.visibility_scope)
     }
 
+    /*
     pub fn with_locals<I, F>(&mut self,
                              iter: I,
                              f: F) -> (bool, Vec<ast::Stmt>)
@@ -83,17 +85,16 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             stmts.extend(child_stmt);
             (terminated, stmts)
         } else {
-            let (terminated, stmt) = self.with_local(scope, local, |this| {
+            self.with_local(scope, local, |this| {
                 this.with_locals(iter, f)
-            });
-            (terminated, vec![stmt])
+            })
         }
     }
 
     fn with_local<F>(&mut self,
                      scope: VisibilityScope,
                      local: Local,
-                     f: F) -> (bool, ast::Stmt)
+                     f: F) -> (bool, Vec<ast::Stmt>)
         where F: FnOnce(&mut Self) -> (bool, Vec<ast::Stmt>)
     {
         self.push_scope(scope);
@@ -102,7 +103,49 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         let (terminated, child_stmts) = f(self);
         stmts.extend(child_stmts);
 
-        (terminated, self.pop_scope(terminated, stmts))
+        loop {
+            let mut stmts_ = vec![];
+            mem::swap(&mut stmts, &mut stmts_);
+
+            let (scope_, stmt) = self.pop_scope(terminated, stmts_);
+            stmts.push(stmt);
+
+            if scope == scope_ {
+                break;
+            }
+        }
+
+        (terminated, stmts)
+    }
+    */
+
+    /// Pop stacks off until we get to `visibility_scope`.
+    fn pop_scopes(&mut self,
+                  visibility_scope: VisibilityScope,
+                  mut stmts: Vec<ast::Stmt>) -> Vec<ast::Stmt> {
+        debug!("pop_scopes: scope={:?}", visibility_scope);
+
+        loop {
+            if self.scope_stack.is_empty() {
+                span_bug!(
+                    self.cx,
+                    self.span,
+                    "scope stack is empty trying to pop to scope={:?}",
+                    visibility_scope);
+            }
+
+            let mut stmts_ = vec![];
+            mem::swap(&mut stmts, &mut stmts_);
+
+            let (scope_, stmt) = self.pop_scope(terminated, stmts_);
+            stmts.push(stmt);
+
+            if scope == scope_ {
+                break;
+            }
+        }
+
+        stmts
     }
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
@@ -115,7 +158,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Pop the scope, and add all the statements into an `ast::Stmt`. This may or may not be an
     /// `ast::Block`, depending on if we're returning any locals up the stack.
-    fn pop_scope(&mut self, terminated: bool, mut stmts: Vec<ast::Stmt>) -> ast::Stmt {
+    fn pop_scope(&mut self, terminated: bool, mut stmts: Vec<ast::Stmt>) -> (VisibilityScope, ast::Stmt) {
         debug!("pop_scope: terminated={:?}, stmts={:#?}", terminated, stmts);
 
         // When we exit a scope, we need to also rename all the shadowed names to their real names.
@@ -129,9 +172,11 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         // If the inner scope terminated, it would have already consumed all the scope variables.
         // Otherwise, we need to bubble up all the shadowed locals up the scope.
         if terminated {
-            return builder.stmt().semi().block()
+            let stmt = builder.stmt().semi().block()
                 .with_stmts(stmts)
                 .build();
+
+            return (scope.visibility_scope, stmt);
         }
 
         let mut pats = vec![];
@@ -159,10 +204,10 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         }
 
         // Don't do anything if we didn't rename any locals.
-        if pats.is_empty() {
-            return builder.stmt().semi().block()
+        let stmt = if pats.is_empty() {
+            builder.stmt().semi().block()
                 .with_stmts(stmts)
-                .build();
+                .build()
         } else {
             // Insert an expression into the block that returns all the locals.
             stmts.push(
@@ -183,7 +228,9 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             builder.stmt().let_()
                 .build(tuple_pat)
                 .build_expr(block_expr)
-        }
+        };
+
+        (scope.visibility_scope, stmt)
     }
 
     /*
@@ -269,13 +316,25 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
         // First, make sure the scope of this local is actually in our stack.
         if !self.scope_stack.iter().any(|scope| scope.visibility_scope == local_scope) {
-            span_bug!(
-                self.cx,
-                source_info.span,
-                "local's scope not in stack? local={:?} scope={:?} stack={:#?}",
-                local,
-                local_scope,
-                self.scope_stack);
+            let current_scope = self.current_visibility_scope().expect("scope stack empty?");
+            let local_scope_parent = self.mir.visibility_scopes[local_scope].parent_scope
+                .expect("no parent?");
+
+            debug!("shadow_local: current_scope: {:?} parent_scope: {:?}",
+                   current_scope,
+                   local_scope_parent);
+
+            if current_scope == local_scope_parent {
+                self.push_scope(local_scope);
+            } else {
+                span_bug!(
+                    self.cx,
+                    source_info.span,
+                    "local's scope not in stack? local={:?} scope={:?} stack={:#?}",
+                    local,
+                    local_scope,
+                    self.scope_stack);
+            }
         }
 
         // First, get the local that's currently using this name.

@@ -8,17 +8,14 @@ use syntax::ast;
 use syntax::codemap::Span;
 
 impl<'a, 'b: 'a> Builder<'a, 'b> {
-    pub fn block(&mut self, block: BasicBlock, local_stack: &mut LocalStack) -> Vec<ast::Stmt> {
-        // First, group all our statements by their scope.
-        let scope_block = self.build_scope_block(block);
-
+    pub fn block(&mut self, block: BasicBlock) -> Vec<ast::Stmt> {
         let block_data = &self.mir[block];
 
-        println!("block: {:?}", block);
-        println!("decls: {:#?}",
+        debug!("block: {:?}", block);
+        debug!("block: decls: {:#?}",
                  self.mir.local_decls.iter_enumerated()
                  .collect::<Vec<_>>());
-        println!("stmts: {:#?}",
+        debug!("block: stmts: {:#?}",
                  block_data.statements().iter()
                     .map(|stmt| {
                         format!(
@@ -28,14 +25,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                             get_dest_scopes(self.mir, stmt))
                     })
                     .collect::<Vec<_>>());
-        println!("terminator: {:#?}",
+        debug!("block: terminator: {:#?}",
                  block_data.terminator.as_ref().map(|terminator| {
                      format!("terminator: {:?}; // {:?}",
                              terminator,
                              terminator.source_info.scope)
                  }));
-
-        println!("scope locals: {:#?}",
+        debug!("block: scope_locals: {:#?}",
                  self.scope_locals[&block].iter()
                     .map(|(scope, locals)| {
                         (
@@ -47,11 +43,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     })
                     .collect::<BTreeMap<_, _>>());
 
-        println!("scope_block: {:#?}", scope_block);
+        // First, group all our statements by their scope.
+        let scope_block = self.build_scope_block(block);
+        debug!("block: scope_block: {:#?}", scope_block);
 
-        let (terminated, stmts) = self.scope_block(block, local_stack, scope_block);
+        let mut local_stack = LocalStack::new(self, block);
+        let (terminated, stmts) = self.scope_block(block, &mut local_stack, scope_block);
 
-        println!("scope stack: {:#?}", local_stack.scope_stack);
+        debug!("block: local_stack: {:#?}", local_stack.scope_stack);
 
         if !terminated {
             span_bug!(
@@ -189,18 +188,21 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
     fn scope_block(&mut self,
                    block: BasicBlock,
+                   parent_scope: VisibilityScope,
                    local_stack: &mut LocalStack,
                    scope_block: ScopeBlock) -> (bool, Vec<ast::Stmt>) {
         let scope = scope_block.scope;
         let scope_stmts = scope_block.stmts;
 
+        /*
         let locals = self.scope_locals[&block].get(&scope).into_iter()
             .flat_map(|locals| {
                 locals.iter().map(|local| (scope, *local))
             })
             .collect::<Vec<_>>();
+        */
 
-        local_stack.with_locals(locals, |local_stack| {
+        //local_stack.with_locals(locals, |local_stack| {
             let mut stmts = vec![];
 
             stmts.extend(self.extract_scope_locals(block, local_stack, scope));

@@ -105,16 +105,16 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let span = self.block_span(block);
         let ast_builder = self.ast_builder.span(span);
 
+        /*
         let mut local_stack = LocalStack::new(self, block);
 
-        /*
         let locals = self.scope_locals[&block].iter()
             .map(|(scope, locals)| (*scope, locals.clone()))
             .collect::<Vec<_>>();
             */
 
         //let (terminated, stmts) = self.recurse(block, &mut local_stack, locals.into_iter());
-        let stmts = self.block(block, &mut local_stack);
+        let stmts = self.block(block);
 
         /*
         // First, push start a scope for all the arm parameters.
