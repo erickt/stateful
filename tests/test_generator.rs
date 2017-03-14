@@ -49,11 +49,24 @@ fn test_empty_loop() {
 #[test]
 fn test_empty_while() {
     #[generator]
-    fn gen() -> Box<Iterator<Item=usize>> {
-        while false { }
+    fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
+        while pred { }
     }
 
-    let mut iter = gen();
+    let mut iter = gen(false);
+    assert_eq!(iter.next(), None);
+}
+
+#[test]
+fn test_simple_match() {
+    #[generator]
+    fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
+        match pred {
+            _ => { }
+        }
+    }
+
+    let mut iter = gen(false);
     assert_eq!(iter.next(), None);
 }
 

@@ -347,7 +347,15 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         let stmts = self.goto(span, arm.block, local_stack);
                         debug!("terminator match: scope: {:?}", scope);
-                        let stmts = local_stack.pop_scopes(scope, true, stmts);
+
+                        // If we had any lvalues, make sure to pop off their scopes
+                        let stmts = if let Some(lvalue) = arm.lvalues.first() {
+                            let local = lvalue.to_local().expect("arm lvalue is not local?");
+                            let local_scope = self.mir.local_decls[local].source_info.scope;
+                            local_stack.pop_scopes(local_scope, true, stmts)
+                        } else {
+                            stmts
+                        };
 
                         let ast_builder = ast_builder.span(self.block_span(arm.block));
 
