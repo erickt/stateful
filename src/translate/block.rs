@@ -51,7 +51,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         let (terminated, stmts) = self.scope_block(
             block,
             &mut local_stack,
-            ARGUMENT_VISIBILITY_SCOPE,
             scope_block);
 
         debug!("block: local_stack: {:#?}", local_stack.scope_stack);
@@ -193,8 +192,11 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
     fn scope_block(&mut self,
                    block: BasicBlock,
                    local_stack: &mut LocalStack,
-                   parent_scope: VisibilityScope,
                    scope_block: ScopeBlock) -> (bool, Vec<ast::Stmt>) {
+        debug!("scope_block: block={:?}, block_scope={:?}",
+               block,
+               scope_block.scope);
+
         let scope = scope_block.scope;
         let scope_stmts = scope_block.stmts;
 
@@ -212,7 +214,6 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     let (terminated_, child_stmts) = self.scope_block(
                         block,
                         local_stack,
-                        scope,
                         scope_block);
 
                     terminated = terminated_;
@@ -228,7 +229,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         }
 
         // Pop off the scopes we've processed.
-        let stmts = local_stack.pop_scopes(parent_scope, terminated, stmts);
+        let stmts = local_stack.pop_scopes(scope, terminated, stmts);
 
         (terminated, stmts)
     }
@@ -345,6 +346,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                         }
 
                         let stmts = self.goto(span, arm.block, local_stack);
+                        debug!("terminator match: scope: {:?}", scope);
                         let stmts = local_stack.pop_scopes(scope, true, stmts);
 
                         let ast_builder = ast_builder.span(self.block_span(arm.block));

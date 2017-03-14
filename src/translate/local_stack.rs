@@ -122,10 +122,11 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Pop stacks off until we get to `visibility_scope`.
     pub fn pop_scopes(&mut self,
-                  scope: VisibilityScope,
-                  terminated: bool,
-                  mut stmts: Vec<ast::Stmt>) -> Vec<ast::Stmt> {
+                      scope: VisibilityScope,
+                      terminated: bool,
+                      mut stmts: Vec<ast::Stmt>) -> Vec<ast::Stmt> {
         debug!("pop_scopes: scope={:?}", scope);
+        debug!("pop_scopes: scope_stack={:#?}", self.scope_stack);
 
         loop {
             if self.scope_stack.is_empty() {
@@ -142,6 +143,8 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             let (scope_, stmt) = self.pop_scope(terminated, stmts_);
             stmts.push(stmt);
 
+            debug!("pop_scopes: popped {:?} -> {:?}", scope, scope_);
+
             if scope == scope_ {
                 break;
             }
@@ -152,18 +155,38 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
-    fn push_scope(&mut self, scope: VisibilityScope) {
-        debug!("push_scope: scope={:?}", scope);
+    fn push_scope(&mut self, visibility_scope: VisibilityScope) {
+        debug!("push_scope: scope={:?}", visibility_scope);
 
+        // Exit early if this scope is already in our stack.
+        if self.scope_stack.iter().any(|scope| scope.visibility_scope == visibility_scope) {
+            return;
+        }
+
+        // Otherwise, push the scope.
         let current_scope = self.current_visibility_scope();
+        let mut scope = visibility_scope;
+        let mut missing_scopes = vec![];
 
-        if scope != current_scope {
+        while scope != current_scope {
+            missing_scopes.push(scope);
+
             if let Some(parent_scope) = self.mir.visibility_scopes[scope].parent_scope {
-                self.push_scope(parent_scope);
+                scope = parent_scope;
+            } else {
+                span_bug!(
+                    self.cx,
+                    self.span,
+                    "could not find parent scope in local stack for scope {:?}, stack={:#?}",
+                    scope,
+                    self.scope_stack);
             }
         }
 
-        self.scope_stack.push(Scope::new(scope));
+        for scope in missing_scopes.iter().rev() {
+            debug!("push_scope: creating scope for {:?}", scope);
+            self.scope_stack.push(Scope::new(*scope));
+        }
     }
 
     /// Pop the scope, and add all the statements into an `ast::Stmt`. This may or may not be an
@@ -175,7 +198,9 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         // We can figure out what's been renamed by just going through all the names we aliased,
         // and for any that still have locals, rename them back to the original name.
         let scope = self.scope_stack.pop().expect("scope stack is empty?");
-        debug!("pop_scope: scope={:#?}", scope);
+        debug!("pop_scope: visibility_scope={:?} scope={:#?}",
+               scope.visibility_scope,
+               scope);
 
         let builder = AstBuilder::new().span(self.span);
 
@@ -196,17 +221,24 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
         // defined, then we'll create `let (a,b) = { ... (shadowed_a, shadowed_b) }` to extract
         // out locals from the inner scope.
         for (local, child_name) in scope.local_to_name.iter() {
-            debug!("popping: local={:?} child_name={:?}", local, child_name);
+            debug!("pop_scope: popped local: local={:?} child_name={:?}", local, child_name);
 
             let local_scope = self.mir.local_decls[*local].source_info.scope;
 
             // Only include the locals that are still in scope.
-            if scope.visibility_scope != local_scope {
+            if scope.visibility_scope == local_scope {
+                debug!("pop_scope: local {:?} no longer in scope", local);
+            } else {
                 if let Some(parent_name) = self.get_name(*local) {
-                    debug!("parent_name: local={:?} parent_name={:?}", local, parent_name);
+                    debug!("pop_scope: local {:?} is still shadowed, named {:?}",
+                           local,
+                           parent_name);
+
                     pats.push(builder.pat().id(parent_name));
                     exprs.push(builder.expr().id(child_name));
                 } else {
+                    debug!("pop_scope: local {:?} is no longer shadowed", local);
+
                     pats.push(builder.pat().id(child_name));
                     exprs.push(builder.expr().id(child_name));
                 }
