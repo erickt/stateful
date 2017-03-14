@@ -70,7 +70,6 @@ fn test_simple_match() {
     assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_empty_while_let() {
     #[generator]
@@ -89,15 +88,13 @@ fn test_empty_for() {
     #[generator]
     fn gen() -> Box<Iterator<Item=usize>> {
         let items = Empty::<usize>::new();
-        for _item in items { }
+        for _item in moved!(items) { }
     }
 
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
-*/
 
-/*
 #[should_panic]
 #[test]
 fn test_empty_with_macro() {
@@ -109,9 +106,7 @@ fn test_empty_with_macro() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
-*/
 
-/*
 #[test]
 fn test_break_value() {
     #[generator]
@@ -126,7 +121,6 @@ fn test_break_value() {
     assert_eq!(iter.next(), Some(5));
     assert_eq!(iter.next(), None);
 }
-*/
 
 /*
 #[test]
@@ -148,7 +142,9 @@ fn test_ints() {
     assert_eq!(iter.next(), Some(3));
     assert_eq!(iter.next(), None);
 }
+*/
 
+/*
 #[test]
 fn test_item_slice() {
     #[generator]
@@ -348,8 +344,8 @@ fn test_if_yield() {
     assert_eq!(iter.next(), Some(3));
     assert_eq!(iter.next(), None);
 }
+*/
 
-/*
 #[test]
 fn test_let_assign() {
     #[generator]
@@ -363,5 +359,3 @@ fn test_let_assign() {
     let mut iter = gen();
     assert_eq!(iter.next(), None);
 }
-*/
-*/
