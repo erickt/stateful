@@ -84,7 +84,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
             .collect::<Vec<_>>();
 
         let block_data = &self.mir[block];
-        let stmts = self.mir[block].statements();
+        let stmts = self.mir[block].statements().iter()
+            .filter_map(|stmt| {
+                match stmt.kind {
+                    StatementKind::StorageLive(_) |
+                    StatementKind::StorageDead(_) => {
+                        None
+                    }
+                    _ => {
+                        Some(stmt)
+                    }
+                }
+            })
+            .collect::<Vec<_>>();
         let terminator = block_data.terminator.as_ref().expect("terminator not set?");
 
         // Only process the statements if we have any.
