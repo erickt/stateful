@@ -107,6 +107,7 @@ fn test_empty_with_macro() {
     assert_eq!(iter.next(), None);
 }
 
+/*
 #[test]
 fn test_break_value() {
     #[generator]
@@ -121,8 +122,8 @@ fn test_break_value() {
     assert_eq!(iter.next(), Some(5));
     assert_eq!(iter.next(), None);
 }
+*/
 
-/*
 #[test]
 fn test_ints() {
     #[generator]
@@ -142,7 +143,6 @@ fn test_ints() {
     assert_eq!(iter.next(), Some(3));
     assert_eq!(iter.next(), None);
 }
-*/
 
 /*
 #[test]
@@ -239,6 +239,7 @@ fn test_partial_decl_nested() {
     assert_eq!(iter.next(), Some(6));
     assert_eq!(iter.next(), None);
 }
+*/
 
 #[test]
 fn test_yield_expr() {
@@ -256,6 +257,7 @@ fn test_yield_expr() {
     assert_eq!(iter.next(), None);
 }
 
+/*
 #[test]
 fn test_yield_in_assign() {
     #[generator]
@@ -267,7 +269,9 @@ fn test_yield_in_assign() {
     assert_eq!(iter.next(), Some(1));
     assert_eq!(iter.next(), None);
 }
+*/
 
+/*
 #[test]
 fn test_shadowing() {
     #[generator]
@@ -294,7 +298,9 @@ fn test_shadowing() {
     assert_eq!(iter.next(), Some(format!("a")));
     assert_eq!(iter.next(), None);
 }
+*/
 
+/*
 #[cfg(feature = "impl_trait")]
 #[test]
 fn test_impl_trait() {
