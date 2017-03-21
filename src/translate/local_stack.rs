@@ -155,7 +155,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
-    fn push_scope(&mut self, visibility_scope: VisibilityScope) {
+    fn push_scope(&mut self, mut visibility_scope: VisibilityScope) {
         debug!("push_scope: scope={:?}", visibility_scope);
 
         // Exit early if this scope is already in our stack.
@@ -163,22 +163,27 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
             return;
         }
 
+        /*
+        debug!("push_scope: creating scope for {:?}", visibility_scope);
+        self.scope_stack.push(Scope::new(visibility_scope));
+        */
+
         // Otherwise, push the scope.
         let current_scope = self.current_visibility_scope();
-        let mut scope = visibility_scope;
         let mut missing_scopes = vec![];
 
-        while scope != current_scope {
-            missing_scopes.push(scope);
+        while visibility_scope != current_scope {
+            missing_scopes.push(visibility_scope);
 
-            if let Some(parent_scope) = self.mir.visibility_scopes[scope].parent_scope {
-                scope = parent_scope;
+            if let Some(parent_scope) = self.mir.visibility_scopes[visibility_scope].parent_scope {
+                visibility_scope = parent_scope;
             } else {
                 span_bug!(
                     self.cx,
                     self.span,
-                    "could not find parent scope in local stack for scope {:?}, stack={:#?}",
-                    scope,
+                    "could not find parent scope in local stack for scope {:?}, missing={:#?}, stack={:#?}",
+                    visibility_scope,
+                    missing_scopes,
                     self.scope_stack);
             }
         }

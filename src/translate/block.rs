@@ -17,6 +17,19 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                  .collect::<Vec<_>>());
         debug!("block: stmts: {:#?}",
                  block_data.statements().iter()
+                 /*
+                    .filter_map(|stmt| {
+                        match stmt.kind {
+                            StatementKind::StorageLive(_) |
+                            StatementKind::StorageDead(_) => {
+                                None
+                            }
+                            _ => {
+                                Some(stmt)
+                            }
+                        }
+                    })
+                    */
                     .map(|stmt| {
                         format!(
                             "stmt: {:?}; // {:?} -> {:?}",
@@ -85,6 +98,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
         let block_data = &self.mir[block];
         let stmts = self.mir[block].statements().iter()
+            /*
             .filter_map(|stmt| {
                 match stmt.kind {
                     StatementKind::StorageLive(_) |
@@ -96,6 +110,7 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                     }
                 }
             })
+            */
             .collect::<Vec<_>>();
         let terminator = block_data.terminator.as_ref().expect("terminator not set?");
 
@@ -126,6 +141,46 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 };
 
                 stack.last_mut().unwrap().push(ScopeStatement::Statement(stmt));
+                /*
+                /*
+                if let StatementKind::StorageLive(ref lvalue) = stmt.kind {
+                    let local = lvalue.to_local().expect("lvalue not local?");
+                    let local_scope = self.mir.local_decls[local].source_info.scope;
+
+                    self.adjust_scope(&mut stack, current_scope, local_scope);
+                }
+                */
+
+                match stmt.kind {
+                    StatementKind::StorageDead(_) => { }
+                    _ => {
+                        self.adjust_scope(&mut stack, current_scope, next_scope);
+                    }
+                }
+
+                stack.last_mut().unwrap().push(ScopeStatement::Statement(stmt.clone()));
+
+                if let StatementKind::StorageDead(ref lvalue) = stmt.kind {
+                    let local = lvalue.to_local().expect("lvalue not local?");
+                    let local_scope = self.mir.local_decls[local].source_info.scope;
+                    let current_scope = stack.last_mut().expect("scope stack empty?").scope;
+
+                    if local_scope != current_scope {
+                        span_bug!(
+                            self.cx,
+                            self.block_span(block),
+                            "tried to pop wrong scope. expected {:?} found {:?}, stack={:#?}",
+                            local_scope,
+                            current_scope,
+                            stack);
+                    }
+
+                    let parent_scope = self.mir.visibility_scopes[local_scope].parent_scope
+                        .expect("scope has no parent?");
+
+                    self.adjust_scope(&mut stack, current_scope, parent_scope);
+                }
+                */
             }
         }
 

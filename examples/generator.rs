@@ -52,6 +52,8 @@ fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
     };
 }
 
+fn identity<T>(x: T) -> T { x }
+
 /*
 #[generator]
 fn gen() -> Box<Iterator<Item=String>> {
