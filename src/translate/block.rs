@@ -118,14 +118,14 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
         if !stmts.is_empty() {
             // First, we need to adjust the scope from the the last scope local to the scope of
             // this statement.
-            {
-                let prev_scope = stack.last().unwrap().scope;
-                let first_scope = stmts.first().unwrap().source_info.scope;
+            /*
+            let prev_scope = stack.last().unwrap().scope;
+            let first_scope = stmts.first().unwrap().source_info.scope;
 
-                if prev_scope != first_scope {
-                    self.adjust_scope(&mut stack, prev_scope, first_scope);
-                };
-            }
+            if prev_scope != first_scope {
+                self.adjust_scope(&mut stack, prev_scope, first_scope);
+            };
+            */
 
             // Now that our stack is ready, we need to process all the statements.
             let next_scopes = stmts.iter()
@@ -133,14 +133,28 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
                 .map(|stmt| stmt.source_info.scope)
                 .chain(iter::once(terminator.source_info.scope));
 
-            for (stmt, next_scope) in stmts.iter().zip(next_scopes) {
-                let current_scope = stmt.source_info.scope;
+            let mut current_scope = stack.last().unwrap().scope;
 
-                if current_scope != next_scope {
-                    self.adjust_scope(&mut stack, current_scope, next_scope);
-                };
+            for (stmt, next_scope) in stmts.iter().zip(next_scopes) {
+                //let current_scope = stmt.source_info.scope;
+
+                match stmt.kind {
+                    StatementKind::StorageLive(ref lvalue)
+                    //StatementKind::StorageDead(ref lvalue)
+                    => {
+                        let local = lvalue.to_local().expect("lvalue is not local?");
+                        let next_scope = self.mir.local_decls[local].source_info.scope;
+
+                        if current_scope != next_scope {
+                            self.adjust_scope(&mut stack, current_scope, next_scope);
+                            current_scope = next_scope;
+                        };
+                    }
+                    _ => { }
+                }
 
                 stack.last_mut().unwrap().push(ScopeStatement::Statement(stmt));
+
                 /*
                 /*
                 if let StatementKind::StorageLive(ref lvalue) = stmt.kind {

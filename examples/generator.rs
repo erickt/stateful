@@ -50,6 +50,8 @@ fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
         let y = 3;
         y
     };
+    let z = identity(x);
+    let w = identity(z);
 }
 
 fn identity<T>(x: T) -> T { x }

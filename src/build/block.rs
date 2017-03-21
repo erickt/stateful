@@ -86,10 +86,26 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                         // Evaluate the initializer, if present.
                         if let Some(ref init) = local.init {
+                            if let ast::ExprKind::Block(_) = init.node {
+                                let temp = this.temp(block, stmt.span, "local_init");
+                                let init_scope = this.start_new_extent();
+                                unpack!(block = this.in_scope(init_scope, stmt.span, block, |this| {
+                                    unpack!(block = this.into(temp.clone(), block, init));
+                                    this.lvalue_into_pattern(block, &local.pat, &temp)
+                                }));
+                            } else {
+                                let init_scope = this.start_new_extent();
+                                unpack!(block = this.in_scope(init_scope, stmt.span, block, |this| {
+                                    this.expr_into_pattern(block, &local.pat, init)
+                                }));
+                            }
+
+                            /*
                             let init_scope = this.start_new_extent();
                             unpack!(block = this.in_scope(init_scope, stmt.span, block, |this| {
                                 this.expr_into_pattern(block, &local.pat, init)
                             }));
+                            */
                         } else {
                             this.storage_live_for_bindings(block, &local.pat);
                         }
