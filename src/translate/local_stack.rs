@@ -155,7 +155,7 @@ impl<'a, 'b: 'a> LocalStack<'a, 'b> {
 
     /// Enter into a new scope. When the closure returns, this method returns all the statements
     /// necessary to rename the aliased locals back into the original names.
-    fn push_scope(&mut self, mut visibility_scope: VisibilityScope) {
+    pub fn push_scope(&mut self, mut visibility_scope: VisibilityScope) {
         debug!("push_scope: scope={:?}", visibility_scope);
 
         // Exit early if this scope is already in our stack.

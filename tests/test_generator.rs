@@ -107,7 +107,6 @@ fn test_empty_with_macro() {
     assert_eq!(iter.next(), None);
 }
 
-/*
 #[test]
 fn test_break_value() {
     #[generator]
@@ -122,7 +121,6 @@ fn test_break_value() {
     assert_eq!(iter.next(), Some(5));
     assert_eq!(iter.next(), None);
 }
-*/
 
 #[test]
 fn test_ints() {

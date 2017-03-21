@@ -109,7 +109,13 @@ impl<'a, 'b: 'a> Builder<'a, 'b> {
 
                 stmts
             }
-            StatementKind::StorageLive(_) |
+            StatementKind::StorageLive(ref lvalue) => {
+                // This local may belong to a new scope, so make sure we push a new scope onto our
+                // stack.
+                let local = lvalue.to_local().expect("lvalue not local?");
+                local_stack.push_scope(self.mir.local_decls[local].source_info.scope);
+                vec![]
+            }
             StatementKind::StorageDead(_) => {
             //StatementKind::Nop => {
                 vec![]
