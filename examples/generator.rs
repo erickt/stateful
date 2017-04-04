@@ -46,9 +46,16 @@ impl<T> Iterator for EmptyIterator<T> {
 
 #[generator]
 fn gen(pred: bool) -> Box<Iterator<Item=usize>> {
-    let x = loop {
-        break 5;
-    };
+    loop {
+        let x = yield_!(1);
+        break;
+    }
+    /*
+    let items = vec![1, 2, 3];
+    for item in moved!(items) {
+        yield_!(item);
+    }
+    */
 }
 
 fn identity<T>(x: T) -> T { x }

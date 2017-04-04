@@ -19,6 +19,7 @@ use super::{MoveData, MovePathIndex};
 use syntax::codemap::Span;
 use ty::TyCtxt;
 
+#[derive(Debug)]
 pub struct DefiniteAssignment {
     initialized: BTreeMap<BasicBlock, BTreeSet<Local>>,
     assigned_on_entry: BTreeMap<BasicBlock, BTreeSet<Local>>,
